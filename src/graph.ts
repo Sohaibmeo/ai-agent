@@ -1,4 +1,3 @@
-
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import anomalies from "./steps/anomalies";
 import coach from "./steps/coach";
@@ -12,8 +11,13 @@ import { CatRow, Insights, Row } from "./types";
 import whatIf from "./steps/whatIf";
 
 const Store = Annotation.Root({
+  // Inputs
   csv: Annotation<string>(),
   goal: Annotation<number>(),
+  timeWindowDays: Annotation<number>(),
+  periodLabel: Annotation<string>(),
+
+  // Working state
   rows: Annotation<Row[]>(),
   ruleCats: Annotation<CatRow[]>(),
   nerCats: Annotation<CatRow[]>(),
@@ -36,10 +40,12 @@ export const graph = new StateGraph(Store)
   .addNode("insightsJoin", insightsJoin)
   .addNode("coach", coach)
   .addEdge(START, "parser")
+  // Parallel: rules + NER
   .addEdge("parser", "ruleMatcher")
   .addEdge("parser", "nerCategorizer")
   .addEdge("ruleMatcher", "reconcile")
   .addEdge("nerCategorizer", "reconcile")
+  // Parallel: insights fan-out
   .addEdge("reconcile", "subs")
   .addEdge("reconcile", "anomalies")
   .addEdge("reconcile", "whatIf")

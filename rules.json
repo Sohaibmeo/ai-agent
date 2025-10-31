@@ -1,9 +1,24 @@
 {
-  "Subscriptions": ["spotify","netflix","disney","youtube premium"],
-  "Transport": ["uber","bolt","tfl","oyster","lyft"],
-  "Groceries": ["tesco","sainsbury","asda","aldi","lidl","waitrose","iceland"],
-  "Dining": ["starbucks","costa","pret","mcdonald","kfc","burger king","domino"],
-  "Shopping": ["amazon","argos","primark","zara","h&m","ikea"],
-  "Bills": ["octopus","british gas","thames water","vodafone","ee","o2","bt"],
-  "Income": ["salary","payroll","wage","direct credit"]
+  "Subscriptions": [
+    "spotify", "netflix", "prime video", "amazon prime", "youtube premium",
+    "icloud", "microsoft 365", "dropbox", "one drive", "itunes", "deezer"
+  ],
+  "Groceries": [
+    "tesco", "sainsbury", "asda", "aldi", "lidl", "waitrose", "iceland", "morrisons"
+  ],
+  "Dining": [
+    "starbucks", "costa", "pret", "mcdonald", "kfc", "burger king", "domino", "café", "coffee"
+  ],
+  "Transport": [
+    "uber", "bolt", "lyft", "tfl", "oyster", "trainline", "parking", "national rail"
+  ],
+  "Bills": [
+    "octopus", "british gas", "thames water", "vodafone", "ee", "o2", "bt", "council tax", "sky", "virgin media"
+  ],
+  "Shopping": [
+    "amazon", "argos", "primark", "zara", "h&m", "ikea", "ebay", "currys", "john lewis"
+  ],
+  "Income": [
+    "salary", "payroll", "wage", "direct credit", "pension", "refund", "reimbursement"
+  ]
 }
