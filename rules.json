@@ -1,0 +1,9 @@
+{
+  "Subscriptions": ["spotify","netflix","disney","youtube premium"],
+  "Transport": ["uber","bolt","tfl","oyster","lyft"],
+  "Groceries": ["tesco","sainsbury","asda","aldi","lidl","waitrose","iceland"],
+  "Dining": ["starbucks","costa","pret","mcdonald","kfc","burger king","domino"],
+  "Shopping": ["amazon","argos","primark","zara","h&m","ikea"],
+  "Bills": ["octopus","british gas","thames water","vodafone","ee","o2","bt"],
+  "Income": ["salary","payroll","wage","direct credit"]
+}
