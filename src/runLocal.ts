@@ -1,36 +1,29 @@
 import { graph } from "./graph";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
+// ESM dirname
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 1) Resolve CSV_PATH (absolute from CWD), then fall back to common locations, else embed sample.
 function resolveCsv(): { csv: string; pathUsed: string } {
   const envPath = process.env.CSV_PATH
     ? path.resolve(process.cwd(), process.env.CSV_PATH)
     : null;
 
   if (envPath && fs.existsSync(envPath)) {
-    const csv = fs.readFileSync(envPath, "utf8");
-    return { csv, pathUsed: envPath };
+    return { csv: fs.readFileSync(envPath, "utf8"), pathUsed: envPath };
   }
 
-  // fallbacks
   const candidates = [
     path.resolve(process.cwd(), "test_data/tx.csv"),
     path.resolve(__dirname, "../test_data/tx.csv"),
     path.resolve(__dirname, "./test_data/tx.csv"),
   ];
-  const found = candidates.find(p => fs.existsSync(p));
+  const found = candidates.find((p) => fs.existsSync(p));
+  if (found) return { csv: fs.readFileSync(found, "utf8"), pathUsed: found };
 
-  if (found) {
-    const csv = fs.readFileSync(found, "utf8");
-    return { csv, pathUsed: found };
-  }
-
-  // last resort: embedded sample
   const embedded = `date,description,amount
 2025-10-01,Salary,1200.00
 2025-10-03,Tesco Superstore,-32.40
@@ -42,21 +35,51 @@ function resolveCsv(): { csv: string; pathUsed: string } {
   return { csv: embedded, pathUsed: "(embedded sample)" };
 }
 
-// 2) Period/goal from env
-const tw = (process.env.TIME_WINDOW || "week").toLowerCase();
-const timeWindowDays = tw === "month" ? 30 : 7;
-const periodLabel = tw === "month" ? "month" : "week";
-const goal = Number(process.env.GOAL || (periodLabel === "month" ? 120 : 30));
+function periodToDays(p?: string) {
+  if (!p) return { days: 7, label: "week" };
+  const norm = p.toLowerCase();
+  if (norm === "month" || norm === "monthly") return { days: 30, label: "month" };
+  return { days: 7, label: "week" };
+}
 
-// 3) Load CSV and run
+// ENV -> params
+const period = String(process.env.TIME_WINDOW ?? "week");
+const { days, label } = periodToDays(period);
+const goal = Number(process.env.GOAL ?? (label === "month" ? 120 : 30));
+
+// Load CSV and run graph
 const { csv, pathUsed } = resolveCsv();
-const res = await graph.invoke({ csv, goal, timeWindowDays, periodLabel });
+const out = await graph.invoke({
+  csv,
+  goal,
+  timeWindowDays: days,
+  periodLabel: label,
+});
 
-// 4) Print which CSV was used so you can sanity-check runs
-console.log(JSON.stringify({
-  period: periodLabel,
-  csv: pathUsed,
-  categorized: res.categorized,
-  insights: res.insights,
-  advice: res.advice
-}, null, 2));
+// Build response payload with optional verbose trace
+const verboseFlag = String(process.env.VERBOSE ?? "0").toLowerCase();
+const isVerbose = verboseFlag === "1" || verboseFlag === "true";
+
+const payload: Record<string, unknown> = {
+  period: label,
+  timeWindowDays: days,
+  goal,
+  csvPath: pathUsed,
+  categorized: out.categorized,
+  insights: out.insights,
+  advice: out.advice,
+};
+
+if (isVerbose) {
+  payload.trace = {
+    csv,
+    rows: out.rows,
+    ruleCats: out.ruleCats,
+    nerCats: out.nerCats,
+    subOut: out.subOut,
+    anomOut: out.anomOut,
+    whatIfOut: out.whatIfOut,
+  };
+}
+
+console.log(JSON.stringify(payload, null, 2));

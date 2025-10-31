@@ -25,3 +25,11 @@ A behavioral finance analysis tool powered by LLMs.
 - `src/server.ts`: Fastify API
 - `rules.json`: Keyword rules
 - `test_data/tx.csv`: Example transaction data
+
+Some things to run :
+CSV_PATH=test_data/baseline_week.csv          TIME_WINDOW=week  GOAL=30  npm run dev
+CSV_PATH=test_data/subscriptions_heavy.csv    TIME_WINDOW=week  GOAL=30  npm run dev
+CSV_PATH=test_data/transport_spike_month.csv  TIME_WINDOW=month GOAL=120 npm run dev
+CSV_PATH=test_data/sparse_week_big_dining.csv TIME_WINDOW=week  GOAL=30  npm run dev
+CSV_PATH=test_data/mixed_large.csv            TIME_WINDOW=month GOAL=120 npm run dev
+
