@@ -1,4 +1,4 @@
-import { graph } from "./graph";
+import { runPipeline, buildResponse } from "./pipeline";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -47,9 +47,9 @@ const period = String(process.env.TIME_WINDOW ?? "week");
 const { days, label } = periodToDays(period);
 const goal = Number(process.env.GOAL ?? (label === "month" ? 120 : 30));
 
-// Load CSV and run graph
+// Load CSV and run pipeline
 const { csv, pathUsed } = resolveCsv();
-const out = await graph.invoke({
+const state = await runPipeline({
   csv,
   goal,
   timeWindowDays: days,
@@ -60,26 +60,9 @@ const out = await graph.invoke({
 const verboseFlag = String(process.env.VERBOSE ?? "0").toLowerCase();
 const isVerbose = verboseFlag === "1" || verboseFlag === "true";
 
-const payload: Record<string, unknown> = {
-  period: label,
-  timeWindowDays: days,
-  goal,
+const payload = buildResponse(state, {
   csvPath: pathUsed,
-  categorized: out.categorized,
-  insights: out.insights,
-  advice: out.advice,
-};
-
-if (isVerbose) {
-  payload.trace = {
-    csv,
-    rows: out.rows,
-    ruleCats: out.ruleCats,
-    nerCats: out.nerCats,
-    subOut: out.subOut,
-    anomOut: out.anomOut,
-    whatIfOut: out.whatIfOut,
-  };
-}
+  includeTrace: isVerbose,
+});
 
 console.log(JSON.stringify(payload, null, 2));

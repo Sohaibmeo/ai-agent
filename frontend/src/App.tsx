@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
 import CsvUploader from "./components/CsvUploader";
 import StepTimeline from "./components/StepTimeline";
 import InsightsPanel from "./components/InsightsPanel";
 import TraceViewer from "./components/TraceViewer";
 import { useAnalyze, PIPELINE_META } from "./hooks/useAnalyze";
-import type { StepKey, StepSummary } from "./types/api";
+import type { StepKey } from "./types/api";
 
 const SAMPLE_CSV = `date,description,amount
 2025-10-01,Salary,1200.00
@@ -25,30 +25,15 @@ function App() {
   const [selectedStep, setSelectedStep] = useState<StepKey | null>(PIPELINE_META[0]?.key ?? null);
   const [showTrace, setShowTrace] = useState(false);
 
-  const { analyze, status, result, error } = useAnalyze();
-
-  const fallbackSteps: StepSummary[] = useMemo(
-    () =>
-      PIPELINE_META.map(meta => ({
-        key: meta.key,
-        title: meta.title,
-        description: meta.description,
-        icon: meta.icon,
-        status: "pending" as const,
-        output: undefined,
-      })),
-    []
-  );
-
-  const steps = result?.steps ?? fallbackSteps;
-  const response = result?.response ?? null;
+  const { analyze, status, response, steps, error } = useAnalyze();
   const canAnalyze = csvText.trim().length > 0;
 
   useEffect(() => {
-    if (result?.steps?.length) {
-      setSelectedStep(result.steps[0].key);
+    if (status === "processing") {
+      const running = steps.find(step => step.status === "running");
+      setSelectedStep(running?.key ?? PIPELINE_META[0]?.key ?? null);
     }
-  }, [result]);
+  }, [status, steps]);
 
   const handleCsvLoaded = (text: string, name?: string) => {
     setCsvText(text);
@@ -62,6 +47,7 @@ function App() {
 
   const handleAnalyze = () => {
     if (!canAnalyze || status === "processing") return;
+    setSelectedStep(PIPELINE_META[0]?.key ?? null);
     analyze({ csv: csvText, goal, period });
   };
 
@@ -113,11 +99,7 @@ function App() {
           />
 
           <StepTimeline
-            steps={steps.map(step => ({
-              ...step,
-              status: status === "done" ? "done" : step.status,
-            }))}
-            status={status}
+            steps={steps}
             selectedStep={selectedStep}
             onSelectStep={handleSelectStep}
           />

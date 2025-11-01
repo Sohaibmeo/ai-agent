@@ -47,6 +47,15 @@ src/
 
 ## Ideas for iteration
 
-- Stream backend progress (SSE/websocket) to animate the timeline in real time.
 - Persist analysis history so runs can be compared or exported later.
 - Layer in charts (Recharts/Nivo) for spend trends or goal tracking.
+- Provide inline editing/override of categorisations with instant recompute.
+
+## Next Progress and Goals
+
+- Capture per-step timings and error metrics alongside the streaming feed so ops can spot slow or flaky agents at a glance.
+- Enrich insights with historical trend charts, envelope-style budgets, and multi-period comparisons for deeper context.
+- Personalise the coach: store user goals, surface habit triggers, and schedule reminders or commitments tied to advice.
+- Expand ingestion beyond CSV by wiring in bank connectors (Plaid/TrueLayer) and scheduled sync jobs with secure storage.
+- Experiment with hybrid categorisation (rules + feedback-trained models) to reduce LLM calls and learn from corrections.
+- Automate guardrails with configurable alerts when categories overshoot budgets, real-time notifications, and calendar/task integrations for follow-through.

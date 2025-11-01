@@ -98,3 +98,9 @@ export type StepSummary = {
   icon: string;
   output?: unknown;
 };
+
+export type StepStreamEvent =
+  | { type: "step"; status: "start"; step: StepKey }
+  | { type: "step"; status: "complete"; step: StepKey; output?: unknown }
+  | { type: "error"; message: string; step?: StepKey }
+  | { type: "complete"; result: AnalyzeResponse };

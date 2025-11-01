@@ -36,3 +36,14 @@ export type Store = {
   insights: Insights;
   advice: string;
 };
+
+export type StepKey =
+  | "parser"
+  | "ruleMatcher"
+  | "nerCategorizer"
+  | "reconcile"
+  | "subs"
+  | "anomalies"
+  | "whatIf"
+  | "insightsJoin"
+  | "coach";
