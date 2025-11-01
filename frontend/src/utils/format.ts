@@ -17,7 +17,13 @@ export const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
 
 export const prettyJsonSnippet = (data: unknown, maxLines = 10) => {
-  if (data === undefined) return "No data";
+  if (data === undefined || data === null) return "No data";
+
+  if (typeof data === "string") {
+    const normalised = data.replace(/\r\n/g, "\n").trim();
+    return normalised.length ? normalised : "Empty string";
+  }
+
   try {
     const text = JSON.stringify(data, null, 2);
     const lines = text.split("\n");
