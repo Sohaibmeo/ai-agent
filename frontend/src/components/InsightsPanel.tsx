@@ -1,5 +1,6 @@
 import type { AnalyzeResponse, CatRow } from "../types/api";
 import { formatCurrency, formatNumber } from "../utils/format";
+import AdviceCard from "./AdviceCard";
 
 type InsightsPanelProps = {
   response: AnalyzeResponse | null;
@@ -185,7 +186,7 @@ const InsightsPanel = ({ response, status }: InsightsPanelProps) => {
       <section className="insight-section">
         <h3>Coach advice</h3>
         {advice ? (
-          <pre className="advice">{advice}</pre>
+          <AdviceCard advice={advice} />
         ) : (
           <p>Advice will appear once a run completes.</p>
         )}
