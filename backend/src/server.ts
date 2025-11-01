@@ -18,6 +18,12 @@ function parseGoal(input: unknown, fallback: number) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function parseDelayMs(input: unknown) {
+  const n = Number(input);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.floor(n);
+}
+
 function parseVerbose(hint: unknown) {
   return typeof hint === "boolean"
     ? hint
@@ -37,13 +43,18 @@ app.post("/analyze", async (req, res) => {
     const { days, label } = periodToDays(period);
     const defaultGoal = label === "month" ? 120 : 30;
     const goal = parseGoal(req.query.goal ?? req.body?.goal ?? process.env.GOAL, defaultGoal);
+    const delayMs = parseDelayMs(req.query.delay ?? req.body?.delay ?? process.env.STEP_DELAY_MS);
 
-    const state = await runPipeline({
-      csv,
-      goal,
-      timeWindowDays: days,
-      periodLabel: label,
-    });
+    const state = await runPipeline(
+      {
+        csv,
+        goal,
+        timeWindowDays: days,
+        periodLabel: label,
+      },
+      undefined,
+      { stepDelayMs: delayMs }
+    );
 
     const verboseHint = req.query.verbose ?? req.body?.verbose ?? req.headers["x-verbose"];
     const verbose = parseVerbose(verboseHint);
@@ -71,6 +82,7 @@ app.post("/analyze/stream", async (req, res) => {
     const { days, label } = periodToDays(period);
     const defaultGoal = label === "month" ? 120 : 30;
     const goal = parseGoal(req.query.goal ?? req.body?.goal ?? process.env.GOAL, defaultGoal);
+    const delayMs = parseDelayMs(req.query.delay ?? req.body?.delay ?? process.env.STEP_DELAY_MS);
     const verbose = true; // stream always includes trace-style outputs
 
     res.setHeader("Content-Type", "application/x-ndjson");
@@ -98,7 +110,8 @@ app.post("/analyze/stream", async (req, res) => {
           } else {
             write(event);
           }
-        }
+        },
+        { stepDelayMs: delayMs }
       );
       res.end();
     } catch (err) {

@@ -7,6 +7,7 @@ type AnalyzeParams = {
   csv: string;
   goal: number;
   period: "week" | "month";
+  delayMs?: number;
 };
 
 type UseAnalyzeReturn = {
@@ -113,14 +114,20 @@ export function useAnalyze(): UseAnalyzeReturn {
 
   const [steps, setSteps] = useState<StepSummary[]>(() => createInitialSteps());
 
-  const analyze = useCallback(async ({ csv, goal, period }: AnalyzeParams) => {
+  const analyze = useCallback(async ({ csv, goal, period, delayMs = 0 }: AnalyzeParams) => {
     setStatus("processing");
     setError(null);
     setResponseData(null);
     setSteps(createInitialSteps());
 
     try {
-      const response = await fetch(`${API_BASE}/analyze/stream?period=${encodeURIComponent(period)}&goal=${encodeURIComponent(goal)}`, {
+      const params = new URLSearchParams({
+        period,
+        goal: String(goal),
+      });
+      if (delayMs > 0) params.set("delay", String(delayMs));
+
+      const response = await fetch(`${API_BASE}/analyze/stream?${params.toString()}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ csv }),

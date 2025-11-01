@@ -49,12 +49,17 @@ const goal = Number(process.env.GOAL ?? (label === "month" ? 120 : 30));
 
 // Load CSV and run pipeline
 const { csv, pathUsed } = resolveCsv();
-const state = await runPipeline({
-  csv,
-  goal,
-  timeWindowDays: days,
-  periodLabel: label,
-});
+const stepDelayMs = Number(process.env.STEP_DELAY_MS ?? 0) || 0;
+const state = await runPipeline(
+  {
+    csv,
+    goal,
+    timeWindowDays: days,
+    periodLabel: label,
+  },
+  undefined,
+  { stepDelayMs }
+);
 
 // Build response payload with optional verbose trace
 const verboseFlag = String(process.env.VERBOSE ?? "0").toLowerCase();

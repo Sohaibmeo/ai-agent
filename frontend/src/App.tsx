@@ -24,6 +24,7 @@ function App() {
   const [goal, setGoal] = useState(30);
   const [selectedStep, setSelectedStep] = useState<StepKey | null>(PIPELINE_META[0]?.key ?? null);
   const [showTrace, setShowTrace] = useState(false);
+  const [slowMode, setSlowMode] = useState(false);
 
   const { analyze, status, response, steps, error } = useAnalyze();
   const canAnalyze = csvText.trim().length > 0;
@@ -48,7 +49,7 @@ function App() {
   const handleAnalyze = () => {
     if (!canAnalyze || status === "processing") return;
     setSelectedStep(PIPELINE_META[0]?.key ?? null);
-    analyze({ csv: csvText, goal, period });
+    analyze({ csv: csvText, goal, period, delayMs: slowMode ? 1000 : 0 });
   };
 
   const handleLoadSample = () => {
@@ -68,6 +69,14 @@ function App() {
           <p className="topbar__subtitle">Trace the agent pipeline from CSV upload through insights and coaching.</p>
         </div>
         <div className="topbar__actions">
+          <button
+            className="button button--toggle"
+            type="button"
+            aria-pressed={slowMode}
+            onClick={() => setSlowMode(prev => !prev)}
+          >
+            {slowMode ? "Slow mode: on" : "Slow mode: off"}
+          </button>
           {error && <span className="badge badge--error">Error: {error}</span>}
           {response && (
             <button

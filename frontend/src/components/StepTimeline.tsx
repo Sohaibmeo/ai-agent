@@ -44,10 +44,16 @@ const StepTimeline = ({ steps, selectedStep, onSelectStep }: StepTimelineProps) 
       <ul className="timeline">
         {derivedSteps.map(step => {
           const active = selectedStep === step.key;
+          const spinnerContent = step.status === "done" ? "✓" : step.status === "error" ? "!" : "";
           return (
             <li key={step.key} className={`timeline__item timeline__item--${step.status} ${active ? "timeline__item--active" : ""}`}>
               <button className="timeline__button" type="button" onClick={() => onSelectStep(step.key)}>
-                <span className="timeline__icon" aria-hidden>{step.icon}</span>
+                <div className="timeline__lead">
+                  <span className={`timeline__spinner timeline__spinner--${step.status}`} aria-hidden>
+                    <span className="timeline__spinner-inner">{spinnerContent}</span>
+                  </span>
+                  <span className="timeline__icon" aria-hidden>{step.icon}</span>
+                </div>
                 <div className="timeline__content">
                   <div className="timeline__header">
                     <h3>{step.title}</h3>

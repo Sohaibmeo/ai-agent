@@ -55,9 +55,14 @@ export type PipelineEvent =
 
 type EventSink = (event: PipelineEvent) => void;
 
+type PipelineOptions = {
+  stepDelayMs?: number;
+};
+
 export async function runPipeline(
   input: PipelineInput,
-  emit?: EventSink
+  emit?: EventSink,
+  options: PipelineOptions = {}
 ): Promise<PipelineState> {
   let state: PipelineState = {
     goal: input.goal,
@@ -66,12 +71,17 @@ export async function runPipeline(
     periodLabel: input.periodLabel,
   };
 
+  const delayMs = Math.max(0, options.stepDelayMs ?? 0);
+
   for (const step of STEPS) {
     emit?.({ type: "step", status: "start", step: step.key });
     try {
       const output = await step.run(state);
       state = { ...state, ...output };
       emit?.({ type: "step", status: "complete", step: step.key, output });
+      if (delayMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Step failed";
       emit?.({ type: "error", message, step: step.key });

@@ -275,6 +275,65 @@
   cursor: pointer;
 }
 
+.timeline__lead {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 70px;
+}
+
+.timeline__spinner {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 3px solid rgba(148, 163, 184, 0.4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: border-color 200ms ease, background 200ms ease, transform 200ms ease;
+}
+
+.timeline__spinner-inner {
+  font-size: 1rem;
+  color: #047857;
+  opacity: 0;
+  transform: scale(0.6);
+  transition: transform 180ms ease, opacity 180ms ease;
+}
+
+.timeline__spinner--pending {
+  border-color: rgba(148, 163, 184, 0.5);
+}
+
+.timeline__spinner--running {
+  border-color: rgba(59, 130, 246, 0.8);
+  border-right-color: transparent;
+  animation: spin 1s linear infinite;
+}
+
+.timeline__spinner--done {
+  border-color: rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.15);
+}
+
+.timeline__spinner--done .timeline__spinner-inner {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.timeline__spinner--error {
+  border-color: rgba(239, 68, 68, 0.5);
+  border-right-color: transparent;
+  animation: spin 1s linear infinite;
+}
+
+.timeline__spinner--error .timeline__spinner-inner {
+  color: #b91c1c;
+  opacity: 1;
+  transform: scale(1);
+}
+
 .timeline__icon {
   font-size: 1.8rem;
   line-height: 1;
@@ -560,6 +619,15 @@
   }
 }
 
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .drawer {
   position: fixed;
   left: 0;
@@ -604,6 +672,25 @@
   font-size: 0.85rem;
   overflow: auto;
   max-height: 45vh;
+}
+
+.button--toggle {
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  color: #1d2142;
+  background: rgba(99, 102, 241, 0.08);
+  box-shadow: none;
+}
+
+.button--toggle[aria-pressed=\"true\"],
+.button--toggle-active {
+  background: rgba(99, 102, 241, 0.18);
+  border-color: rgba(99, 102, 241, 0.6);
+  color: #1d2142;
+}
+
+.button--toggle[aria-pressed=\"true\"]:hover {
+  transform: none;
+  box-shadow: none;
 }
 
 @media (max-width: 1120px) {
