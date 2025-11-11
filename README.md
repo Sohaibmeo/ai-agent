@@ -119,4 +119,24 @@ Attach Superset / Metabase later for insights such as:
 
 Flow Chart :
 
-<paste image links here>
+## 🧩 System Architecture
+
+![System Diagram](docs/system.png)
+
+---
+
+## ⚙️ Workflow Overview
+
+![Workflow Diagram](docs/flow.png)
+
+---
+
+## 🧠 Sequence Diagram
+
+![Sequence Diagram](docs/sequence%20diagram.png)
+
+---
+
+## 🧾 Figma Workflow
+
+![Figma Design](docs/Figma.png)
