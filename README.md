@@ -119,28 +119,4 @@ Attach Superset / Metabase later for insights such as:
 
 Flow Chart :
 
-flowchart LR
-    %% USER INTERACTION
-    U[🧑‍💻 User Input<br/>(Profile, Preferences, Budget, Activity)] 
-    --> B1[⚙️ Backend<br/>(Validate + Compute BMI/TDEE/Macros)]
-
-    %% PLAN GENERATION LOOP
-    B1 --> O[🧩 Orchestrator<br/>(LangChain.js Workflow)]
-    O --> C1[🤖 Coach Agent<br/>Generate 7-Day Plan<br/>(Cost ≤ Budget, Macros Balanced)]
-    C1 --> R1[🗣️ Review Agent<br/>Handle Edits + Recalculate<br/>(Macro + Cost Changes)]
-
-    R1 -->|Revised Context| C1
-    C1 -->|Updated Plan| R1
-    R1 -->|✅ User Accepts| F[📦 Final Plan<br/>(Stored in DB)]
-
-    %% ADAPTIVE FEEDBACK
-    F --> L[🧠 Adaptive Learner<br/>(Update Costs & Preferences)]
-    L --> O
-    F --> N[💬 Prior-Week Insights Narrator<br/>(Optional Feedback Summary)]
-    N --> U
-
-    %% STORAGE & OPTIONAL LAYERS
-    F --> DB[(🗄️ PostgreSQL)]
-    O --> R[(🧰 Redis Queue)]
-    F --> S[(📁 Exports – Optional S3/MinIO)]
-    DB -.read-only.-> M[(📊 Optional Analytics<br/>Superset / Metabase)]
+<paste image links here>
