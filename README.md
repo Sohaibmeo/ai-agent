@@ -119,18 +119,61 @@ Attach Superset / Metabase later for insights such as:
 
 Flow Chart :
 
-## ⚙️ Workflow Overview
-
-![Workflow Diagram](docs/flow.png)
-
----
-
-## 🧠 Sequence Diagram
-
-![Sequence Diagram](docs/sequence%20diagram.png)
-
----
-
 ## 🧾 Figma Workflow
 
 ![Figma Design](docs/Figma.png)
+
+## 🧑‍💻 Local Development Setup
+
+1. **Install dependencies**
+   ```bash
+   npm install
+   ```
+2. **Environment variables**  
+   Copy `.env.example` to `.env` and adjust ports, database URL, and Ollama model names if needed.
+3. **Database (Dockerised Postgres)**  
+   ```bash
+   docker compose up -d postgres
+   cd backend
+   npm run prisma:migrate -- --name init   # first migration
+   npm run db:seed                         # optional sample data
+   ```
+4. **Ollama runtime**  
+   Install Ollama locally, pull a chat-capable model (e.g. `ollama pull llama3:latest`) and keep the daemon running. Update `OLLAMA_MODEL` in your `.env` if you switch models.
+
+## 🚀 Running the services
+
+| Service   | Command | Notes |
+|-----------|---------|-------|
+| Backend API (Express + Prisma) | `npm run dev:backend` | Serves `/api/*` routes, handles auth/calculations/storage |
+| Agent Orchestrator (LangChain + Ollama) | `npm run dev:agents` | Exposes `/plan/generate`, wraps prompts + LLM calls |
+| Frontend (React + Vite + shadcn/ui) | `npm run dev:frontend` | Vite dev server with proxy-free API calls |
+
+## 📁 Project structure
+
+```
+ai-agent/
+├── backend/        # Node API, Prisma models, meal logic
+├── agents/         # LangChain orchestrator talking to Ollama
+├── frontend/       # React + Tailwind + shadcn UI
+├── docs/           # Diagrams (flow/sequencing/figma exports)
+├── docker-compose.yml
+├── tsconfig.base.json
+└── README.md
+```
+
+## 🧪 Validation scripts
+
+- `npm run lint --workspace backend`
+- `npm run lint --workspace agents`
+- `npm run build --workspace frontend`
+- API smoke test: `curl http://localhost:4000/health`
+- Agent smoke test: `curl http://localhost:4001/health`
+
+Goal:
+1. Document the implementation roadmap inside this README and keep architecture assets updated.
+2. Scaffold the monorepo (shared tooling, Dockerized Postgres, env templates) before coding features.
+3. Build the Node/TypeScript backend with Prisma models, meal-planning logic, and APIs that talk to LangChain agents.
+4. Ship the LangChain + Ollama agent service that handles plan drafting/review loops and exposes HTTP hooks.
+5. Deliver the React + TypeScript frontend (shadcn UI) covering onboarding, plan review, and edit workflows.
+6. Finish with testing scripts plus developer ops docs so the whole system runs locally end-to-end.
