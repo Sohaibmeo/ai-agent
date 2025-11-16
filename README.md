@@ -134,9 +134,8 @@ Flow Chart :
 3. **Database (Dockerised Postgres)**  
    ```bash
    docker compose up -d postgres
-   cd backend
-   npm run prisma:migrate -- --name init   # first migration
-   npm run db:seed                         # optional sample data
+   # tables auto-sync when the backend boots
+   npm run db:seed --workspace backend   # optional sample data
    ```
 4. **Ollama runtime**  
    Install Ollama locally, pull a chat-capable model (e.g. `ollama pull llama3:latest`) and keep the daemon running. Update `OLLAMA_MODEL` in your `.env` if you switch models.
@@ -145,7 +144,7 @@ Flow Chart :
 
 | Service   | Command | Notes |
 |-----------|---------|-------|
-| Backend API (Express + Prisma) | `npm run dev:backend` | Serves `/api/*` routes, handles auth/calculations/storage |
+| Backend API (Express + pg) | `npm run dev:backend` | Serves `/api/*` routes, handles auth/calculations/storage |
 | Agent Orchestrator (LangChain + Ollama) | `npm run dev:agents` | Exposes `/plan/generate`, wraps prompts + LLM calls |
 | Frontend (React + Vite + shadcn/ui) | `npm run dev:frontend` | Vite dev server with proxy-free API calls |
 

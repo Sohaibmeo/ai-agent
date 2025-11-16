@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { prisma } from "../lib/prisma.js";
+import { pool } from "../lib/db.js";
 import { generatePlanForUser, listPlansForUser } from "../services/planService.js";
 
 const planRequestSchema = z.object({
@@ -21,15 +21,24 @@ planRouter.post("/generate", async (req, res, next) => {
 
 planRouter.get("/detail/:planId", async (req, res, next) => {
   try {
-    const plan = await prisma.mealPlan.findUnique({
-      where: { id: req.params.planId },
-    });
+    const result = await pool.query("SELECT * FROM meal_plans WHERE id = $1", [req.params.planId]);
 
-    if (!plan) {
+    if (result.rowCount === 0) {
       return res.status(404).json({ message: "Plan not found" });
     }
 
-    res.json(plan);
+    const row = result.rows[0];
+    res.json({
+      id: row.id,
+      userId: row.user_id,
+      summary: row.summary,
+      totalCalories: row.total_calories,
+      totalProtein: row.total_protein,
+      totalCostCents: row.total_cost_cents,
+      planJson: row.plan_json,
+      agentVersion: row.agent_version,
+      createdAt: row.created_at,
+    });
   } catch (error) {
     next(error);
   }

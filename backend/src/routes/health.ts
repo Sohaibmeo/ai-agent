@@ -1,12 +1,12 @@
 import { Router } from "express";
-import { prisma } from "../lib/prisma.js";
+import { pool } from "../lib/db.js";
 
 export const healthRouter = Router();
 
 healthRouter.get("/", async (_req, res) => {
-  const userCount = await prisma.userProfile.count();
+  const result = await pool.query("SELECT COUNT(*) AS count FROM users");
   res.json({
     status: "ok",
-    users: userCount,
+    users: Number(result.rows[0]?.count ?? 0),
   });
 });

@@ -46,3 +46,7 @@ coverage/
 
 # Optional: ignore test output
 test-results/
+
+# Runtime helper files
+*dev.pid
+*dev.log

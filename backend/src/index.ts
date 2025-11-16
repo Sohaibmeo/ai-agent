@@ -6,7 +6,7 @@ import { healthRouter } from "./routes/health.js";
 import { userRouter } from "./routes/userRoutes.js";
 import { recipeRouter } from "./routes/recipeRoutes.js";
 import { planRouter } from "./routes/planRoutes.js";
-import { prisma } from "./lib/prisma.js";
+import { initDb, pool } from "./lib/db.js";
 
 const app = express();
 
@@ -30,13 +30,26 @@ app.use(
   },
 );
 
-const server = app.listen(env.PORT, () => {
-  console.log(`Backend API ready on port ${env.PORT}`);
-});
+let server: ReturnType<typeof app.listen> | null = null;
+
+initDb()
+  .then(() => {
+    server = app.listen(env.PORT, () => {
+      console.log(`Backend API ready on port ${env.PORT}`);
+    });
+  })
+  .catch((error) => {
+    console.error("Failed to initialise database", error);
+    process.exit(1);
+  });
 
 const shutdown = async () => {
-  await prisma.$disconnect();
-  server.close(() => process.exit(0));
+  await pool.end();
+  if (server) {
+    server.close(() => process.exit(0));
+  } else {
+    process.exit(0);
+  }
 };
 
 process.on("SIGINT", shutdown);
