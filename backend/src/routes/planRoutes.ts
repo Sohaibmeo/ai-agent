@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { pool } from "../lib/db.js";
 import { generatePlanForUser, listPlansForUser } from "../services/planService.js";
+import { submitReviewRequest } from "../services/reviewService.js";
 
 const planRequestSchema = z.object({
   userId: z.string().uuid(),
@@ -48,6 +49,21 @@ planRouter.get("/:userId", async (req, res, next) => {
   try {
     const plans = await listPlansForUser(req.params.userId);
     res.json(plans);
+  } catch (error) {
+    next(error);
+  }
+});
+
+const reviewSchema = z.object({
+  requestText: z.string().min(3),
+  userId: z.string().uuid(),
+});
+
+planRouter.post("/:planId/review", async (req, res, next) => {
+  try {
+    const { requestText, userId } = reviewSchema.parse(req.body);
+    const plan = await submitReviewRequest(req.params.planId, requestText, userId);
+    res.json(plan);
   } catch (error) {
     next(error);
   }

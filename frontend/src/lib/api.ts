@@ -28,3 +28,9 @@ export const requestPlanGeneration = (userId: string) =>
   });
 
 export const fetchPlans = (userId: string) => apiFetch<PlanRecord[]>(`/api/plans/${userId}`);
+
+export const requestPlanReview = (planId: string, userId: string, requestText: string) =>
+  apiFetch(`/api/plans/${planId}/review`, {
+    method: "POST",
+    body: JSON.stringify({ requestText, userId }),
+  });

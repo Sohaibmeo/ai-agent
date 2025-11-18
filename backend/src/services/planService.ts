@@ -3,6 +3,7 @@ import { env } from "../config/env.js";
 import { pool } from "../lib/db.js";
 import { deriveMacroTargets } from "./nutrition.js";
 import { AgentPlanResponse } from "../types/plan.js";
+import { recordAgentRun, recordPlanEvent } from "../lib/orchestrator.js";
 
 const mapPlanRow = (row: any) => ({
   id: row.id,
@@ -40,6 +41,7 @@ export async function generatePlanForUser(userId: string) {
       id: user.id,
       name: user.name,
       email: user.email,
+      region: user.region,
       weeklyBudgetCents: user.weekly_budget_cents,
       dietaryPreferences: user.dietary_preferences ?? [],
       excludedIngredients: user.excluded_ingredients ?? [],
@@ -58,17 +60,41 @@ export async function generatePlanForUser(userId: string) {
     })),
   };
 
-  const { data } = await axios.post<AgentPlanResponse>(
-    `${env.AGENT_SERVICE_URL}/plan/generate`,
-    payload,
-  );
+  const runId = await recordAgentRun({
+    agentType: "coach",
+    status: "pending",
+    inputPayload: payload,
+  });
+
+  const { data } = await axios
+    .post<AgentPlanResponse>(`${env.AGENT_SERVICE_URL}/plan/generate`, payload)
+    .then(async (response) => {
+      await recordAgentRun({
+        agentType: "coach",
+        status: "success",
+        inputPayload: payload,
+        outputPayload: response.data,
+        runId,
+      });
+      return response;
+    })
+    .catch(async (error) => {
+      await recordAgentRun({
+        agentType: "coach",
+        status: "failed",
+        inputPayload: payload,
+        outputPayload: error?.response?.data ?? { message: error.message },
+        runId,
+      });
+      throw error;
+    });
 
   const insertResult = await pool.query(
     `
       INSERT INTO meal_plans
-        (user_id, summary, total_calories, total_protein, total_cost_cents, plan_json, agent_version)
+        (user_id, summary, total_calories, total_protein, total_cost_cents, plan_json, agent_version, status)
       VALUES
-        ($1,$2,$3,$4,$5,$6,$7)
+        ($1,$2,$3,$4,$5,$6,$7,'ready')
       RETURNING *;
     `,
     [
@@ -82,8 +108,17 @@ export async function generatePlanForUser(userId: string) {
     ],
   );
 
+  const savedPlan = mapPlanRow(insertResult.rows[0]);
+
+  await recordPlanEvent({
+    planId: savedPlan.id,
+    actor: "CoachAgent",
+    action: "plan_generated",
+    metadata: { agentRunId: runId },
+  });
+
   return {
-    plan: mapPlanRow(insertResult.rows[0]),
+    plan: savedPlan,
     macros,
     agentResponse: data,
   };

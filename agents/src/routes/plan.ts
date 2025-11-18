@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
-import { generateWeeklyPlan } from "../services/planAgent.js";
+import { generateWeeklyPlan } from "../services/coachAgent.js";
+import { reviewWeeklyPlan } from "../services/reviewAgent.js";
+import { agentResponseSchema } from "../services/planSchemas.js";
 
 const requestSchema = z.object({
   user: z.object({
@@ -37,6 +39,21 @@ planRouter.post("/generate", async (req, res, next) => {
   try {
     const payload = requestSchema.parse(req.body);
     const plan = await generateWeeklyPlan(payload);
+    res.json(plan);
+  } catch (error) {
+    next(error);
+  }
+});
+
+const reviewRequestSchema = z.object({
+  plan: agentResponseSchema,
+  request: z.string().min(3),
+});
+
+planRouter.post("/review", async (req, res, next) => {
+  try {
+    const payload = reviewRequestSchema.parse(req.body);
+    const plan = await reviewWeeklyPlan(payload);
     res.json(plan);
   } catch (error) {
     next(error);

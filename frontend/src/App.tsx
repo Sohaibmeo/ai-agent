@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { ProfileForm } from "./components/forms/ProfileForm";
 import { PlanOverview } from "./components/plan/PlanOverview";
 import { PlanTabs } from "./components/plan/PlanTabs";
 import { PlanHistory } from "./components/plan/PlanHistory";
 import { Button } from "./components/ui/button";
-import { createOrUpdateUser, fetchPlans, requestPlanGeneration } from "./lib/api";
+import { createOrUpdateUser, fetchPlans, requestPlanGeneration, requestPlanReview } from "./lib/api";
+import { OnboardingWizard } from "./components/onboarding/OnboardingWizard";
+import { PlanReviewForm } from "./components/plan/PlanReviewForm";
 import type { PlanRecord, UserProfilePayload, WeeklyPlanResponse } from "./types";
 import { Loader2, RefreshCw } from "lucide-react";
 import "./index.css";
@@ -20,10 +21,12 @@ function App() {
   const [history, setHistory] = useState<PlanRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reviewMessage, setReviewMessage] = useState<string | null>(null);
 
   const loadHistory = useCallback(async (id: string) => {
     const plans = await fetchPlans(id);
     setHistory(plans);
+    return plans;
   }, []);
 
   useEffect(() => {
@@ -88,9 +91,30 @@ function App() {
           <div className="space-y-6">
             <PlanOverview plan={activePlan} isGenerating={isLoading} />
             <PlanTabs plan={activePlan} />
+            {userId && activePlan?.plan?.id && (
+            <PlanReviewForm
+              planId={activePlan.plan.id}
+              userId={userId}
+              onSubmit={async (text) => {
+                setReviewMessage(null);
+                try {
+                  await requestPlanReview(activePlan.plan.id, userId, text);
+                  const plans = await loadHistory(userId);
+                  const updated = plans.find((p) => p.id === activePlan.plan.id);
+                  if (updated) {
+                    setActivePlan({ plan: updated });
+                  }
+                  setReviewMessage("Review agent applied your change.");
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "Review failed");
+                }
+              }}
+            />
+            )}
+            {reviewMessage && <p className="text-sm text-emerald-600">{reviewMessage}</p>}
           </div>
           <div className="space-y-6">
-            <ProfileForm isSubmitting={isLoading} onSubmit={handleProfileSubmit} />
+            <OnboardingWizard isSubmitting={isLoading} onComplete={handleProfileSubmit} />
             <PlanHistory history={history} onSelect={(item) => setActivePlan({ plan: item })} />
           </div>
         </div>
