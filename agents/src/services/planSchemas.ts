@@ -60,12 +60,17 @@ const toNumber = (value: unknown, fallback = 0) => {
   return Number.isFinite(num) ? num : fallback;
 };
 
-export const safeJsonParse = (text: string) => {
+export const safeJsonParse = async (text: string) => {
   try {
     return JSON.parse(text);
   } catch {
     const cleaned = text.replace(/\/\/.*$/gm, "");
-    return JSON.parse(cleaned);
+    try {
+      return JSON.parse(cleaned);
+    } catch {
+      const { jsonrepair } = await import("jsonrepair");
+      return JSON.parse(jsonrepair(text));
+    }
   }
 };
 

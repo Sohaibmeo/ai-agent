@@ -48,10 +48,29 @@ export async function reviewWeeklyPlan(input: { plan: AgentPlanResponse; request
     request: input.request,
   });
   const rawJson = extractJsonBlock(responseText);
-  const repaired = safeJsonParse(rawJson);
+  const repaired = await safeJsonParse(rawJson);
   const normalizedPlan = normalizeAgentResponse(repaired.updatedPlan ?? repaired.plan ?? repaired);
+  const fallbackDays = input.plan.days ?? [];
+  const mergedDays = normalizedPlan.days.map((day, idx) => {
+    if (day.meals.length === 0 && fallbackDays[idx]) {
+      return fallbackDays[idx];
+    }
+    return day;
+  });
+  while (mergedDays.length < fallbackDays.length) {
+    mergedDays.push(fallbackDays[mergedDays.length]);
+  }
+  const planWithFallback = {
+    ...normalizedPlan,
+    totals: {
+      calories: normalizedPlan.totals.calories || input.plan.totals.calories,
+      protein: normalizedPlan.totals.protein || input.plan.totals.protein,
+      costCents: normalizedPlan.totals.costCents || input.plan.totals.costCents,
+    },
+    days: mergedDays,
+  };
   return reviewResponseSchema.parse({
     rationale: typeof repaired.rationale === "string" ? repaired.rationale : "Applied requested changes.",
-    updatedPlan: normalizedPlan,
+    updatedPlan: planWithFallback,
   });
 }

@@ -46,7 +46,7 @@ export async function generateWeeklyPlan(payload: AgentRequestPayload) {
   });
 
   const rawJson = extractJsonBlock(responseText);
-  const repaired = safeJsonParse(rawJson);
+  const repaired = await safeJsonParse(rawJson);
   const normalized = normalizeAgentResponse(repaired);
   const parsed = agentResponseSchema.parse(normalized);
   return parsed;
