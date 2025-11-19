@@ -22,13 +22,26 @@ function messageContentToString(content: unknown): string {
   return '';
 }
 
+function logUsage(agent: string, message: unknown, defaultModel: string) {
+  const usage = (message as { usageMetadata?: { inputTokens?: number; outputTokens?: number } }).usageMetadata;
+  const responseMetadata = (message as { response_metadata?: { model?: string } }).response_metadata;
+  if (!usage) return;
+  console.log('LLM usage', {
+    agent,
+    model: responseMetadata?.model ?? defaultModel,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+  });
+}
+
 export async function runReviewAgent(args: {
   actionContext: PlanActionContext;
   reasonText?: string;
   currentPlan: WeeklyPlan;
   profileSnippet: Record<string, unknown>;
 }): Promise<ReviewInstruction> {
-  const llm = createLLM({ temperature: 0.1 });
+  const model = process.env.REVIEW_MODEL || 'gpt-5-nano';
+  const llm = createLLM(model);
   const prompt = [
     'Translate the action context + reason into a structured ReviewInstruction for the Coach Agent.',
     'Do not directly modify the plan.',
@@ -39,7 +52,13 @@ export async function runReviewAgent(args: {
     `Current plan summary: ${JSON.stringify(args.currentPlan)}`,
   ].join('\n');
   const llmResponse = await llm.invoke(prompt);
+  logUsage('review', llmResponse, model);
   const text = messageContentToString(llmResponse.content);
-  const parsed = await parser.parse(text);
-  return ReviewInstructionSchema.parse(parsed);
+  try {
+    const parsed = await parser.parse(text);
+    return ReviewInstructionSchema.parse(parsed);
+  } catch (error) {
+    console.error('Review agent output parsing failed', { error, rawOutput: text });
+    throw error;
+  }
 }

@@ -36,7 +36,7 @@ function messageContentToString(content: unknown): string {
 }
 
 export async function enrichIngredient(description: string) {
-  const llm = createLLM({ temperature: 0.2 });
+  const llm = createLLM();
   const prompt = [
     'Extract nutrition + price info for a UK grocery ingredient/product description.',
     'Return only JSON matching the schema fields.',

@@ -20,6 +20,19 @@ npm run dev            # starts the Express API on http://localhost:3000
 
 The backend assumes a single placeholder user id (`00000000-0000-0000-0000-000000000001`) for now. All profile, plan, and shopping list flows operate on this demo user until UI/auth is implemented.
 
+Environment variables (`.env`) include:
+
+```
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/ai_agent
+OPENAI_API_KEY=your_key_here
+LLM_MODEL=gpt-5-mini          # optional global override
+COACH_MODEL=gpt-5-mini        # coach agent default
+REVIEW_MODEL=gpt-5-nano       # review agent default
+PORT=3000
+```
+
+Any LangChain-compatible base URL can be set via `LLM_BASE_URL` if you proxy requests to a local OpenAI-compatible server.
+
 ### API Surface (V1)
 
 - `GET/PUT /api/user/profile` – onboarding, preferences, and “My ingredients/recipes”.
