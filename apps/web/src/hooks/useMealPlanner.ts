@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
-import {
+import type {
   PlannerResponse,
   ReviewInstruction,
   ShoppingList,

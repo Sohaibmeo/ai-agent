@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import './App.css';
 import { useMealPlanner } from './hooks/useMealPlanner';
-import {
+import type {
   PlanDay,
   PlanMeal,
   ReviewInstruction,
