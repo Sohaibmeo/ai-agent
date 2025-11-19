@@ -17,6 +17,12 @@ npm run dev:web       # http://localhost:5173
 
 The default demo user id is `demo-user`. The web app loads this user automatically.
 
+### Logging & Observability
+
+- Backend uses [pino](https://github.com/pinojs/pino). Set `LOG_LEVEL=debug` to see per-request traces, orchestrator transitions, and coach/review agent decisions.
+- Every HTTP request logs latency, status, and correlation id; agents emit info-level summaries whenever they regenerate weeks/days/meals or translate user feedback.
+- Tail logs in development with `npm run dev:server` or point your preferred log shipper at stdout in production.
+
 ### Flows Implemented
 
 - Profile, dietary, and preference editing.
