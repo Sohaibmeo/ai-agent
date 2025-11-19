@@ -1,3 +1,5 @@
+import planRouter from './routes/plan';
+app.use('/api/plan', planRouter);
 import express from 'express';
 import bodyParser from 'body-parser';
 
