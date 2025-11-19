@@ -143,5 +143,8 @@ export const orchestrator = {
   },
   getShoppingList(planId: string): ShoppingList | undefined {
     return mockDb.getShoppingList(planId);
+  },
+  getPlan(planId: string) {
+    return mockDb.getWeeklyPlan(planId);
   }
 };
