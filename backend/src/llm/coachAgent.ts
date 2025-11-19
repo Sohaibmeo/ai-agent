@@ -9,6 +9,7 @@ import {
 } from './schemas.js';
 
 const parser = StructuredOutputParser.fromZodSchema(WeeklyPlanSchema);
+const formatInstructions = parser.getFormatInstructions();
 
 export interface CoachAgentArgs {
   mode: 'generate' | 'regenerate';
@@ -51,68 +52,41 @@ function logUsage(agent: string, message: unknown, defaultModel: string) {
   });
 }
 
-export async function runCoachAgent(args: CoachAgentArgs): Promise<WeeklyPlan> {
+async function invokeCoachLLM(args: CoachAgentArgs, retryHint?: string) {
   const model = process.env.COACH_MODEL || 'gpt-5-mini';
   const llm = createLLM(model);
-  const prompt = [
-    'You are the Coach Agent for a UK budget-aware meal planner.',
-    'Return ONLY JSON that satisfies the WeeklyPlan schema. DO NOT invent new fields.',
-    'WeeklyPlan schema reminder:',
-    `{
-      "weekStartDate": "YYYY-MM-DD",
-      "totalEstimatedCost": number,
-      "totalKcal": number,
-      "status": "draft" | "active" | "superseded",
-      "days": [
-        {
-          "id": string? (optional but helpful),
-          "dayIndex": 0-6,
-          "date": "YYYY-MM-DD",
-          "dailyEstimatedCost": number,
-          "dailyKcal": number,
-          "meals": [
-            {
-              "id": string? (optional),
-              "mealType": "breakfast" | "snack" | "lunch" | "dinner",
-              "recipeId": string | null,
-              "recipeName": string,
-              "portionMultiplier": number,
-              "kcal": number,
-              "protein": number,
-              "carbs": number,
-              "fat": number,
-              "estimatedCost": number,
-              "ingredients": [
-                {
-                  "id": string | null,
-                  "name": string,
-                  "quantity": number,
-                  "quantityUnit": string,
-                  "estimatedCost": number
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    }`,
-    'All numeric fields must be raw numbers (no strings). Provide exactly 7 consecutive days starting at weekStartDate, populate dayIndex sequentially 0-6.',
-    'Use only recipes and ingredients from the catalog. Respect generateInput.profile (meal schedule, diets, budgets).',
+  const instructions = [
+    'You are the Coach Agent for a UK budget-aware meal planner. Produce a 7-day WeeklyPlan JSON strictly following the schema.',
+    formatInstructions,
+    'Hard requirements:',
+    '- Exactly 7 days starting at weekStartDate with sequential dayIndex 0-6.',
+    '- Populate meals only for enabled meal schedule slots.',
+    '- Use only recipes/ingredients from catalog; adjust costs/macros by portionMultiplier.',
+    '- Numeric fields must be plain numbers (no strings).',
+    retryHint ? `Previous output was invalid: ${retryHint}. Respond with JSON only.` : 'Respond with JSON only, no prose.',
     '',
     `Mode: ${args.mode}`,
-    `Generate input: ${JSON.stringify(args.generateInput ?? null)}`,
-    `Current plan: ${JSON.stringify(args.currentPlan ?? null)}`,
-    `Review instruction: ${JSON.stringify(args.instruction ?? null)}`,
-    `Catalog: ${JSON.stringify(args.catalog)}`,
+    `Generate input JSON: ${JSON.stringify(args.generateInput ?? null)}`,
+    `Current plan JSON: ${JSON.stringify(args.currentPlan ?? null)}`,
+    `Review instruction JSON: ${JSON.stringify(args.instruction ?? null)}`,
+    `Catalog JSON (trimmed): ${JSON.stringify(args.catalog)}`,
   ].join('\n');
-  const llmResponse = await llm.invoke(prompt);
+  const llmResponse = await llm.invoke(instructions);
   logUsage('coach', llmResponse, model);
-  const text = messageContentToString(llmResponse.content);
-  try {
-    const parsed = await parser.parse(text);
-    return WeeklyPlanSchema.parse(parsed);
-  } catch (error) {
-    console.error('Coach agent output parsing failed', { error, rawOutput: text });
-    throw error;
+  return messageContentToString(llmResponse.content);
+}
+
+export async function runCoachAgent(args: CoachAgentArgs): Promise<WeeklyPlan> {
+  let lastError: unknown;
+  for (const retryHint of [undefined, 'Return valid WeeklyPlan JSON exactly as specified']) {
+    const text = await invokeCoachLLM(args, retryHint);
+    try {
+      const parsed = await parser.parse(text);
+      return WeeklyPlanSchema.parse(parsed);
+    } catch (error) {
+      console.error('Coach agent output parsing failed', { error, rawOutput: text });
+      lastError = error;
+    }
   }
+  throw lastError instanceof Error ? lastError : new Error('Coach agent failed to produce valid plan');
 }

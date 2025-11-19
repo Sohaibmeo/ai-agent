@@ -22,14 +22,48 @@ function getUpcomingMonday(date = new Date()): string {
   return monday.toISOString().slice(0, 10);
 }
 
+const INGREDIENT_LIMIT = Number(process.env.CATALOG_INGREDIENT_LIMIT ?? 25);
+const RECIPE_LIMIT = Number(process.env.CATALOG_RECIPE_LIMIT ?? 20);
+
+type CatalogRecipe = Awaited<ReturnType<typeof listCatalogRecipes>>[number];
+
+function limitRecipes(recipes: CatalogRecipe[], limit: number) {
+  const buckets: Record<'breakfast' | 'snack' | 'lunch' | 'dinner', CatalogRecipe[]> = {
+    breakfast: [],
+    snack: [],
+    lunch: [],
+    dinner: [],
+  };
+
+  for (const recipe of recipes) {
+    buckets[recipe.mealSlot as keyof typeof buckets].push(recipe);
+  }
+
+  const perBucket = Math.max(1, Math.floor(limit / 4));
+  const selected: CatalogRecipe[] = [];
+
+  for (const slot of ['breakfast', 'snack', 'lunch', 'dinner'] as const) {
+    selected.push(...buckets[slot].slice(0, perBucket));
+  }
+
+  if (selected.length < limit) {
+    selected.push(...recipes.filter((recipe) => !selected.includes(recipe)).slice(0, limit - selected.length));
+  }
+
+  return selected.slice(0, limit);
+}
+
 async function buildCatalog(userId: string) {
   const [ingredients, recipes] = await Promise.all([
     listCatalogIngredients(userId),
     listCatalogRecipes(userId),
   ]);
 
+  const limitedIngredients = ingredients.slice(0, INGREDIENT_LIMIT);
+  const limitedRecipes = limitRecipes(recipes, RECIPE_LIMIT);
+
   return {
-    ingredients: ingredients.map((ingredient) => ({
+    ingredients: limitedIngredients.map((ingredient) => ({
       id: ingredient.id,
       name: ingredient.name,
       unit: ingredient.unit,
@@ -40,7 +74,7 @@ async function buildCatalog(userId: string) {
       fatPerUnit: ingredient.fatPerUnit,
       estimatedPricePerUnit: ingredient.estimatedPricePerUnit,
     })),
-    recipes: recipes.map((recipe) => ({
+    recipes: limitedRecipes.map((recipe) => ({
       id: recipe.id,
       name: recipe.name,
       mealSlot: recipe.mealSlot,
