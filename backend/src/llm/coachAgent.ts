@@ -56,8 +56,48 @@ export async function runCoachAgent(args: CoachAgentArgs): Promise<WeeklyPlan> {
   const llm = createLLM(model);
   const prompt = [
     'You are the Coach Agent for a UK budget-aware meal planner.',
-    'Return ONLY JSON that satisfies the WeeklyPlan schema (7 days, meals respecting meal schedule, budgets, diets).',
-    'Use only catalog recipes/ingredients provided.',
+    'Return ONLY JSON that satisfies the WeeklyPlan schema. DO NOT invent new fields.',
+    'WeeklyPlan schema reminder:',
+    `{
+      "weekStartDate": "YYYY-MM-DD",
+      "totalEstimatedCost": number,
+      "totalKcal": number,
+      "status": "draft" | "active" | "superseded",
+      "days": [
+        {
+          "id": string? (optional but helpful),
+          "dayIndex": 0-6,
+          "date": "YYYY-MM-DD",
+          "dailyEstimatedCost": number,
+          "dailyKcal": number,
+          "meals": [
+            {
+              "id": string? (optional),
+              "mealType": "breakfast" | "snack" | "lunch" | "dinner",
+              "recipeId": string | null,
+              "recipeName": string,
+              "portionMultiplier": number,
+              "kcal": number,
+              "protein": number,
+              "carbs": number,
+              "fat": number,
+              "estimatedCost": number,
+              "ingredients": [
+                {
+                  "id": string | null,
+                  "name": string,
+                  "quantity": number,
+                  "quantityUnit": string,
+                  "estimatedCost": number
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }`,
+    'All numeric fields must be raw numbers (no strings). Provide exactly 7 consecutive days starting at weekStartDate, populate dayIndex sequentially 0-6.',
+    'Use only recipes and ingredients from the catalog. Respect generateInput.profile (meal schedule, diets, budgets).',
     '',
     `Mode: ${args.mode}`,
     `Generate input: ${JSON.stringify(args.generateInput ?? null)}`,

@@ -5,7 +5,6 @@ export function createLLM(modelOverride?: string) {
 
   const client = new ChatOpenAI({
     model,
-    temperature: 0.3,
     apiKey: process.env.OPENAI_API_KEY,
     configuration: process.env.LLM_BASE_URL
       ? {
