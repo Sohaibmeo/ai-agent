@@ -728,3 +728,29 @@ When generating git commits, use natural, meaningful messages based on the chang
 "implement weekly plan orchestrator and shopping list builder"
 
 "create dashboard layout with profile, plans, groceries tabs"
+
+7. LLM Usage & Cost-Safety Instructions
+
+Important: this project must use cost-efficient models by default and avoid accidentally calling expensive models.
+
+7.1 Models to use
+
+Coach Agent (plan generation & regeneration)
+
+Use: gpt-5-mini
+
+This is the default model for all WeeklyPlan generation.
+
+Review Agent (interpreting user actions into ReviewInstruction)
+
+Use: gpt-5-nano by default.
+
+It’s allowed to upgrade this to gpt-5-mini later if needed, but start with nano.
+
+Do NOT use gpt-5.1, gpt-5-pro, or o3/o4 in this project
+
+Those are too expensive for this use case and must not be used in any default path.
+
+7.2 Env-based model configuration
+
+Create a shared LLM client in src/llm/llmClient.ts that reads the model from environment variables, with safe defaults:

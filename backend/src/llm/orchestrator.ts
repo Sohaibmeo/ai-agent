@@ -1,7 +1,10 @@
 import { DEMO_USER_ID } from '../constants.js';
-import { listCatalogIngredients } from '../db/repositories/ingredientRepo.js';
 import { getCurrentPlan, getWeeklyPlanById, markPlanStatus, saveWeeklyPlan } from '../db/repositories/planRepo.js';
-import { listCatalogRecipes } from '../db/repositories/recipeRepo.js';
+import {
+  getRecipesWithIngredients,
+  listCatalogRecipes,
+  RecipeWithIngredients,
+} from '../db/repositories/recipeRepo.js';
 import { rebuildShoppingListFromPlan } from '../db/repositories/shoppingListRepo.js';
 import { getUserPreferences, getUserProfile } from '../db/repositories/userRepo.js';
 import { runCoachAgent } from './coachAgent.js';
@@ -10,6 +13,7 @@ import {
   GenerateWeekInput,
   PlanActionContext,
   PlanActionContextSchema,
+  PlanMeal,
   ReviewInstruction,
   WeeklyPlan,
 } from './schemas.js';
@@ -22,7 +26,6 @@ function getUpcomingMonday(date = new Date()): string {
   return monday.toISOString().slice(0, 10);
 }
 
-const INGREDIENT_LIMIT = Number(process.env.CATALOG_INGREDIENT_LIMIT ?? 25);
 const RECIPE_LIMIT = Number(process.env.CATALOG_RECIPE_LIMIT ?? 20);
 
 type CatalogRecipe = Awaited<ReturnType<typeof listCatalogRecipes>>[number];
@@ -54,26 +57,11 @@ function limitRecipes(recipes: CatalogRecipe[], limit: number) {
 }
 
 async function buildCatalog(userId: string) {
-  const [ingredients, recipes] = await Promise.all([
-    listCatalogIngredients(userId),
-    listCatalogRecipes(userId),
-  ]);
-
-  const limitedIngredients = ingredients.slice(0, INGREDIENT_LIMIT);
+  const recipes = await listCatalogRecipes(userId);
   const limitedRecipes = limitRecipes(recipes, RECIPE_LIMIT);
 
   return {
-    ingredients: limitedIngredients.map((ingredient) => ({
-      id: ingredient.id,
-      name: ingredient.name,
-      unit: ingredient.unit,
-      tags: ingredient.tags,
-      kcalPerUnit: ingredient.kcalPerUnit,
-      proteinPerUnit: ingredient.proteinPerUnit,
-      carbsPerUnit: ingredient.carbsPerUnit,
-      fatPerUnit: ingredient.fatPerUnit,
-      estimatedPricePerUnit: ingredient.estimatedPricePerUnit,
-    })),
+    ingredients: [],
     recipes: limitedRecipes.map((recipe) => ({
       id: recipe.id,
       name: recipe.name,
@@ -119,6 +107,107 @@ async function buildGenerateInput(userId: string): Promise<GenerateWeekInput> {
   };
 }
 
+function hydrateMealFromRecipe(meal: PlanMeal, recipe?: RecipeWithIngredients): PlanMeal {
+  const portionMultiplier = meal.portionMultiplier ?? 1;
+  const baseMeal: PlanMeal = {
+    ...meal,
+    portionMultiplier,
+    ingredients: meal.ingredients ? [...meal.ingredients] : [],
+  };
+
+  if (!recipe) {
+    baseMeal.ingredients = [];
+    return baseMeal;
+  }
+
+  const updatedMeal: PlanMeal = { ...baseMeal };
+  updatedMeal.recipeName = updatedMeal.recipeName || recipe.name;
+
+  if (updatedMeal.kcal == null && recipe.baseKcal != null) {
+    updatedMeal.kcal = Number(recipe.baseKcal) * portionMultiplier;
+  }
+  if (updatedMeal.protein == null && recipe.baseProtein != null) {
+    updatedMeal.protein = Number(recipe.baseProtein) * portionMultiplier;
+  }
+  if (updatedMeal.carbs == null && recipe.baseCarbs != null) {
+    updatedMeal.carbs = Number(recipe.baseCarbs) * portionMultiplier;
+  }
+  if (updatedMeal.fat == null && recipe.baseFat != null) {
+    updatedMeal.fat = Number(recipe.baseFat) * portionMultiplier;
+  }
+
+  updatedMeal.ingredients = recipe.ingredients.map((ingredient) => {
+    const estimatedCost =
+      ingredient.unitPrice != null ? Number(ingredient.unitPrice) * ingredient.quantity * portionMultiplier : undefined;
+    return {
+      id: ingredient.ingredientId ?? undefined,
+      name: ingredient.name,
+      quantity: ingredient.quantity * portionMultiplier,
+      quantityUnit: ingredient.quantityUnit,
+      estimatedCost,
+    };
+  });
+
+  const ingredientCost = updatedMeal.ingredients.reduce((sum, ingredient) => sum + (ingredient.estimatedCost ?? 0), 0);
+  if (ingredientCost > 0) {
+    updatedMeal.estimatedCost = ingredientCost;
+  } else if (updatedMeal.estimatedCost == null && recipe.baseEstimatedCost != null) {
+    updatedMeal.estimatedCost = Number(recipe.baseEstimatedCost) * portionMultiplier;
+  }
+
+  return updatedMeal;
+}
+
+function sumNumbers(values: Array<number | undefined>): number | undefined {
+  let total = 0;
+  for (const value of values) {
+    if (typeof value === 'number' && !Number.isNaN(value)) {
+      total += value;
+    }
+  }
+  return total > 0 ? total : undefined;
+}
+
+async function hydratePlanWithRecipes(plan: WeeklyPlan): Promise<WeeklyPlan> {
+  const recipeIds = new Set<string>();
+  for (const day of plan.days) {
+    for (const meal of day.meals) {
+      if (meal.recipeId) {
+        recipeIds.add(meal.recipeId);
+      }
+    }
+  }
+
+  if (!recipeIds.size) {
+    return plan;
+  }
+
+  const recipes = await getRecipesWithIngredients([...recipeIds]);
+  const recipeMap = new Map(recipes.map((recipe) => [recipe.id, recipe]));
+
+  const hydratedDays = plan.days.map((day) => {
+    const meals = day.meals.map((meal) => hydrateMealFromRecipe(meal, meal.recipeId ? recipeMap.get(meal.recipeId) : undefined));
+    const dailyEstimatedCost = sumNumbers(meals.map((meal) => meal.estimatedCost));
+    const dailyKcal = sumNumbers(meals.map((meal) => meal.kcal));
+    return {
+      ...day,
+      meals,
+      dailyEstimatedCost,
+      dailyKcal,
+    };
+  });
+
+  const totalEstimatedCost = sumNumbers(hydratedDays.map((day) => day.dailyEstimatedCost));
+  const totalKcal = sumNumbers(hydratedDays.map((day) => day.dailyKcal));
+
+  return {
+    ...plan,
+    days: hydratedDays,
+    totalEstimatedCost,
+    totalKcal,
+  };
+}
+
 async function persistAndReload(userId: string, plan: WeeklyPlan): Promise<WeeklyPlan> {
   const planId = await saveWeeklyPlan(userId, plan);
   await rebuildShoppingListFromPlan(planId, { ...plan, id: planId });
@@ -136,7 +225,8 @@ export async function generateWeeklyPlan(userId: string = DEMO_USER_ID) {
     generateInput,
     catalog: generateInput.catalog,
   });
-  return persistAndReload(userId, coachPlan);
+  const hydratedPlan = await hydratePlanWithRecipes(coachPlan);
+  return persistAndReload(userId, hydratedPlan);
 }
 
 export async function handlePlanAction(args: {
@@ -184,7 +274,8 @@ export async function handlePlanAction(args: {
     catalog,
   });
 
-  return persistAndReload(args.userId, updatedPlan);
+  const hydratedPlan = await hydratePlanWithRecipes(updatedPlan);
+  return persistAndReload(args.userId, hydratedPlan);
 }
 
 export async function getCurrentPlanForUser(userId: string) {
