@@ -1,7 +1,8 @@
-import planRouter from './routes/plan';
-app.use('/api/plan', planRouter);
+
 import express from 'express';
 import bodyParser from 'body-parser';
+import planRouter from './routes/plan';
+import profileRouter from './routes/profile';
 
 const app = express();
 app.use(bodyParser.json());
@@ -10,8 +11,7 @@ app.get('/', (req, res) => {
   res.send('AI Meal Planning Backend is running');
 });
 
-
-import profileRouter from './routes/profile';
+app.use('/api/plan', planRouter);
 app.use('/api/user/profile', profileRouter);
 
 const PORT = process.env.PORT || 4000;

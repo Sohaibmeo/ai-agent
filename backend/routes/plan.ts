@@ -24,7 +24,7 @@ router.post('/generate-week/:userId', async (req, res) => {
     if (profile.dinner_enabled) mealSlots.push('dinner');
     const plan = [];
     for (const day of days) {
-      const dayMeals = {};
+      const dayMeals: Record<string, any> = {}; // Define type to allow string keys
       for (const slot of mealSlots) {
         const candidates = await getCandidateRecipes({
           mealSlot: slot,
