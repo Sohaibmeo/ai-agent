@@ -5,6 +5,7 @@ import {
   WeeklyPlan,
   WeeklyPlanSchema
 } from '../schemas';
+import { logger } from '../logger';
 
 interface ReviewContext {
   profile: GenerateWeekInput['profile'];
@@ -41,12 +42,17 @@ const parseSwapMention = (feedback: string) => {
 export const reviewAgent = {
   buildAvoidList(input: GenerateWeekInput): string[] {
     const dietAvoids = dietAvoidMap[input.profile.dietType] ?? [];
-    return Array.from(
+    const avoidList = Array.from(
       new Set([
         ...dietAvoids,
         ...input.preferences.ingredientsAvoid.map((item) => item.toLowerCase())
       ])
     );
+    reviewLog.debug(
+      { action: 'build-avoid-list', dietType: input.profile.dietType, size: avoidList.length },
+      'Compiled avoid list'
+    );
+    return avoidList;
   },
   interpretFeedback(feedback: string): ReviewInstruction {
     const normalized = feedback.toLowerCase();
@@ -54,7 +60,7 @@ export const reviewAgent = {
     const ingredient = parseIngredientMention(normalized);
 
     if (swap) {
-      return ReviewInstructionSchema.parse({
+      const instruction = ReviewInstructionSchema.parse({
         targetLevel: 'ingredient',
         action: 'swap_ingredient',
         params: {
@@ -63,10 +69,20 @@ export const reviewAgent = {
           applyToWholeWeek: normalized.includes('week')
         }
       });
+      reviewLog.info(
+        {
+          action: 'interpret-feedback',
+          type: 'swap',
+          remove: swap.remove,
+          add: swap.add
+        },
+        'Interpreted swap feedback'
+      );
+      return instruction;
     }
 
     if (ingredient) {
-      return ReviewInstructionSchema.parse({
+      const instruction = ReviewInstructionSchema.parse({
         targetLevel: 'ingredient',
         action: 'remove_ingredient',
         params: {
@@ -74,10 +90,15 @@ export const reviewAgent = {
           applyToWholeWeek: normalized.includes('week')
         }
       });
+      reviewLog.info(
+        { action: 'interpret-feedback', type: 'remove', ingredient },
+        'Interpreted removal feedback'
+      );
+      return instruction;
     }
 
     if (normalized.includes('day')) {
-      return ReviewInstructionSchema.parse({
+      const instruction = ReviewInstructionSchema.parse({
         targetLevel: 'day',
         action: 'regenerate_day',
         params: {
@@ -86,10 +107,12 @@ export const reviewAgent = {
           makeHigherProtein: normalized.includes('protein')
         }
       });
+      reviewLog.info({ action: 'interpret-feedback', type: 'day' }, 'Regenerate day instruction');
+      return instruction;
     }
 
     if (normalized.includes('meal')) {
-      return ReviewInstructionSchema.parse({
+      const instruction = ReviewInstructionSchema.parse({
         targetLevel: 'meal',
         action: 'regenerate_meal',
         params: {
@@ -99,9 +122,11 @@ export const reviewAgent = {
           preferMealType: normalized.includes('smoothie') ? 'drinkable' : undefined
         }
       });
+      reviewLog.info({ action: 'interpret-feedback', type: 'meal' }, 'Regenerate meal instruction');
+      return instruction;
     }
 
-    return ReviewInstructionSchema.parse({
+    const instruction = ReviewInstructionSchema.parse({
       targetLevel: 'week',
       action: normalized.includes('new') ? 'generate_new_week' : 'regenerate_week',
       params: {
@@ -111,6 +136,8 @@ export const reviewAgent = {
         easierDifficulty: normalized.includes('easy')
       }
     });
+    reviewLog.info({ action: 'interpret-feedback', type: 'week' }, 'Week-level instruction');
+    return instruction;
   },
   validatePlan(plan: WeeklyPlan, context: ReviewContext) {
     const issues: string[] = [];
@@ -130,7 +157,12 @@ export const reviewAgent = {
         computedCost += meal.estimatedCost ?? 0;
         meal.ingredients.forEach((ingredient) => {
           if (avoidSet.has(ingredient.name.toLowerCase())) {
-            issues.push(`Ingredient ${ingredient.name} violates avoid list`);
+            const message = `Ingredient ${ingredient.name} violates avoid list`;
+            issues.push(message);
+            reviewLog.warn(
+              { action: 'validate-plan', issue: message, ingredient: ingredient.name },
+              'Dietary violation'
+            );
           }
         });
       });
@@ -142,9 +174,21 @@ export const reviewAgent = {
         issues.push(
           `Plan cost £${computedCost.toFixed(2)} exceeds budget £${maxBudget.toFixed(2)}`
         );
+        reviewLog.warn(
+          {
+            action: 'validate-plan',
+            computedCost: computedCost.toFixed(2),
+            maxBudget: maxBudget.toFixed(2)
+          },
+          'Budget exceeded'
+        );
       }
     }
 
+    if (issues.length === 0) {
+      reviewLog.info({ action: 'validate-plan' }, 'Plan passed validation');
+    }
     return { valid: issues.length === 0, issues };
   }
 };
+const reviewLog = logger.child({ scope: 'review-agent' });

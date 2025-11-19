@@ -14,6 +14,7 @@ import {
   getPortionMultiplier
 } from '../data/store';
 import { priceAgent } from './priceAgent';
+import { logger } from '../logger';
 
 export interface CoachContext {
   user: UserState;
@@ -179,8 +180,18 @@ const recomputePlanTotals = (plan: WeeklyPlan) => {
 
 export const coachAgent = {
   generateWeek(input: GenerateWeekInput, context: CoachContext): WeeklyPlan {
+    coachLog.info(
+      {
+        action: 'generate-week',
+        userId: input.userId,
+        portionMode: input.profile.portionMode,
+        schedule: getMealSlots(input.profile)
+      },
+      'Coach generating weekly plan'
+    );
     const days: PlanDay[] = [];
     for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
+      coachLog.debug({ action: 'build-day', dayIndex }, 'Building day');
       days.push(buildDay(dayIndex, input, context));
     }
     const plan: WeeklyPlan = {
@@ -200,6 +211,7 @@ export const coachAgent = {
     input: GenerateWeekInput,
     context: CoachContext
   ) {
+    coachLog.info({ action: 'regenerate-day', dayIndex }, 'Regenerating plan day');
     const dayPosition = plan.days.findIndex((day) => day.dayIndex === dayIndex);
     if (dayPosition === -1) return plan;
     plan.days[dayPosition] = buildDay(dayIndex, input, context);
@@ -212,6 +224,10 @@ export const coachAgent = {
     input: GenerateWeekInput,
     context: CoachContext
   ) {
+    coachLog.info(
+      { action: 'regenerate-meal', dayIndex, mealType },
+      'Regenerating meal slot'
+    );
     const day = plan.days.find((currentDay) => currentDay.dayIndex === dayIndex);
     if (!day) return plan;
     const mealPosition = day.meals.findIndex((meal) => meal.mealType === mealType);
@@ -223,6 +239,14 @@ export const coachAgent = {
     return recomputePlanTotals(plan);
   },
   applyIngredientInstruction(plan: WeeklyPlan, instruction: ReviewInstruction) {
+    coachLog.info(
+      {
+        action: instruction.action,
+        ingredientToRemove: instruction.params?.ingredientToRemove,
+        ingredientToAdd: instruction.params?.ingredientToAdd
+      },
+      'Applying ingredient level instruction'
+    );
     const params = instruction.params;
     if (!params) return plan;
     plan.days.forEach((day) => {
@@ -253,3 +277,4 @@ export const coachAgent = {
     return recomputePlanTotals(plan);
   }
 };
+const coachLog = logger.child({ scope: 'coach-agent' });
