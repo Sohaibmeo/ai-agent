@@ -1,27 +1,43 @@
+
 import express from 'express';
 import { UserProfileSchema } from '../models/userProfile';
+import { getUserProfile, upsertUserProfile } from '../services/userProfileService';
 
 const router = express.Router();
 
-// Mock DB (replace with real DB integration)
-let userProfile: any = null;
-
 // GET user profile
-router.get('/', (req, res) => {
-  if (!userProfile) {
-    return res.status(404).json({ error: 'Profile not found' });
+router.get('/:userId', async (req, res) => {
+  const userId = Number(req.params.userId);
+  if (!userId) {
+    return res.status(400).json({ error: 'Missing or invalid userId' });
   }
-  res.json(userProfile);
+  try {
+    const profile = await getUserProfile(userId);
+    if (!profile) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+    res.json(profile);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch profile' });
+  }
 });
 
 // PUT user profile (create or update)
-router.put('/', (req, res) => {
-  const parseResult = UserProfileSchema.safeParse(req.body);
-  if (!parseResult.success) {
-  return res.status(400).json({ error: 'Invalid profile data', details: parseResult.error.issues });
+router.put('/:userId', async (req, res) => {
+  const userId = Number(req.params.userId);
+  if (!userId) {
+    return res.status(400).json({ error: 'Missing or invalid userId' });
   }
-  userProfile = parseResult.data;
-  res.json(userProfile);
+  const parseResult = UserProfileSchema.safeParse({ ...req.body, user_id: userId });
+  if (!parseResult.success) {
+    return res.status(400).json({ error: 'Invalid profile data', details: parseResult.error.issues });
+  }
+  try {
+    const profile = await upsertUserProfile(parseResult.data);
+    res.json(profile);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save profile' });
+  }
 });
 
 export default router;
