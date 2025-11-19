@@ -8,7 +8,9 @@ app.get('/', (req, res) => {
   res.send('AI Meal Planning Backend is running');
 });
 
-// TODO: Import and use routes
+
+import profileRouter from './routes/profile';
+app.use('/api/user/profile', profileRouter);
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
