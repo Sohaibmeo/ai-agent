@@ -1,0 +1,838 @@
+1. System Overview & Agents
+1.1 Goal
+
+Build a UK-focused AI meal planning system that generates 7-day meal plans within a weekly budget, respecting dietary rules (e.g. halal/vegan), and allowing deep customization at ingredient, meal, day, and week levels. It produces a grocery shopping list, tracks pantry items, and lets users override ingredient prices for more accurate budgeting.
+
+1.2 High-level Architecture
+
+Frontend: React + TypeScript
+
+Backend: Node.js + TypeScript (REST API)
+
+LLM Orchestration: LangChain (JS/TS), using local LLMs
+
+DB: Postgres (or compatible SQL)
+
+Validation: Zod schemas
+
+Agents:
+
+Coach Agent – generates & regenerates meal plans
+
+Review Agent – interprets user feedback & validates plans
+
+Price Agent (optional) – helps normalize and reason about prices/units
+
+2. Agents & Responsibilities
+2.1 Coach Agent
+
+Inputs (examples):
+
+User profile: age, height, weight, activity level, portion preset
+
+Dietary settings: halal/vegan/keto/etc → mapped to avoid lists
+
+Preferences: ingredients/recipes liked/disliked, cuisines
+
+Meal schedule: which meals per day (breakfast/snacks/lunch/dinner)
+
+Difficulty setting: super easy / easy / medium / hard
+
+Weekly budget (optional but recommended)
+
+Ingredient catalog (with cost + macros)
+
+Base recipes (with ingredients, difficulty, macros, cost)
+
+Existing weekly plan (when regenerating)
+
+Tasks:
+
+Generate a 7-day weekly plan with meals per day according to schedule
+
+Choose suitable recipes from catalog that match:
+
+diet rules
+
+difficulty
+
+preferences
+
+Compute:
+
+ingredient quantities (using portion preset)
+
+macros (kcal, protein, carbs, fat)
+
+daily cost & total weekly cost
+
+Modify plans on demand:
+
+regenerate meal/day/week
+
+remove/replace ingredients
+
+handle “swap all X in week”
+
+apply portion-presets and difficulty constraints
+
+Output:
+
+Strict JSON matching WeeklyPlan schema (defined below).
+
+2.2 Review Agent
+
+Inputs:
+
+User feedback text and/or UI actions (e.g. “remove mayo”, “regenerate day”, “too expensive”)
+
+Current weekly plan (or subset: day/meal)
+
+Basic constraints (budget, dietary rules, schemas)
+
+Tasks:
+
+Convert feedback into structured instructions, e.g.:
+
+avoid_ingredients: ["mayonnaise"]
+
+constraints: { make_healthier: true, keep_calories_similar: true }
+
+Validate Coach Agent output:
+
+JSON schema check (via Zod)
+
+Check dietary rules (no pork for halal, etc.)
+
+Check cost vs budget (if overshoot is allowed, by how much)
+
+If invalid, send corrective instructions back to Coach.
+
+Output:
+
+ReviewInstruction JSON (used as input to Coach)
+
+Pass/fail validation for generated plans.
+
+2.3 Price Agent (optional)
+
+Inputs:
+
+Ingredient definitions with units & base prices
+
+User price overrides (user_ingredient_price)
+
+New ingredients added by Coach (auto-discovered)
+
+Tasks:
+
+Normalize units (1kg, 100g, 1 piece, etc.)
+
+Estimate assumed prices for new ingredients
+
+Classify ingredients as high-impact vs low-impact for cost
+
+Help compute cost per meal/day/week
+
+Output:
+
+Updated estimated_price_per_unit for ingredients
+
+Cost bands (cheap/medium/expensive) if needed.
+
+3. User Flows & Choices
+3.1 Onboarding Flow
+
+User visits app for the first time → fills onboarding:
+
+Basic Body Info
+
+age
+
+height_cm
+
+weight_kg
+
+activity_level (enum: sedentary, light, moderate, active)
+
+Dietary Requirements
+
+diet_type: none | halal | vegan | vegetarian | keto | gluten_free | lactose_free
+
+System maps these to ingredient avoid lists, e.g.:
+
+halal → avoid pork, alcohol, etc.
+
+vegan → avoid all meat, eggs, dairy, etc.
+
+Preferences (optional, but powerful)
+
+ingredients_preferred: string[]
+
+ingredients_avoid: string[]
+
+must_have_ingredients: string[]
+
+recipes_preferred: string[]
+
+cuisines_liked: string[]
+
+cuisines_disliked: string[]
+
+Meal Schedule
+
+enable_breakfast: boolean
+
+enable_snacks: boolean
+
+enable_lunch: boolean
+
+enable_dinner: boolean
+
+Difficulty
+
+recipe_difficulty: "super_easy" | "easy" | "medium" | "hard"
+
+Portion Size Preset
+
+portion_mode: "cutting" | "maintenance" | "bulking"
+
+Mapped to numeric factor:
+
+cutting: 0.8
+
+maintenance: 1.0
+
+bulking: 1.2–1.5 (pick default 1.3)
+
+Weekly Budget
+
+weekly_budget_gbp: number | null
+
+User then hits “Generate My Week”.
+
+3.2 Initial Week Generation Flow
+
+Frontend calls POST /api/plan/generate-week.
+
+Backend:
+
+loads user profile, preferences, ingredient catalog, recipes
+
+calls Orchestrator → Coach Agent with GenerateWeekInput.
+
+Coach Agent:
+
+constructs meals per day, respecting:
+
+meal schedule
+
+budget
+
+diet rules
+
+difficulty
+
+portion preset
+
+preferences
+
+calculates macros + cost.
+
+Review Agent:
+
+validates JSON & constraints.
+
+Backend saves plan → returns WeeklyPlan JSON.
+
+Frontend renders weekly plan.
+
+3.3 Modification / Regeneration Flow
+
+User can interact at multiple levels:
+
+3.3.1 Ingredient-Level Interaction
+
+On any meal, ingredient list is visible & interactive.
+
+For each ingredient user can:
+
+Remove ingredient (for this meal only)
+
+Replace ingredient (with default or chosen alternative)
+
+Avoid this ingredient in all future plans
+
+Prefer this ingredient in future plans
+
+Update ingredient price (for budget accuracy)
+
+Backend logs action → calls Orchestrator:
+
+Review Agent converts UI action into ReviewInstruction.
+
+Coach Agent regenerates the meal (or meals) accordingly.
+
+Updated WeeklyPlan returned.
+
+3.3.2 Meal-Level Interaction
+
+For any meal:
+
+Regenerate meal:
+
+healthier
+
+cheaper
+
+higher protein
+
+easier/super easy
+
+drinkable (smoothie) vs solid
+
+Replace meal by choosing from list of recipes (from DB) that fit constraints.
+
+3.3.3 Day-Level Interaction
+
+For any day:
+
+Regenerate whole day:
+
+fresh random
+
+cheaper
+
+higher protein
+
+easier recipes
+
+3.3.4 Week-Level Interaction
+
+For the entire week:
+
+Regenerate whole week (same filters)
+
+Swap all X in week
+
+e.g. “swap all mayonnaise to Greek yogurt”
+
+e.g. “swap tuna to chicken across week”
+
+Change portion mode (cutting/maintenance/bulking) → system rescales all meals.
+
+3.4 Shopping List, Pantry, & Prices
+3.4.1 Shopping List
+
+After a (current) weekly plan is accepted/used:
+
+System builds consolidated shopping list:
+
+sums ingredient quantities across all meals/days
+
+groups ingredients by category (meat, dairy, veg, pantry, etc.)
+
+calculates estimated total cost.
+
+User can:
+
+mark “Already have this”
+
+update quantity
+
+update ingredient price (user override)
+
+3.4.2 Pantry
+
+When user marks “Already have this”:
+
+Ingredient moves to pantry_items for the user.
+
+For future plans, pantry can be used to:
+
+reduce shopping list
+
+optionally lower effective weekly cost.
+
+3.4.3 Ingredient Price Override
+
+Any ingredient in list or plan:
+
+“I bought 1kg chicken for £4.50”
+
+Backend computes price_per_unit and saves in user_ingredient_price.
+
+Price resolution logic:
+
+IF user_ingredient_price exists → use that
+ELSE IF ingredient.estimated_price_per_unit exists → use that
+ELSE → use assumed default price for that type/category
+
+4. Database Schema (Part 2)
+
+SQL-ish schema for Postgres. You can adjust naming/constraints as needed.
+
+-- 1. Users
+
+CREATE TABLE users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- 2. User profile (body + core settings)
+
+CREATE TABLE user_profile (
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  age INT,
+  height_cm INT,
+  weight_kg NUMERIC(5,2),
+  activity_level TEXT CHECK (activity_level IN ('sedentary','light','moderate','active')),
+  diet_type TEXT CHECK (diet_type IN ('none','halal','vegan','vegetarian','keto','gluten_free','lactose_free')),
+  recipe_difficulty TEXT CHECK (recipe_difficulty IN ('super_easy','easy','medium','hard')),
+  portion_mode TEXT CHECK (portion_mode IN ('cutting','maintenance','bulking')),
+  weekly_budget_gbp NUMERIC(7,2),
+  enable_breakfast BOOLEAN NOT NULL DEFAULT TRUE,
+  enable_snacks BOOLEAN NOT NULL DEFAULT FALSE,
+  enable_lunch BOOLEAN NOT NULL DEFAULT TRUE,
+  enable_dinner BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+-- 3. User preferences (arrays or JSON)
+
+CREATE TABLE user_preferences (
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  ingredients_preferred TEXT[] DEFAULT '{}',
+  ingredients_avoid TEXT[] DEFAULT '{}',
+  must_have_ingredients TEXT[] DEFAULT '{}',
+  recipes_preferred TEXT[] DEFAULT '{}',
+  cuisines_liked TEXT[] DEFAULT '{}',
+  cuisines_disliked TEXT[] DEFAULT '{}'
+);
+
+-- 4. Ingredients catalog
+
+CREATE TABLE ingredients (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL UNIQUE,
+  unit TEXT NOT NULL, -- e.g. 'per_100g', 'per_piece', 'per_serving'
+  estimated_price_per_unit NUMERIC(7,4), -- price per unit in GBP
+  kcal_per_unit NUMERIC(7,2),
+  protein_per_unit NUMERIC(7,2),
+  carbs_per_unit NUMERIC(7,2),
+  fat_per_unit NUMERIC(7,2),
+  price_source TEXT CHECK (price_source IN ('seeded','assumed','user_aggregated')) DEFAULT 'seeded',
+  is_low_impact_cost BOOLEAN NOT NULL DEFAULT FALSE,
+  tags JSONB DEFAULT '[]'::jsonb  -- e.g. ["halal","vegan","keto_safe"]
+);
+
+-- 5. User-specific ingredient prices
+
+CREATE TABLE user_ingredient_price (
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  ingredient_id UUID NOT NULL REFERENCES ingredients(id) ON DELETE CASCADE,
+  price_per_unit NUMERIC(7,4) NOT NULL,
+  last_updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, ingredient_id)
+);
+
+-- 6. Recipes
+
+CREATE TABLE recipes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  meal_slot TEXT CHECK (meal_slot IN ('breakfast','snack','lunch','dinner')) NOT NULL,
+  difficulty TEXT CHECK (difficulty IN ('super_easy','easy','medium','hard')) NOT NULL,
+  base_portion_size NUMERIC(4,2) NOT NULL DEFAULT 1.0,
+  base_kcal NUMERIC(7,2),
+  base_protein NUMERIC(7,2),
+  base_carbs NUMERIC(7,2),
+  base_fat NUMERIC(7,2),
+  base_estimated_cost NUMERIC(7,2),
+  cuisine TEXT,
+  tags JSONB DEFAULT '[]'::jsonb -- e.g. ["high_protein","vegan","one_pot"]
+);
+
+-- 7. Recipe ingredients (composition)
+
+CREATE TABLE recipe_ingredients (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  recipe_id UUID NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+  ingredient_id UUID NOT NULL REFERENCES ingredients(id),
+  quantity NUMERIC(8,3) NOT NULL,
+  quantity_unit TEXT NOT NULL,  -- e.g. 'g','ml','piece'
+  is_optional BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+-- 8. Weekly plans
+
+CREATE TABLE weekly_plans (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  week_start_date DATE NOT NULL,
+  status TEXT CHECK (status IN ('draft','active','superseded')) NOT NULL DEFAULT 'draft',
+  total_estimated_cost NUMERIC(8,2),
+  total_kcal NUMERIC(10,2),
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- 9. Plan days
+
+CREATE TABLE plan_days (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  weekly_plan_id UUID NOT NULL REFERENCES weekly_plans(id) ON DELETE CASCADE,
+  day_index INT NOT NULL CHECK (day_index BETWEEN 0 AND 6),
+  date DATE,  -- optionally week_start_date + day_index
+  daily_estimated_cost NUMERIC(8,2),
+  daily_kcal NUMERIC(10,2)
+);
+
+-- 10. Plan meals (finalized meal per slot)
+
+CREATE TABLE plan_meals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  plan_day_id UUID NOT NULL REFERENCES plan_days(id) ON DELETE CASCADE,
+  meal_type TEXT CHECK (meal_type IN ('breakfast','snack','lunch','dinner')) NOT NULL,
+  recipe_id UUID REFERENCES recipes(id),
+  portion_multiplier NUMERIC(4,2) NOT NULL DEFAULT 1.0,
+  kcal NUMERIC(7,2),
+  protein NUMERIC(7,2),
+  carbs NUMERIC(7,2),
+  fat NUMERIC(7,2),
+  estimated_cost NUMERIC(7,2)
+);
+
+-- 11. Plan meal ingredients snapshot
+-- (so the generated plan is frozen even if recipes change later)
+
+CREATE TABLE plan_meal_ingredients (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  plan_meal_id UUID NOT NULL REFERENCES plan_meals(id) ON DELETE CASCADE,
+  ingredient_id UUID NOT NULL REFERENCES ingredients(id),
+  name TEXT NOT NULL,
+  quantity NUMERIC(8,3) NOT NULL,
+  quantity_unit TEXT NOT NULL,
+  kcal NUMERIC(7,2),
+  protein NUMERIC(7,2),
+  carbs NUMERIC(7,2),
+  fat NUMERIC(7,2),
+  estimated_cost NUMERIC(7,4)
+);
+
+-- 12. Pantry items
+
+CREATE TABLE pantry_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  ingredient_id UUID NOT NULL REFERENCES ingredients(id),
+  quantity NUMERIC(8,3),
+  quantity_unit TEXT
+);
+
+-- 13. Shopping list items
+
+CREATE TABLE shopping_list_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  weekly_plan_id UUID NOT NULL REFERENCES weekly_plans(id) ON DELETE CASCADE,
+  ingredient_id UUID NOT NULL REFERENCES ingredients(id),
+  name TEXT NOT NULL,
+  required_quantity NUMERIC(8,3) NOT NULL,
+  quantity_unit TEXT NOT NULL,
+  estimated_cost NUMERIC(8,2),
+  is_in_pantry BOOLEAN NOT NULL DEFAULT FALSE,
+  user_marked_have BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+-- 14. Plan feedback (optional but recommended)
+
+CREATE TABLE plan_feedback (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  weekly_plan_id UUID NOT NULL REFERENCES weekly_plans(id) ON DELETE CASCADE,
+  level TEXT CHECK (level IN ('week','day','meal','ingredient')) NOT NULL,
+  target_plan_day_id UUID,
+  target_plan_meal_id UUID,
+  target_ingredient_id UUID,
+  action TEXT CHECK (action IN ('accept','reject','regenerate','swap_all')) NOT NULL,
+  reason_text TEXT,
+  structured_payload JSONB,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+5. JSON & Zod Schemas (Part 3)
+
+These are the core types used between:
+
+Backend ↔ Frontend
+
+Backend ↔ Coach Agent / Review Agent
+
+You can expand them, but this will get you going.
+
+5.1 TypeScript Types
+
+// Ingredient as seen in a plan/recipe context
+export interface IngredientRef {
+  id: string;
+  name: string;
+  quantity: number;
+  quantityUnit: string; // 'g', 'ml', 'piece', etc.
+  kcal?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+  estimatedCost?: number; // for this quantity
+}
+
+// Meal in a plan
+export interface PlanMeal {
+  id: string;
+  mealType: 'breakfast' | 'snack' | 'lunch' | 'dinner';
+  recipeId: string | null;
+  recipeName: string;
+  portionMultiplier: number;
+  kcal?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+  estimatedCost?: number;
+  ingredients: IngredientRef[];
+}
+
+// Day in a plan
+export interface PlanDay {
+  id: string;
+  dayIndex: number; // 0-6
+  date?: string; // ISO date
+  meals: PlanMeal[];
+  dailyEstimatedCost?: number;
+  dailyKcal?: number;
+}
+
+// Weekly plan
+export interface WeeklyPlan {
+  id: string;
+  userId: string;
+  weekStartDate: string; // ISO date
+  status: 'draft' | 'active' | 'superseded';
+  days: PlanDay[];
+  totalEstimatedCost?: number;
+  totalKcal?: number;
+}
+
+// Shopping list item
+export interface ShoppingListItem {
+  id: string;
+  ingredientId: string;
+  name: string;
+  requiredQuantity: number;
+  quantityUnit: string;
+  estimatedCost?: number;
+  isInPantry: boolean;
+  userMarkedHave: boolean;
+}
+
+// Shopping list
+export interface ShoppingList {
+  weeklyPlanId: string;
+  items: ShoppingListItem[];
+  totalEstimatedCost?: number;
+}
+
+// Input for Coach Agent to generate week
+export interface GenerateWeekInput {
+  userId: string;
+  profile: {
+    age?: number;
+    heightCm?: number;
+    weightKg?: number;
+    activityLevel: 'sedentary' | 'light' | 'moderate' | 'active';
+    dietType:
+      | 'none'
+      | 'halal'
+      | 'vegan'
+      | 'vegetarian'
+      | 'keto'
+      | 'gluten_free'
+      | 'lactose_free';
+    recipeDifficulty: 'super_easy' | 'easy' | 'medium' | 'hard';
+    portionMode: 'cutting' | 'maintenance' | 'bulking';
+    weeklyBudgetGbp?: number;
+    enableBreakfast: boolean;
+    enableSnacks: boolean;
+    enableLunch: boolean;
+    enableDinner: boolean;
+  };
+  preferences: {
+    ingredientsPreferred: string[];
+    ingredientsAvoid: string[];
+    mustHaveIngredients: string[];
+    recipesPreferred: string[];
+    cuisinesLiked: string[];
+    cuisinesDisliked: string[];
+  };
+  // You can add more context: pantry summary, etc.
+}
+
+// Instruction from Review Agent back to Coach
+export interface ReviewInstruction {
+  targetLevel: 'week' | 'day' | 'meal' | 'ingredient';
+  targetIds?: {
+    weeklyPlanId?: string;
+    planDayId?: string;
+    planMealId?: string;
+    ingredientId?: string;
+  };
+  action:
+    | 'generate_new_week'
+    | 'regenerate_week'
+    | 'regenerate_day'
+    | 'regenerate_meal'
+    | 'swap_ingredient'
+    | 'remove_ingredient';
+  params?: {
+    // e.g. swap mayo -> yogurt across week
+    ingredientToRemove?: string;
+    ingredientToAdd?: string;
+    applyToWholeWeek?: boolean;
+    makeHealthier?: boolean;
+    makeCheaper?: boolean;
+    makeHigherProtein?: boolean;
+    easierDifficulty?: boolean;
+    preferMealType?: 'drinkable' | 'solid';
+    keepCaloriesSimilar?: boolean;
+  };
+}
+5.2 Zod Schemas
+
+import { z } from 'zod';
+
+export const IngredientRefSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  quantity: z.number(),
+  quantityUnit: z.string(),
+  kcal: z.number().optional(),
+  protein: z.number().optional(),
+  carbs: z.number().optional(),
+  fat: z.number().optional(),
+  estimatedCost: z.number().optional()
+});
+
+export const PlanMealSchema = z.object({
+  id: z.string(),
+  mealType: z.enum(['breakfast', 'snack', 'lunch', 'dinner']),
+  recipeId: z.string().nullable(),
+  recipeName: z.string(),
+  portionMultiplier: z.number(),
+  kcal: z.number().optional(),
+  protein: z.number().optional(),
+  carbs: z.number().optional(),
+  fat: z.number().optional(),
+  estimatedCost: z.number().optional(),
+  ingredients: z.array(IngredientRefSchema)
+});
+
+export const PlanDaySchema = z.object({
+  id: z.string(),
+  dayIndex: z.number().int().min(0).max(6),
+  date: z.string().optional(), // ISO date
+  meals: z.array(PlanMealSchema),
+  dailyEstimatedCost: z.number().optional(),
+  dailyKcal: z.number().optional()
+});
+
+export const WeeklyPlanSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  weekStartDate: z.string(), // ISO
+  status: z.enum(['draft', 'active', 'superseded']),
+  days: z.array(PlanDaySchema),
+  totalEstimatedCost: z.number().optional(),
+  totalKcal: z.number().optional()
+});
+
+export const ShoppingListItemSchema = z.object({
+  id: z.string(),
+  ingredientId: z.string(),
+  name: z.string(),
+  requiredQuantity: z.number(),
+  quantityUnit: z.string(),
+  estimatedCost: z.number().optional(),
+  isInPantry: z.boolean(),
+  userMarkedHave: z.boolean()
+});
+
+export const ShoppingListSchema = z.object({
+  weeklyPlanId: z.string(),
+  items: z.array(ShoppingListItemSchema),
+  totalEstimatedCost: z.number().optional()
+});
+
+export const GenerateWeekInputSchema = z.object({
+  userId: z.string(),
+  profile: z.object({
+    age: z.number().optional(),
+    heightCm: z.number().optional(),
+    weightKg: z.number().optional(),
+    activityLevel: z.enum(['sedentary', 'light', 'moderate', 'active']),
+    dietType: z.enum([
+      'none',
+      'halal',
+      'vegan',
+      'vegetarian',
+      'keto',
+      'gluten_free',
+      'lactose_free'
+    ]),
+    recipeDifficulty: z.enum(['super_easy', 'easy', 'medium', 'hard']),
+    portionMode: z.enum(['cutting', 'maintenance', 'bulking']),
+    weeklyBudgetGbp: z.number().optional(),
+    enableBreakfast: z.boolean(),
+    enableSnacks: z.boolean(),
+    enableLunch: z.boolean(),
+    enableDinner: z.boolean()
+  }),
+  preferences: z.object({
+    ingredientsPreferred: z.array(z.string()),
+    ingredientsAvoid: z.array(z.string()),
+    mustHaveIngredients: z.array(z.string()),
+    recipesPreferred: z.array(z.string()),
+    cuisinesLiked: z.array(z.string()),
+    cuisinesDisliked: z.array(z.string())
+  })
+});
+
+export const ReviewInstructionSchema = z.object({
+  targetLevel: z.enum(['week', 'day', 'meal', 'ingredient']),
+  targetIds: z
+    .object({
+      weeklyPlanId: z.string().optional(),
+      planDayId: z.string().optional(),
+      planMealId: z.string().optional(),
+      ingredientId: z.string().optional()
+    })
+    .optional(),
+  action: z.enum([
+    'generate_new_week',
+    'regenerate_week',
+    'regenerate_day',
+    'regenerate_meal',
+    'swap_ingredient',
+    'remove_ingredient'
+  ]),
+  params: z
+    .object({
+      ingredientToRemove: z.string().optional(),
+      ingredientToAdd: z.string().optional(),
+      applyToWholeWeek: z.boolean().optional(),
+      makeHealthier: z.boolean().optional(),
+      makeCheaper: z.boolean().optional(),
+      makeHigherProtein: z.boolean().optional(),
+      easierDifficulty: z.boolean().optional(),
+      preferMealType: z.enum(['drinkable', 'solid']).optional(),
+      keepCaloriesSimilar: z.boolean().optional()
+    })
+    .optional()
+});
+
