@@ -1,6 +1,5 @@
-
-const request = require('supertest');
-const app = require('../index');
+import request from 'supertest';
+import app from '../index';
 
 describe('User Profile API', () => {
   it('should return 404 for missing profile', async () => {
