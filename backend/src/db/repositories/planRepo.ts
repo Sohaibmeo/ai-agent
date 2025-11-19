@@ -6,62 +6,58 @@ import { withTransaction } from '../index.js';
 import { PlanDay, PlanMeal, WeeklyPlan } from '../../llm/schemas.js';
 import { pool } from '../index.js';
 
-function ensureId<T extends { id?: string }>(entity: T): T & { id: string } {
-  return { ...entity, id: entity.id ?? randomUUID() };
-}
-
 async function insertPlanDays(client: PoolClient, weeklyPlanId: string, days: PlanDay[]) {
   for (const day of days) {
-    const dayWithId = ensureId(day);
+    const dayId = randomUUID();
     await client.query(
       `INSERT INTO plan_days (id, weekly_plan_id, day_index, date, daily_estimated_cost, daily_kcal)
        VALUES ($1,$2,$3,$4,$5,$6)`,
       [
-        dayWithId.id,
+        dayId,
         weeklyPlanId,
-        dayWithId.dayIndex,
-        dayWithId.date ?? null,
-        dayWithId.dailyEstimatedCost ?? null,
-        dayWithId.dailyKcal ?? null,
+        day.dayIndex,
+        day.date ?? null,
+        day.dailyEstimatedCost ?? null,
+        day.dailyKcal ?? null,
       ],
     );
 
-    for (const meal of dayWithId.meals) {
-      await insertPlanMeal(client, dayWithId.id, meal);
+    for (const meal of day.meals) {
+      await insertPlanMeal(client, dayId, meal);
     }
   }
 }
 
 async function insertPlanMeal(client: PoolClient, planDayId: string, meal: PlanMeal) {
-  const mealWithId = ensureId(meal);
+  const mealId = randomUUID();
   await client.query(
     `INSERT INTO plan_meals (
       id, plan_day_id, meal_type, recipe_id, recipe_name, portion_multiplier,
       kcal, protein, carbs, fat, estimated_cost
     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
     [
-      mealWithId.id,
+      mealId,
       planDayId,
-      mealWithId.mealType,
-      mealWithId.recipeId ?? null,
-      mealWithId.recipeName,
-      mealWithId.portionMultiplier ?? 1,
-      mealWithId.kcal ?? null,
-      mealWithId.protein ?? null,
-      mealWithId.carbs ?? null,
-      mealWithId.fat ?? null,
-      mealWithId.estimatedCost ?? null,
+      meal.mealType,
+      meal.recipeId ?? null,
+      meal.recipeName,
+      meal.portionMultiplier ?? 1,
+      meal.kcal ?? null,
+      meal.protein ?? null,
+      meal.carbs ?? null,
+      meal.fat ?? null,
+      meal.estimatedCost ?? null,
     ],
   );
 
-  for (const ingredient of mealWithId.ingredients ?? []) {
+  for (const ingredient of meal.ingredients ?? []) {
     const ingredientId = ingredient.id ?? null;
     await client.query(
       `INSERT INTO plan_meal_ingredients (
         id, plan_meal_id, ingredient_id, name, quantity, quantity_unit, estimated_cost
       ) VALUES (uuid_generate_v4(), $1,$2,$3,$4,$5,$6)`,
       [
-        mealWithId.id,
+        mealId,
         ingredientId,
         ingredient.name,
         ingredient.quantity,
