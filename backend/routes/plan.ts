@@ -24,7 +24,7 @@ router.post('/generate-week/:userId', async (req, res) => {
     if (profile.dinner_enabled) mealSlots.push('dinner');
     const plan = [];
     for (const day of days) {
-      const dayMeals = {};
+      const dayMeals: Record<string, any> = {};
       for (const slot of mealSlots) {
         const candidates = await getCandidateRecipes({
           mealSlot: slot,
@@ -33,7 +33,7 @@ router.post('/generate-week/:userId', async (req, res) => {
           maxDifficulty: profile.max_difficulty
         });
         // Simple selection: pick first candidate
-        dayMeals[slot as string] = candidates[0] || null;
+        dayMeals[slot] = candidates[0] || null;
       }
       plan.push({ day, meals: dayMeals });
     }
