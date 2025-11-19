@@ -43,13 +43,20 @@ export async function runReviewAgent(args: {
   const model = process.env.REVIEW_MODEL || 'gpt-5-nano';
   const llm = createLLM(model);
   const prompt = [
-    'Translate the action context + reason into a structured ReviewInstruction for the Coach Agent.',
-    'Do not directly modify the plan.',
+    'You must output valid JSON matching the ReviewInstruction schema:',
+    `{
+      "action": string,            // e.g. "regenerate_meal", "swap_ingredient"
+      "params": object,            // include planDayId / planMealId / ingredient names, reasons, constraints
+      "summary": string?           // optional short explanation
+    }`,
+    'Use ONLY the action names understood by the Coach Agent. Do NOT invent new top-level fields.',
+    'Use the actionContext and reasonText to set action + params. Include planDayId/planMealId/etc as needed.',
     '',
     `Action context: ${JSON.stringify(args.actionContext)}`,
     `Reason: ${args.reasonText ?? ''}`,
     `Profile snippet: ${JSON.stringify(args.profileSnippet)}`,
-    `Current plan summary: ${JSON.stringify(args.currentPlan)}`,
+    'Current plan (snippet):',
+    JSON.stringify(args.currentPlan).slice(0, 2000),
   ].join('\n');
   const llmResponse = await llm.invoke(prompt);
   logUsage('review', llmResponse, model);
