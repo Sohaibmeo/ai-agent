@@ -116,7 +116,9 @@ export const reviewAgent = {
     const issues: string[] = [];
     const parsed = WeeklyPlanSchema.safeParse(plan);
     if (!parsed.success) {
-      parsed.error.errors.forEach((err) => issues.push(`${err.path.join('.')}: ${err.message}`));
+      parsed.error.issues.forEach((issue) => {
+        issues.push(`${issue.path.join('.')}: ${issue.message}`);
+      });
       return { valid: false, issues };
     }
 
