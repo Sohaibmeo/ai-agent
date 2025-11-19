@@ -1,20 +1,119 @@
-# AI Meal Planning Playground
+# AI-Assisted Meal Planning System (UK-Focused)
 
-This repo tracks the meal-planning agent experiment described in `docs/flow`.
+This repository contains an enterprise-grade AI-powered meal planning system built with:
 
-## Structure
+- **React + TypeScript** (Frontend)
+- **Node.js + TypeScript + Express** (Backend)
+- **Postgres** (Database)
+- **LangChain JS + Local LLM** (AI Orchestration)
+- **Zod** (Validation)
 
-- `docs/` – product notes + flow diagrams.
-- `backend/` – Express + LangChain stack (see `backend/README.md` for details).
-- `data/` – scratch files (placeholder).
+The system generates **7-day meal plans** tailored to UK users, respecting:
 
-Run backend commands from the `backend` directory:
+- Body composition goals (lose/maintain/gain)
+- Diet types (Halal, Vegan, Vegetarian, Keto, etc.)
+- **14 major UK allergens**
+- Weekly budgets
+- Recipe difficulty
+- Meal schedules (breakfast/snacks/lunch/dinner)
 
+Meals are selected—not generated—by the AI from a curated recipe database.  
+All nutrition and cost calculations are backend-driven.
+
+---
+
+## 📁 Documentation
+
+Complete system documentation is split into structured sections:
+
+- `INSTRUCTIONS-01-Overview.md`
+- `INSTRUCTIONS-02-Architecture.md`
+- `INSTRUCTIONS-03-Domain-Rules.md`
+- `INSTRUCTIONS-04-Frontend.md`
+- `INSTRUCTIONS-05-Data-Model.md`
+- `INSTRUCTIONS-06-Agents-Orchestrator.md`
+- `INSTRUCTIONS-07-Flows.md`
+- `INSTRUCTIONS-08-LLM-Usage.md`
+- `INSTRUCTIONS-09-Future-Extensibility.md`
+
+These documents describe the full blueprint: architecture, flows, DB schema, agents, and future roadmap.
+
+---
+
+## 🧠 Core Features (V1)
+
+- User profile with diet & allergy constraints  
+- Weekly meal plan generation  
+- Meal swapping & ingredient-level modifications  
+- Custom recipe creation  
+- Grocery list with:
+  - pantry tracking  
+  - price overrides  
+- Local LLM orchestration (Review + Coach Agents)  
+- Strict JSON validation using Zod  
+- Backend-calculated macros & cost  
+
+---
+
+## 🏗️ Tech Stack
+
+- **Frontend:** React, TypeScript  
+- **Backend:** Node.js, Express, TypeScript  
+- **Database:** Postgres  
+- **AI:** LangChain JS + Local OpenAI-Compatible LLM  
+- **Validation:** Zod  
+
+---
+
+## 🚀 Getting Started
+
+### 1. Install dependencies
 ```bash
-cd backend
 npm install
-npm run seed
-npm run dev
 ```
 
-More implementation notes live in `backend/README.md`.
+### 2. Start Postgres (via Docker)
+```bash
+docker-compose up -d
+```
+
+### 3. Run migrations
+```bash
+npm run migrate
+```
+
+### 4. Start development servers
+Frontend:
+```bash
+npm run dev
+```
+Backend:
+```bash
+npm run dev:server
+```
+
+Local LLM (example: Ollama):
+```bash
+ollama run your-model
+```
+
+---
+
+## 📦 Suggested Folder Structure
+
+```
+/frontend
+/backend
+/docs
+  INSTRUCTIONS-01-Overview.md
+  INSTRUCTIONS-02-Architecture.md
+  ...
+```
+
+---
+
+## 📌 Status
+
+This repository contains the **full technical blueprint** required for implementation.  
+You may now begin building the backend, frontend, or LLM orchestration layer.
+
