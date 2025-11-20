@@ -1,5 +1,23 @@
 import request from 'supertest';
 import app from '../index';
+import pool from '../services/db';
+
+const demoProfile = {
+  age: 30,
+  height_cm: 175,
+  weight_kg: 70,
+  activity_level: 'moderate',
+  goal: 'maintain_weight',
+  goal_intensity: 'medium',
+  diet_type: 'halal',
+  allergy_keys: [],
+  breakfast_enabled: true,
+  snack_enabled: true,
+  lunch_enabled: true,
+  dinner_enabled: true,
+  max_difficulty: 'easy',
+  weekly_budget_gbp: 40
+};
 
 describe('User Profile API', () => {
   it('should return 404 for missing profile', async () => {
@@ -8,23 +26,7 @@ describe('User Profile API', () => {
   });
 
   it('should create and retrieve a user profile', async () => {
-    const profile = {
-      age: 30,
-      height_cm: 175,
-      weight_kg: 70,
-      activity_level: 'moderate',
-      goal: 'maintain_weight',
-      goal_intensity: 'medium',
-      diet_type: 'halal',
-      allergy_keys: [],
-      breakfast_enabled: true,
-      snack_enabled: true,
-      lunch_enabled: true,
-      dinner_enabled: true,
-      max_difficulty: 'easy',
-      weekly_budget_gbp: 40
-    };
-    const resPut = await request(app).put('/api/user/profile/1').send(profile);
+    const resPut = await request(app).put('/api/user/profile/1').send(demoProfile);
     expect(resPut.status).toBe(200);
     expect(resPut.body.age).toBe(30);
 
@@ -36,11 +38,15 @@ describe('User Profile API', () => {
 
 describe('Weekly Plan API', () => {
   it('should generate a weekly plan for a user', async () => {
-    // Assume user profile exists for userId 1
+    await request(app).put('/api/user/profile/1').send(demoProfile);
     const res = await request(app).post('/api/plan/generate-week/1');
     expect(res.status).toBe(200);
     expect(res.body.plan).toBeDefined();
     expect(res.body.plan.length).toBe(7);
     expect(res.body.plan[0].meals).toBeDefined();
   });
+});
+
+afterAll(async () => {
+  await pool.end();
 });

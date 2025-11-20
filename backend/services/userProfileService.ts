@@ -7,6 +7,11 @@ export async function getUserProfile(userId: number): Promise<UserProfile | null
 }
 
 export async function upsertUserProfile(profile: UserProfile): Promise<UserProfile> {
+  await pool.query(
+    'INSERT INTO users (id) VALUES ($1) ON CONFLICT (id) DO NOTHING',
+    [profile.user_id]
+  );
+
   await pool.query(`
     INSERT INTO user_profile (
       user_id, age, height_cm, weight_kg, activity_level, goal, goal_intensity, diet_type, allergy_keys,
