@@ -117,3 +117,36 @@ ollama run your-model
 This repository contains the **full technical blueprint** required for implementation.  
 You may now begin building the backend, frontend, or LLM orchestration layer.
 
+---
+
+## 🛠️ Development Phases
+
+### Phase 1: Core System & MVP
+- User profile onboarding (diet, allergies, goals, meal schedule, difficulty, budget)
+- Recipe/ingredient database setup (with diet tags, allergens, nutrition, cost)
+- Weekly meal plan generation (backend logic)
+- Simple meal swap and custom recipe creation
+- Shopping list generation (pantry tracking, price overrides)
+- Local LLM integration (Review Agent, Coach Agent) for plan selection only
+- Strict JSON validation (Zod schemas)
+- Basic REST API
+
+**Frontend will be built only after backend and agents are complete.**
+
+### Phase 2: Advanced Editing & User Experience
+- Plan history and multi-week support
+- Enhanced swap/modify flows (LLM-driven suggestions: cheaper, higher protein, etc.)
+- Ingredient-level likes/dislikes and preference learning
+- Improved UI/UX (modals, feedback, error handling)
+
+### Phase 3: Extensibility & Integrations
+- Cloud LLM support (easy migration)
+- Workout/gym integration (logging, per-day nutrition tweaks)
+- Localization (diet types, recipes, pricing)
+- Security and compliance (auth, GDPR, audit logs)
+
+### Phase 4: Analytics & Personalization
+- Usage analytics and reporting
+- Preference Agent, Explanation Agent, Nutrition Advisor Agent
+- Advanced ranking and recommendation logic
+

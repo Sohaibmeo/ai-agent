@@ -95,3 +95,157 @@ VALUES
   (26, 14, 30, 'g'), (26, 13, 2, 'slice'), -- Cheese & Crackers: Cheese, Bread (use bread as proxy)
   (27, 20, 1, 'piece'), (27, 10, 20, 'g'), -- Banana & Almond Butter: Banana, Almonds
   (28, 12, 30, 'g'), (28, 11, 50, 'g'); -- Spinach & Tofu Bites: Spinach, Tofu
+
+
+
+INSERT INTO recipes (name, meal_slot, diet_tags, difficulty, base_kcal, base_protein, base_carbs, base_fat, base_cost_gbp, is_custom, instructions)
+VALUES
+  -- Extra Breakfasts (IDs ~29-32)
+  ('High-Protein Yogurt Bowl', 'breakfast', ARRAY['halal', 'vegetarian'], 'easy',
+   292, 23, 29, 10, 1.29, FALSE,
+   'Greek yogurt topped with oats and almonds.'),
+  ('Veggie Omelette Toast', 'breakfast', ARRAY['halal', 'vegetarian'], 'easy',
+   238, 16, 16, 11, 0.81, FALSE,
+   'Make a simple omelette with spinach and tomato, serve on whole wheat bread.'),
+  ('Tofu Breakfast Bowl', 'breakfast', ARRAY['vegan', 'vegetarian'], 'medium',
+   305, 15, 50, 7, 1.19, FALSE,
+   'Warm tofu with oats, banana slices, and spinach in a bowl.'),
+  ('Peanut Butter Banana Oats', 'breakfast', ARRAY['vegetarian'], 'easy',
+   388, 14, 63, 11, 0.68, FALSE,
+   'Cook oats and top with banana and peanut butter.'),
+
+  -- Extra Lunches (IDs ~33-36)
+  ('Chicken Lentil Power Bowl', 'lunch', ARRAY['halal', 'low_carb'], 'medium',
+   270, 39, 18, 4, 1.89, FALSE,
+   'Serve grilled chicken with lentils, spinach and tomato in a bowl.'),
+  ('Spiced Chickpea Rice Bowl', 'lunch', ARRAY['vegan', 'vegetarian'], 'easy',
+   278, 12, 52, 3, 1.10, FALSE,
+   'Serve chickpeas and rice with tomato and cucumber.'),
+  ('Salmon Lentil Salad', 'lunch', ARRAY['halal', 'pescatarian'], 'medium',
+   248, 23, 14, 11, 2.17, FALSE,
+   'Flaked salmon served over warm lentils with spinach and tomato.'),
+  ('Tofu Chickpea Stir Fry', 'lunch', ARRAY['vegan'], 'easy',
+   182, 14, 22, 6, 1.32, FALSE,
+   'Stir fry tofu with chickpeas, broccoli and tomato.'),
+
+  -- Extra Dinners (IDs ~37-40)
+  ('Chicken Veggie Skillet', 'dinner', ARRAY['halal'], 'easy',
+   240, 41, 8, 5, 2.08, FALSE,
+   'Pan-cook chicken with broccoli, tomato and spinach.'),
+  ('Low-Carb Chicken & Avocado Plate', 'dinner', ARRAY['halal', 'keto', 'low_carb'], 'easy',
+   287, 39, 6, 12, 2.10, FALSE,
+   'Serve grilled chicken with avocado slices and spinach.'),
+  ('Lentil & Chickpea Curry Bowl', 'dinner', ARRAY['vegan', 'vegetarian'], 'medium',
+   222, 15, 38, 2, 1.21, FALSE,
+   'Simmer lentils and chickpeas with tomato and spinach.'),
+  ('Tofu Rice Bowl', 'dinner', ARRAY['vegan'], 'easy',
+   207, 13, 29, 5, 1.35, FALSE,
+   'Serve tofu over rice with spinach and broccoli.'),
+
+  -- Extra Snacks (IDs ~41-44)
+  ('Protein Yogurt Parfait', 'snack', ARRAY['halal', 'vegetarian'], 'easy',
+   288, 15, 45, 7, 0.99, FALSE,
+   'Layer Greek yogurt with oats, banana and almonds.'),
+  ('Chickpea Crunch Cup', 'snack', ARRAY['vegan', 'vegetarian'], 'super_easy',
+   109, 6, 18, 2, 0.58, FALSE,
+   'Serve chickpeas with chopped tomato and cucumber.'),
+  ('Egg & Cucumber Bites', 'snack', ARRAY['halal'], 'super_easy',
+   84, 6, 2, 5, 0.30, FALSE,
+   'Slice boiled egg and cucumber into bite-sized pieces.'),
+  ('Apple Peanut Oat Bites', 'snack', ARRAY['vegetarian', 'vegan'], 'easy',
+   242, 7, 38, 9, 0.58, FALSE,
+   'Serve apple slices with a thin layer of peanut butter and a sprinkle of oats.');
+
+   -- Extra recipe_ingredients for new recipes
+-- Adjust recipe_id values if your auto-increment IDs differ.
+
+INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit)
+VALUES
+  -- High-Protein Yogurt Bowl (recipe_id = 29)
+  (29, 9, 150, 'g'),   -- Greek Yogurt
+  (29, 7, 30,  'g'),   -- Oats
+  (29, 10, 15, 'g'),   -- Almonds
+
+  -- Veggie Omelette Toast (30)
+  (30, 3,  2,  'piece'), -- Egg
+  (30, 12, 30, 'g'),     -- Spinach
+  (30, 17, 30, 'g'),     -- Tomato
+  (30, 13, 1,  'slice'), -- Whole Wheat Bread
+
+  -- Tofu Breakfast Bowl (31)
+  (31, 11, 100, 'g'),   -- Tofu
+  (31, 7,  30,  'g'),   -- Oats
+  (31, 8,  1,   'piece'), -- Banana
+  (31, 12, 30,  'g'),   -- Spinach
+
+  -- Peanut Butter Banana Oats (32)
+  (32, 7,  50,  'g'),   -- Oats
+  (32, 8,  1,   'piece'), -- Banana
+  (32, 6,  15,  'g'),   -- Peanut Butter
+
+  -- Chicken Lentil Power Bowl (33)
+  (33, 1,  100, 'g'),   -- Chicken Breast
+  (33, 16, 80,  'g'),   -- Lentils
+  (33, 12, 30,  'g'),   -- Spinach
+  (33, 17, 30,  'g'),   -- Tomato
+
+  -- Spiced Chickpea Rice Bowl (34)
+  (34, 19, 100, 'g'),   -- Chickpeas
+  (34, 5,  80,  'g'),   -- Rice
+  (34, 17, 30,  'g'),   -- Tomato
+  (34, 18, 30,  'g'),   -- Cucumber
+
+  -- Salmon Lentil Salad (35)
+  (35, 4,  80,  'g'),   -- Salmon
+  (35, 16, 60,  'g'),   -- Lentils
+  (35, 12, 30,  'g'),   -- Spinach
+  (35, 17, 30,  'g'),   -- Tomato
+
+  -- Tofu Chickpea Stir Fry (36)
+  (36, 11, 80,  'g'),   -- Tofu
+  (36, 19, 60,  'g'),   -- Chickpeas
+  (36, 2,  50,  'g'),   -- Broccoli
+  (36, 17, 30,  'g'),   -- Tomato
+
+  -- Chicken Veggie Skillet (37)
+  (37, 1,  120, 'g'),   -- Chicken Breast
+  (37, 2,  80,  'g'),   -- Broccoli
+  (37, 17, 40,  'g'),   -- Tomato
+  (37, 12, 30,  'g'),   -- Spinach
+
+  -- Low-Carb Chicken & Avocado Plate (38)
+  (38, 1,  120, 'g'),     -- Chicken Breast
+  (38, 20, 0.5, 'piece'), -- Avocado
+  (38, 12, 40,  'g'),     -- Spinach
+
+  -- Lentil & Chickpea Curry Bowl (39)
+  (39, 16, 80,  'g'),   -- Lentils
+  (39, 19, 70,  'g'),   -- Chickpeas
+  (39, 17, 40,  'g'),   -- Tomato
+  (39, 12, 30,  'g'),   -- Spinach
+
+  -- Tofu Rice Bowl (40)
+  (40, 11, 100, 'g'),   -- Tofu
+  (40, 5,  80,  'g'),   -- Rice
+  (40, 12, 40,  'g'),   -- Spinach
+  (40, 2,  50,  'g'),   -- Broccoli
+
+  -- Protein Yogurt Parfait (41)
+  (41, 9,  80,  'g'),   -- Greek Yogurt
+  (41, 7,  20,  'g'),   -- Oats
+  (41, 8,  1,   'piece'), -- Banana
+  (41, 10, 10,  'g'),   -- Almonds
+
+  -- Chickpea Crunch Cup (42)
+  (42, 19, 60,  'g'),   -- Chickpeas
+  (42, 17, 30,  'g'),   -- Tomato
+  (42, 18, 30,  'g'),   -- Cucumber
+
+  -- Egg & Cucumber Bites (43)
+  (43, 3,  1,   'piece'), -- Egg
+  (43, 18, 40,  'g'),     -- Cucumber
+
+  -- Apple Peanut Oat Bites (44)
+  (44, 15, 1,   'piece'), -- Apple
+  (44, 6,  15,  'g'),     -- Peanut Butter
+  (44, 7,  15,  'g');     -- Oats
