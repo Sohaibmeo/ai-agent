@@ -46,3 +46,4 @@ coverage/
 # Ignore temporary files
 tmp/
 temp/
+.github/copilot-instructions.md
