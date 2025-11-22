@@ -114,39 +114,23 @@ ollama run your-model
 
 ## 📌 Status
 
-This repository contains the **full technical blueprint** required for implementation.  
-You may now begin building the backend, frontend, or LLM orchestration layer.
+### Progress so far
+- Backend scaffold running (NestJS + TypeORM + Postgres via Docker); migrations and UUID-safe seed data in place.
+- Modules/services for users, recipes, plans, shopping list; filters for diet/allergen/difficulty and budget/protein-aware plan generation.
+- Swaps and custom recipes recompute macros/cost and rebuild shopping lists; shopping lists apply pantry flags and user price overrides.
+- Agents wired to local Ollama models (review/coach/explain/nutrition) with Zod validation stubs; env-driven model config.
+- Preference scaffolding added (`user_preferences` entity + service) for future like/dislike learning.
+
+### Next goals (project)
+- Generate/run migration for `user_preferences`; start recording swap/keep/remove signals into preferences and use them in candidate selection.
+- Harden plan endpoints (error handling, active plan lifecycle), and expose clean GETs for current plan/list.
+- Add minimal tests/fixtures for filters, plan generation, and shopping list aggregation.
+- Frontend scaffold (later): hook up Profile/Plans/Groceries tabs to the REST API.
+
+### Next goals (agents)
+1) **Review/Coach Agents**: integrate into plan generation/edit flows; ensure JSON validation and fallbacks on failure.
+2) **Preference Agent**: consume interaction history to update `user_preferences`.
+3) **Explanation Agent**: answer “why this meal/protein is low” using plan/profile context (API endpoint to expose).
+4) **Nutrition Advisor**: serve structured tips; expose an endpoint for the frontend to call.
 
 ---
-
-## 🛠️ Development Phases
-
-### Phase 1: Core System & MVP
-- User profile onboarding (diet, allergies, goals, meal schedule, difficulty, budget)
-- Recipe/ingredient database setup (with diet tags, allergens, nutrition, cost)
-- Weekly meal plan generation (backend logic)
-- Simple meal swap and custom recipe creation
-- Shopping list generation (pantry tracking, price overrides)
-- Local LLM integration (Review Agent, Coach Agent) for plan selection only
-- Strict JSON validation (Zod schemas)
-- Basic REST API
-
-**Frontend will be built only after backend and agents are complete.**
-
-### Phase 2: Advanced Editing & User Experience
-- Plan history and multi-week support
-- Enhanced swap/modify flows (LLM-driven suggestions: cheaper, higher protein, etc.)
-- Ingredient-level likes/dislikes and preference learning
-- Improved UI/UX (modals, feedback, error handling)
-
-### Phase 3: Extensibility & Integrations
-- Cloud LLM support (easy migration)
-- Workout/gym integration (logging, per-day nutrition tweaks)
-- Localization (diet types, recipes, pricing)
-- Security and compliance (auth, GDPR, audit logs)
-
-### Phase 4: Analytics & Personalization
-- Usage analytics and reporting
-- Preference Agent, Explanation Agent, Nutrition Advisor Agent
-- Advanced ranking and recommendation logic
-
