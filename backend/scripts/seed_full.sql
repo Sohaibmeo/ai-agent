@@ -2,7 +2,42 @@
 TRUNCATE TABLE user_ingredient_price, pantry_items, shopping_list_items, plan_meals, plan_days, weekly_plans, recipe_ingredients, recipes, ingredients, user_profile, users RESTART IDENTITY CASCADE;
 
 -- Users
-INSERT INTO users (id, email) VALUES (uuid_generate_v4(), 'demo@example.com');
+INSERT INTO users (id, email) VALUES ('11111111-1111-1111-1111-111111111111', 'testUser@example.com');
+
+-- User profile for testUser
+INSERT INTO user_profile (
+  user_id,
+  age,
+  height_cm,
+  weight_kg,
+  activity_level,
+  goal,
+  goal_intensity,
+  diet_type,
+  allergy_keys,
+  breakfast_enabled,
+  snack_enabled,
+  lunch_enabled,
+  dinner_enabled,
+  max_difficulty,
+  weekly_budget_gbp
+) VALUES (
+  '11111111-1111-1111-1111-111111111111',
+  25,
+  175,
+  70,
+  'moderate',
+  'maintain_weight',
+  'standard',
+  'halal',
+  ARRAY[]::text[],
+  true,
+  true,
+  true,
+  true,
+  'easy',
+  40
+);
 
 -- Ingredients
 WITH ing AS (
@@ -90,4 +125,5 @@ WITH rec AS (
 SELECT 1;
 
 -- Recipe Ingredients (resolve IDs by name)
-\i scripts/seed_recipe_ingredients.sql
+-- Run together with scripts/seed_recipe_ingredients.sql, e.g.:
+-- cat scripts/seed_full.sql scripts/seed_recipe_ingredients.sql | psql ...
