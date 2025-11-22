@@ -25,6 +25,35 @@ export class PlansService {
     return this.weeklyPlanRepo.find({ relations: ['days', 'days.meals'] });
   }
 
+  async setMealRecipe(planMealId: string, newRecipeId: string) {
+    const meal = await this.planMealRepo.findOne({
+      where: { id: planMealId },
+      relations: ['planDay', 'planDay.weeklyPlan'],
+    });
+    if (!meal) {
+      throw new Error('Plan meal not found');
+    }
+    const recipe = await this.recipesService.findOneById(newRecipeId);
+    if (!recipe) {
+      throw new Error('Recipe not found');
+    }
+    meal.recipe = recipe as any;
+    meal.meal_kcal = recipe.base_kcal;
+    meal.meal_protein = recipe.base_protein;
+    meal.meal_carbs = recipe.base_carbs;
+    meal.meal_fat = recipe.base_fat;
+    meal.meal_cost_gbp = recipe.base_cost_gbp;
+    await this.planMealRepo.save(meal);
+
+    // Recompute aggregates & shopping list
+    await this.recomputeAggregates(meal.planDay.weeklyPlan.id);
+    await this.shoppingListService.rebuildForPlan(meal.planDay.weeklyPlan.id);
+    return this.weeklyPlanRepo.findOne({
+      where: { id: meal.planDay.weeklyPlan.id },
+      relations: ['days', 'days.meals', 'days.meals.recipe'],
+    });
+  }
+
   async generateWeek(userId: string, weekStartDate: string) {
     const profile = await this.usersService.getProfile(userId);
     const targets = calculateTargets(profile);
@@ -79,14 +108,27 @@ export class PlansService {
     }
 
     // Recompute daily/weekly aggregates
-    const daysWithMeals = await this.planDayRepo.find({
-      where: { weeklyPlan: { id: savedPlan.id } },
-      relations: ['meals', 'meals.recipe'],
+    await this.recomputeAggregates(savedPlan.id);
+
+    await this.shoppingListService.rebuildForPlan(savedPlan.id);
+
+    return this.weeklyPlanRepo.findOne({
+      where: { id: savedPlan.id },
+      relations: ['days', 'days.meals', 'days.meals.recipe'],
     });
+  }
+
+  private async recomputeAggregates(planId: string) {
+    const plan = await this.weeklyPlanRepo.findOne({
+      where: { id: planId },
+      relations: ['days', 'days.meals'],
+    });
+    if (!plan || !plan.days) return;
 
     let weeklyKcal = 0;
     let weeklyCost = 0;
-    for (const d of daysWithMeals) {
+
+    for (const d of plan.days) {
       let dayKcal = 0;
       let dayCost = 0;
       for (const m of d.meals || []) {
@@ -99,16 +141,10 @@ export class PlansService {
       weeklyCost += dayCost;
       await this.planDayRepo.save(d);
     }
-    savedPlan.total_kcal = weeklyKcal;
-    savedPlan.total_estimated_cost_gbp = weeklyCost;
-    await this.weeklyPlanRepo.save(savedPlan);
 
-    await this.shoppingListService.rebuildForPlan(savedPlan.id);
-
-    return this.weeklyPlanRepo.findOne({
-      where: { id: savedPlan.id },
-      relations: ['days', 'days.meals', 'days.meals.recipe'],
-    });
+    plan.total_kcal = weeklyKcal;
+    plan.total_estimated_cost_gbp = weeklyCost;
+    await this.weeklyPlanRepo.save(plan);
   }
 
   generateDraft() {

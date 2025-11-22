@@ -26,6 +26,10 @@ export class RecipesService {
     return this.difficultyOrder.slice(0, idx + 1);
   }
 
+  findOneById(id: string) {
+    return this.recipeRepo.findOne({ where: { id } });
+  }
+
   async findCandidatesForUser(query: RecipeCandidatesQueryDto) {
     const profile = await this.usersService.getProfile(query.userId);
 

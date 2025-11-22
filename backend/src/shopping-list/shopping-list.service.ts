@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ShoppingListItem } from '../database/entities';
+import { Ingredient, PlanMeal, RecipeIngredient, ShoppingListItem } from '../database/entities';
 import { PlansService } from '../plans/plans.service';
 import { IngredientsService } from '../ingredients/ingredients.service';
+import { InjectEntityManager } from '@nestjs/typeorm';
+import { EntityManager } from 'typeorm';
 
 @Injectable()
 export class ShoppingListService {
@@ -12,6 +14,7 @@ export class ShoppingListService {
     private readonly shoppingListRepo: Repository<ShoppingListItem>,
     private readonly plansService: PlansService,
     private readonly ingredientsService: IngredientsService,
+    @InjectEntityManager() private readonly entityManager: EntityManager,
   ) {}
 
   getForPlan(planId: string) {
@@ -21,10 +24,57 @@ export class ShoppingListService {
   }
 
   async rebuildForPlan(planId: string) {
-    // Simplified: clear and rebuild by aggregating recipe ingredients scaled by portion.
+    // Clear existing
     await this.shoppingListRepo.delete({ weeklyPlan: { id: planId } as any });
 
-    // TODO: implement aggregation based on plan meals and recipe ingredients.
-    return [];
+    // Aggregate ingredients across plan meals
+    const meals = await this.entityManager.find(PlanMeal, {
+      where: { planDay: { weeklyPlan: { id: planId } } as any },
+      relations: ['recipe'],
+    });
+    if (!meals.length) return [];
+
+    // Load recipe ingredients for all recipes in plan
+    const recipeIds = meals.map((m) => m.recipe.id);
+    const recipeIngredients = await this.entityManager
+      .getRepository(RecipeIngredient)
+      .createQueryBuilder('ri')
+      .innerJoinAndSelect('ri.ingredient', 'ingredient')
+      .where('ri.recipe_id IN (:...recipeIds)', { recipeIds })
+      .getMany();
+
+    const totals = new Map<string, { ingredient: Ingredient; quantity: number; unit: string }>();
+
+    for (const meal of meals) {
+      const portion = Number(meal.portion_multiplier || 1);
+      const ris = recipeIngredients.filter((ri) => ri.recipe.id === meal.recipe.id);
+      for (const ri of ris) {
+        const key = ri.ingredient.id;
+        const current = totals.get(key);
+        const quantity = Number(ri.quantity) * portion;
+        if (current) {
+          current.quantity += quantity;
+        } else {
+          totals.set(key, { ingredient: ri.ingredient, quantity, unit: ri.unit });
+        }
+      }
+    }
+
+    const toSave: Partial<ShoppingListItem>[] = [];
+    for (const [, val] of totals) {
+      const estimatedCost = val.ingredient.estimated_price_per_unit_gbp
+        ? Number(val.ingredient.estimated_price_per_unit_gbp) * val.quantity
+        : undefined;
+      toSave.push({
+        weeklyPlan: { id: planId } as any,
+        ingredient: val.ingredient,
+        total_quantity: val.quantity,
+        unit: val.unit,
+        estimated_cost_gbp: estimatedCost,
+      });
+    }
+
+    await this.shoppingListRepo.save(toSave);
+    return this.getForPlan(planId);
   }
 }
