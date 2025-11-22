@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
+import { Brackets, In, Repository } from 'typeorm';
 import { Recipe, RecipeIngredient } from '../database/entities';
 import { RecipeCandidatesQueryDto } from './dto/recipe-candidates-query.dto';
 import { UsersService } from '../users/users.service';
 import { IngredientsService } from '../ingredients/ingredients.service';
+import { PreferencesService } from '../preferences/preferences.service';
 
 @Injectable()
 export class RecipesService {
@@ -15,6 +16,7 @@ export class RecipesService {
     private readonly recipeIngredientRepo: Repository<RecipeIngredient>,
     private readonly usersService: UsersService,
     private readonly ingredientsService: IngredientsService,
+    private readonly preferencesService: PreferencesService,
   ) {}
 
   findAll() {
@@ -73,7 +75,32 @@ export class RecipesService {
     qb.limit(10);
 
     const recipes = await qb.getMany();
-    return recipes;
+
+    const prefs = await this.preferencesService.getForUser(query.userId);
+    if (!prefs || !prefs.disliked_ingredients || !recipes.length) return recipes;
+
+    const dislikedEntries = Object.entries(prefs.disliked_ingredients).filter(([_, count]) => Number(count) >= 2);
+    const dislikedIds = dislikedEntries.map(([id]) => id);
+    if (!dislikedIds.length) return recipes;
+
+    const ris = await this.recipeIngredientRepo.find({
+      where: { recipe: { id: In(recipes.map((r) => r.id)) } as any },
+      relations: ['ingredient', 'recipe'],
+    });
+    const dislikedSet = new Set(dislikedIds);
+    const filtered = recipes.filter((r) => {
+      const ingIds = ris.filter((ri) => ri.recipe.id === r.id).map((ri) => ri.ingredient.id);
+      return !ingIds.some((id) => dislikedSet.has(id));
+    });
+    return filtered.length ? filtered : recipes;
+  }
+
+  async getIngredientIdsForRecipe(recipeId: string) {
+    const ris = await this.recipeIngredientRepo.find({
+      where: { recipe: { id: recipeId } as any },
+      relations: ['ingredient'],
+    });
+    return ris.map((ri) => ri.ingredient.id);
   }
 
   async createCustomFromExisting(input: {

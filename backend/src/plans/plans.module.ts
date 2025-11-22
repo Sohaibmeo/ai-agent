@@ -6,6 +6,7 @@ import { WeeklyPlan, PlanDay, PlanMeal } from '../database/entities';
 import { RecipesModule } from '../recipes/recipes.module';
 import { UsersModule } from '../users/users.module';
 import { ShoppingListModule } from '../shopping-list/shopping-list.module';
+import { PreferencesModule } from '../preferences/preferences.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { ShoppingListModule } from '../shopping-list/shopping-list.module';
     RecipesModule,
     UsersModule,
     ShoppingListModule,
+    PreferencesModule,
   ],
   providers: [PlansService],
   controllers: [PlansController],

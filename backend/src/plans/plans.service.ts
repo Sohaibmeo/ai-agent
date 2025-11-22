@@ -7,6 +7,7 @@ import { UsersService } from '../users/users.service';
 import { calculateTargets } from './utils/profile-targets';
 import { ShoppingListService } from '../shopping-list/shopping-list.service';
 import { portionTowardsTarget, selectRecipe } from './utils/selection';
+import { PreferencesService } from '../preferences/preferences.service';
 
 @Injectable()
 export class PlansService {
@@ -16,11 +17,12 @@ export class PlansService {
   @InjectRepository(PlanDay)
   private readonly planDayRepo: Repository<PlanDay>,
   @InjectRepository(PlanMeal)
-  private readonly planMealRepo: Repository<PlanMeal>,
-  private readonly recipesService: RecipesService,
-  private readonly usersService: UsersService,
-  private readonly shoppingListService: ShoppingListService,
-) {}
+    private readonly planMealRepo: Repository<PlanMeal>,
+    private readonly recipesService: RecipesService,
+    private readonly usersService: UsersService,
+    private readonly shoppingListService: ShoppingListService,
+    private readonly preferencesService: PreferencesService,
+  ) {}
 
   findAll() {
     return this.weeklyPlanRepo.find({ relations: ['days', 'days.meals'] });
@@ -51,7 +53,7 @@ export class PlansService {
   async setMealRecipe(planMealId: string, newRecipeId: string) {
     const meal = await this.planMealRepo.findOne({
       where: { id: planMealId },
-      relations: ['planDay', 'planDay.weeklyPlan'],
+      relations: ['planDay', 'planDay.weeklyPlan', 'planDay.weeklyPlan.user', 'recipe'],
     });
     if (!meal) {
       throw new Error('Plan meal not found');
@@ -60,6 +62,9 @@ export class PlansService {
     if (!recipe) {
       throw new Error('Recipe not found');
     }
+    const userId = (meal.planDay.weeklyPlan as any).user?.id;
+    const oldIngredients = (meal.recipe as any)?.ingredients?.map((ri: any) => ri.ingredient?.id).filter(Boolean) || [];
+
     meal.recipe = recipe as any;
     meal.meal_kcal = recipe.base_kcal;
     meal.meal_protein = recipe.base_protein;
@@ -67,6 +72,18 @@ export class PlansService {
     meal.meal_fat = recipe.base_fat;
     meal.meal_cost_gbp = recipe.base_cost_gbp;
     await this.planMealRepo.save(meal);
+
+    // Preference signals: swapped out old recipe ingredients = dislike, new recipe ingredients = like.
+    if (userId) {
+      const newIngredients = await this.recipesService.getIngredientIdsForRecipe(newRecipeId);
+      if (oldIngredients.length) {
+        await this.preferencesService.incrementManyIngredients(userId, 'dislike', oldIngredients);
+      }
+      if (newIngredients.length) {
+        await this.preferencesService.incrementManyIngredients(userId, 'like', newIngredients);
+        await this.preferencesService.incrementMealPreference(userId, 'like', newRecipeId);
+      }
+    }
 
     // Recompute aggregates & shopping list
     await this.recomputeAggregates(meal.planDay.weeklyPlan.id);
