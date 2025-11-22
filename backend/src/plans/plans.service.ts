@@ -6,6 +6,7 @@ import { RecipesService } from '../recipes/recipes.service';
 import { UsersService } from '../users/users.service';
 import { calculateTargets } from './utils/profile-targets';
 import { ShoppingListService } from '../shopping-list/shopping-list.service';
+import { portionTowardsTarget, selectRecipe } from './utils/selection';
 
 @Injectable()
 export class PlansService {
@@ -28,6 +29,13 @@ export class PlansService {
   findById(id: string) {
     return this.weeklyPlanRepo.findOne({
       where: { id },
+      relations: ['days', 'days.meals', 'days.meals.recipe'],
+    });
+  }
+
+  async getActivePlan(userId: string) {
+    return this.weeklyPlanRepo.findOne({
+      where: { user: { id: userId } as any, status: 'active' },
       relations: ['days', 'days.meals', 'days.meals.recipe'],
     });
   }
@@ -103,18 +111,22 @@ export class PlansService {
           mealSlot: slot,
           maxDifficulty: profile.max_difficulty,
         });
-        const recipe = candidates[0];
-        if (!recipe) continue;
+        const selected = selectRecipe(candidates, {
+          avoidNames: new Set(), // could track weekly variety
+          budgetCap: profile.weekly_budget_gbp || undefined,
+        });
+        if (!selected) continue;
+        const portion = portionTowardsTarget(selected, day.daily_kcal || 0, targets.dailyCalories);
         const meal = this.planMealRepo.create({
           planDay: savedDay,
           meal_slot: slot,
-          recipe,
-          portion_multiplier: 1,
-          meal_kcal: recipe.base_kcal,
-          meal_protein: recipe.base_protein,
-          meal_carbs: recipe.base_carbs,
-          meal_fat: recipe.base_fat,
-          meal_cost_gbp: recipe.base_cost_gbp,
+          recipe: selected,
+          portion_multiplier: portion,
+          meal_kcal: selected.base_kcal ? Number(selected.base_kcal) * portion : undefined,
+          meal_protein: selected.base_protein ? Number(selected.base_protein) * portion : undefined,
+          meal_carbs: selected.base_carbs ? Number(selected.base_carbs) * portion : undefined,
+          meal_fat: selected.base_fat ? Number(selected.base_fat) * portion : undefined,
+          meal_cost_gbp: selected.base_cost_gbp ? Number(selected.base_cost_gbp) * portion : undefined,
         });
         await this.planMealRepo.save(meal);
       }

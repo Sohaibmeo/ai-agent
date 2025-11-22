@@ -3,6 +3,7 @@ import { PlansService } from './plans.service';
 import { GeneratePlanDto } from './dto/generate-plan.dto';
 import { SetMealRecipeDto } from './dto/set-meal-recipe.dto';
 import { ActivatePlanDto } from './dto/set-plan-status.dto';
+import { ActiveListDto } from '../shopping-list/dto/active-list.dto';
 
 @Controller('plans')
 export class PlansController {
@@ -32,5 +33,10 @@ export class PlansController {
   @Get(':id')
   getById(@Param('id') id: string) {
     return this.plansService.findById(id);
+  }
+
+  @Post('active')
+  getActivePlan(@Body() body: ActiveListDto) {
+    return this.plansService.getActivePlan(body.userId);
   }
 }
