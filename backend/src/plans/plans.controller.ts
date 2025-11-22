@@ -2,6 +2,7 @@ import { Body, Controller, Get, Post } from '@nestjs/common';
 import { PlansService } from './plans.service';
 import { GeneratePlanDto } from './dto/generate-plan.dto';
 import { SetMealRecipeDto } from './dto/set-meal-recipe.dto';
+import { ActivatePlanDto } from './dto/set-plan-status.dto';
 
 @Controller('plans')
 export class PlansController {
@@ -21,5 +22,10 @@ export class PlansController {
   @Post('set-meal-recipe')
   setMealRecipe(@Body() body: SetMealRecipeDto) {
     return this.plansService.setMealRecipe(body.planMealId, body.newRecipeId);
+  }
+
+  @Post('activate')
+  activate(@Body() body: ActivatePlanDto) {
+    return this.plansService.setStatus(body.planId, 'active');
   }
 }

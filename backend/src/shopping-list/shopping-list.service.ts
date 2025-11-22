@@ -2,8 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Ingredient, PlanMeal, RecipeIngredient, ShoppingListItem } from '../database/entities';
-import { PlansService } from '../plans/plans.service';
-import { IngredientsService } from '../ingredients/ingredients.service';
 import { InjectEntityManager } from '@nestjs/typeorm';
 import { EntityManager } from 'typeorm';
 
@@ -12,8 +10,6 @@ export class ShoppingListService {
   constructor(
     @InjectRepository(ShoppingListItem)
     private readonly shoppingListRepo: Repository<ShoppingListItem>,
-    private readonly plansService: PlansService,
-    private readonly ingredientsService: IngredientsService,
     @InjectEntityManager() private readonly entityManager: EntityManager,
   ) {}
 

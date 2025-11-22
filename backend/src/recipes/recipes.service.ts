@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
-import { Recipe } from '../database/entities';
+import { Recipe, RecipeIngredient } from '../database/entities';
 import { RecipeCandidatesQueryDto } from './dto/recipe-candidates-query.dto';
 import { UsersService } from '../users/users.service';
 
@@ -10,6 +10,8 @@ export class RecipesService {
   constructor(
     @InjectRepository(Recipe)
     private readonly recipeRepo: Repository<Recipe>,
+    @InjectRepository(RecipeIngredient)
+    private readonly recipeIngredientRepo: Repository<RecipeIngredient>,
     private readonly usersService: UsersService,
   ) {}
 
@@ -70,5 +72,53 @@ export class RecipesService {
 
     const recipes = await qb.getMany();
     return recipes;
+  }
+
+  async createCustomFromExisting(input: {
+    baseRecipeId: string;
+    newName: string;
+    mealSlot?: string;
+    difficulty?: string;
+    ingredientItems: { ingredientId: string; quantity: number; unit: string }[];
+  }) {
+    const base = await this.recipeRepo.findOne({
+      where: { id: input.baseRecipeId },
+    });
+    if (!base) {
+      throw new Error('Base recipe not found');
+    }
+
+    const recipe = this.recipeRepo.create({
+      name: input.newName,
+      meal_slot: input.mealSlot || base.meal_slot,
+      diet_tags: base.diet_tags,
+      difficulty: input.difficulty || base.difficulty,
+      is_custom: true,
+      createdByUser: base.createdByUser,
+    });
+    const savedRecipe = await this.recipeRepo.save(recipe);
+
+    const ris: RecipeIngredient[] = [];
+    for (const item of input.ingredientItems) {
+      const ingredient = { id: item.ingredientId } as any;
+      const ri = this.recipeIngredientRepo.create({
+        recipe: savedRecipe,
+        ingredient,
+        quantity: item.quantity,
+        unit: item.unit,
+      });
+      ris.push(ri);
+    }
+    await this.recipeIngredientRepo.save(ris);
+
+    // TODO: recompute macros/cost from ingredients; for now, copy base values.
+    savedRecipe.base_kcal = base.base_kcal;
+    savedRecipe.base_protein = base.base_protein;
+    savedRecipe.base_carbs = base.base_carbs;
+    savedRecipe.base_fat = base.base_fat;
+    savedRecipe.base_cost_gbp = base.base_cost_gbp;
+    await this.recipeRepo.save(savedRecipe);
+
+    return savedRecipe;
   }
 }

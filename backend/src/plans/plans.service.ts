@@ -11,18 +11,26 @@ import { ShoppingListService } from '../shopping-list/shopping-list.service';
 export class PlansService {
   constructor(
     @InjectRepository(WeeklyPlan)
-    private readonly weeklyPlanRepo: Repository<WeeklyPlan>,
-    @InjectRepository(PlanDay)
-    private readonly planDayRepo: Repository<PlanDay>,
-    @InjectRepository(PlanMeal)
-    private readonly planMealRepo: Repository<PlanMeal>,
-    private readonly recipesService: RecipesService,
-    private readonly usersService: UsersService,
-    private readonly shoppingListService: ShoppingListService,
-  ) {}
+  private readonly weeklyPlanRepo: Repository<WeeklyPlan>,
+  @InjectRepository(PlanDay)
+  private readonly planDayRepo: Repository<PlanDay>,
+  @InjectRepository(PlanMeal)
+  private readonly planMealRepo: Repository<PlanMeal>,
+  private readonly recipesService: RecipesService,
+  private readonly usersService: UsersService,
+  private readonly shoppingListService: ShoppingListService,
+) {}
 
   findAll() {
     return this.weeklyPlanRepo.find({ relations: ['days', 'days.meals'] });
+  }
+
+  async setStatus(planId: string, status: string) {
+    const plan = await this.weeklyPlanRepo.findOne({ where: { id: planId } });
+    if (!plan) throw new Error('Plan not found');
+    plan.status = status;
+    await this.weeklyPlanRepo.save(plan);
+    return plan;
   }
 
   async setMealRecipe(planMealId: string, newRecipeId: string) {
