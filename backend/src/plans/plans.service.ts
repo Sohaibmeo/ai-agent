@@ -25,6 +25,13 @@ export class PlansService {
     return this.weeklyPlanRepo.find({ relations: ['days', 'days.meals'] });
   }
 
+  findById(id: string) {
+    return this.weeklyPlanRepo.findOne({
+      where: { id },
+      relations: ['days', 'days.meals', 'days.meals.recipe'],
+    });
+  }
+
   async setStatus(planId: string, status: string) {
     const plan = await this.weeklyPlanRepo.findOne({ where: { id: planId } });
     if (!plan) throw new Error('Plan not found');

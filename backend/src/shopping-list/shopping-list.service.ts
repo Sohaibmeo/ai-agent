@@ -8,6 +8,7 @@ import {
   ShoppingListItem,
   PantryItem,
   UserIngredientPrice,
+  WeeklyPlan,
 } from '../database/entities';
 import { InjectEntityManager } from '@nestjs/typeorm';
 import { EntityManager } from 'typeorm';
@@ -21,6 +22,8 @@ export class ShoppingListService {
     private readonly pantryRepo: Repository<PantryItem>,
     @InjectRepository(UserIngredientPrice)
     private readonly priceRepo: Repository<UserIngredientPrice>,
+    @InjectRepository(WeeklyPlan)
+    private readonly weeklyPlanRepo: Repository<WeeklyPlan>,
     @InjectEntityManager() private readonly entityManager: EntityManager,
   ) {}
 
@@ -107,11 +110,10 @@ export class ShoppingListService {
   async getActive(userId: string, planId?: string) {
     let targetPlanId = planId;
     if (!targetPlanId) {
-      const plan = await this.entityManager.findOne(PlanMeal, {
-        relations: ['planDay', 'planDay.weeklyPlan'],
-        where: { planDay: { weeklyPlan: { user: { id: userId } as any, status: 'active' } as any } as any },
+      const plan = await this.weeklyPlanRepo.findOne({
+        where: { user: { id: userId } as any, status: 'active' },
       });
-      targetPlanId = plan?.planDay.weeklyPlan.id;
+      targetPlanId = plan?.id;
     }
     if (!targetPlanId) return [];
     return this.getForPlan(targetPlanId);

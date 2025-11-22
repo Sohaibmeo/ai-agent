@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { PlansService } from './plans.service';
 import { GeneratePlanDto } from './dto/generate-plan.dto';
 import { SetMealRecipeDto } from './dto/set-meal-recipe.dto';
@@ -27,5 +27,10 @@ export class PlansController {
   @Post('activate')
   activate(@Body() body: ActivatePlanDto) {
     return this.plansService.setStatus(body.planId, 'active');
+  }
+
+  @Get(':id')
+  getById(@Param('id') id: string) {
+    return this.plansService.findById(id);
   }
 }
