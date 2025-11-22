@@ -9,3 +9,4 @@ export * from './plan-meal.entity';
 export * from './shopping-list-item.entity';
 export * from './pantry-item.entity';
 export * from './user-ingredient-price.entity';
+export * from './user-preferences.entity';
