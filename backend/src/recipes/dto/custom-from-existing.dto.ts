@@ -1,7 +1,19 @@
-import { IsArray, IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsArray, IsNumber, IsOptional, IsString, IsUUID, MaxLength, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+
+class IngredientItemDto {
+  @IsUUID()
+  ingredientId!: string;
+
+  @IsNumber()
+  quantity!: number;
+
+  @IsString()
+  unit!: string;
+}
 
 export class CustomFromExistingDto {
-  @IsString()
+  @IsUUID()
   baseRecipeId!: string;
 
   @IsString()
@@ -18,9 +30,7 @@ export class CustomFromExistingDto {
   difficulty?: string;
 
   @IsArray()
-  ingredientItems!: {
-    ingredientId: string;
-    quantity: number;
-    unit: string;
-  }[];
+  @ValidateNested({ each: true })
+  @Type(() => IngredientItemDto)
+  ingredientItems!: IngredientItemDto[];
 }

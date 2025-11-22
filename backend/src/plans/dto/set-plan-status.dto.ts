@@ -1,6 +1,6 @@
-import { IsString } from 'class-validator';
+import { IsString, IsUUID } from 'class-validator';
 
 export class ActivatePlanDto {
-  @IsString()
+  @IsUUID()
   planId!: string;
 }

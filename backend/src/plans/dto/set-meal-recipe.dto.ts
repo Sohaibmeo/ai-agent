@@ -1,9 +1,9 @@
-import { IsString } from 'class-validator';
+import { IsString, IsUUID } from 'class-validator';
 
 export class SetMealRecipeDto {
-  @IsString()
+  @IsUUID()
   planMealId!: string;
 
-  @IsString()
+  @IsUUID()
   newRecipeId!: string;
 }

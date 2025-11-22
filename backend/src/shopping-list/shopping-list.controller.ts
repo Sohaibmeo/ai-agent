@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { ShoppingListService } from './shopping-list.service';
 import { ActiveListDto } from './dto/active-list.dto';
+import { UserIdParamDto } from './dto/user-id-param.dto';
 
 @Controller('shopping-list')
 export class ShoppingListController {
@@ -11,8 +12,8 @@ export class ShoppingListController {
     return this.shoppingListService.getForPlan(planId);
   }
 
-  @Post('active')
-  getActive(@Body() body: ActiveListDto) {
-    return this.shoppingListService.getActive(body.userId, body.planId);
+  @Get('active/:userId')
+  getActiveByUser(@Param() params: UserIdParamDto) {
+    return this.shoppingListService.getActive(params.userId);
   }
 }
