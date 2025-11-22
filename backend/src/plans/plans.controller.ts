@@ -1,5 +1,6 @@
-import { Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post } from '@nestjs/common';
 import { PlansService } from './plans.service';
+import { GeneratePlanDto } from './dto/generate-plan.dto';
 
 @Controller('plans')
 export class PlansController {
@@ -11,7 +12,8 @@ export class PlansController {
   }
 
   @Post('generate')
-  generate() {
-    return this.plansService.generateDraft();
+  generate(@Body() body: GeneratePlanDto) {
+    const weekStartDate = body.weekStartDate || new Date().toISOString().slice(0, 10);
+    return this.plansService.generateWeek(body.userId, weekStartDate);
   }
 }

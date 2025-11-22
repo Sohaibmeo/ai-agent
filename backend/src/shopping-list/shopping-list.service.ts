@@ -19,4 +19,12 @@ export class ShoppingListService {
       where: { weeklyPlan: { id: planId } },
     });
   }
+
+  async rebuildForPlan(planId: string) {
+    // Simplified: clear and rebuild by aggregating recipe ingredients scaled by portion.
+    await this.shoppingListRepo.delete({ weeklyPlan: { id: planId } as any });
+
+    // TODO: implement aggregation based on plan meals and recipe ingredients.
+    return [];
+  }
 }
