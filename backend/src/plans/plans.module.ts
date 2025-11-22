@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PlansService } from './plans.service';
 import { PlansController } from './plans.controller';
@@ -14,7 +14,7 @@ import { PreferencesModule } from '../preferences/preferences.module';
     RecipesModule,
     UsersModule,
     ShoppingListModule,
-    PreferencesModule,
+    forwardRef(() => PreferencesModule),
   ],
   providers: [PlansService],
   controllers: [PlansController],
