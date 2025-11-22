@@ -216,16 +216,22 @@ Return ONLY a valid WeeklyPlan JSON.
 
 The backend validates the returned JSON using a Zod schema.
 
-## 6.3 Orchestrator
+## 6.3 AgentOrchestratorService (NestJS)
 
-The orchestrator is a backend module that coordinates:
+The **AgentOrchestratorService** is a NestJS service (injectable provider) that coordinates:
 
 - Candidate recipe selection.
 - Review Agent invocation (for interpreting actions).
 - Coach Agent invocation (for generating/updating the plan).
 - Plan persistence and recomputation of macros and cost.
 
-### 6.3.1 `generateWeeklyPlan(userId)`
+This service is injected into controllers (e.g., `PlanController`) and uses dependency injection to access:
+- `RecipeService`
+- `PlanEngineService`
+- `ProfileService`
+- LLM agent chains (via LangChain)
+
+### 6.3.1 `generateWeeklyPlan(userId)` Method
 
 Steps:
 
@@ -242,7 +248,7 @@ Steps:
 10. Generate or update `shopping_list_items`.
 11. Return the persisted `WeeklyPlan` to the frontend.
 
-### 6.3.2 `handlePlanAction(userId, weeklyPlanId, actionContext, reasonText)`
+### 6.3.2 `handlePlanAction(userId, weeklyPlanId, actionContext, reasonText)` Method
 
 Steps:
 
@@ -262,4 +268,4 @@ Steps:
    - Regenerate the shopping list if needed.
 7. Return the updated plan to the frontend.
 
-In V1, “Swap” can be implemented without the Review Agent or Coach Agent by letting the user manually pick an alternative recipe from a candidate list. However, the Orchestrator-based approach is designed to handle more complex future actions (e.g., “make this cheaper”, “make this higher protein”) via the LLM agents.
+In V1, "Swap" can be implemented without the Review Agent or Coach Agent by letting the user manually pick an alternative recipe from a candidate list. However, the AgentOrchestratorService-based approach is designed to handle more complex future actions (e.g., "make this cheaper", "make this higher protein") via the LLM agents.

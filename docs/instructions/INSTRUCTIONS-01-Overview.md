@@ -15,7 +15,7 @@ The product’s primary goals are:
 The system is built as a modern web application:
 
 - **Frontend**: React + TypeScript (a dashboard with three main tabs: Profile, Plans, Groceries).
-- **Backend**: Node.js + TypeScript (Express or similar, with services and an orchestrator layer).
+- **Backend**: NestJS + TypeScript (modular architecture with controllers, services, and an orchestrator layer).
 - **Database**: Postgres (for users, recipes, ingredients, plans, shopping lists, etc.).
 - **AI / LLM**: LangChain JS with a **local OpenAI-compatible model** for Version 1. Cloud models (such as GPT-5-mini) can be plugged in later without changing business logic.
 

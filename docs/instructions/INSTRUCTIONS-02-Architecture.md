@@ -11,18 +11,21 @@ The system has four main layers:
      - **Groceries** – shopping list derived from the current plan.
    - Communicates with the backend via a REST API.
 
-2. **Backend (Node.js + TypeScript)**
-   - Exposes REST endpoints for:
-     - User profile management.
-     - Recipe retrieval and management (including user-created recipes).
-     - Plan generation, plan retrieval, and plan editing actions.
-     - Shopping list retrieval and updates (pantry and price overrides).
+2. **Backend (NestJS + TypeScript)**
+   - Modular architecture organized into feature modules:
+     - **UsersModule**: User profile management (controller + service).
+     - **RecipesModule**: Recipe retrieval and management including user-created recipes (controller + service).
+     - **PlansModule**: Plan generation, retrieval, and editing actions (controller + service).
+     - **ShoppingListModule**: Shopping list retrieval and updates, pantry tracking (controller + service).
+     - **AgentsModule**: LLM agent orchestration (Review Agent, Coach Agent via LangChain).
+   - Uses **Dependency Injection** for clean separation of concerns.
    - Contains domain services:
      - `ProfileService`
      - `RecipeService`
-     - `PlanEngine`
+     - `PlanEngineService`
      - `ShoppingListService`
-   - Contains an **Orchestrator** responsible for calling the LLM agents (via LangChain) and applying their outputs.
+     - `AgentOrchestratorService`
+   - Contains an **AgentOrchestratorService** responsible for calling the LLM agents (via LangChain) and applying their outputs.
 
 3. **LLM Agents (LangChain + Local OpenAI-Compatible Model)**
    - **Review Agent**: interprets user actions and text reasons into a `ReviewInstruction` JSON.
@@ -39,14 +42,22 @@ The system has four main layers:
    Profile Tab / Plans Tab / Groceries Tab
           │
           ▼
-[Backend REST API]
-  - ProfileService
-  - RecipeService
-  - PlanEngine
-  - ShoppingListService
+[NestJS Backend - REST API]
+  Controllers:
+    - ProfileController
+    - RecipeController
+    - PlanController
+    - ShoppingListController
           │
           ▼
-[Orchestrator]
+  Services:
+    - ProfileService
+    - RecipeService
+    - PlanEngineService
+    - ShoppingListService
+          │
+          ▼
+[AgentOrchestratorService]
   - Calls Review Agent (LLM)
   - Calls Coach Agent (LLM)
           │
@@ -71,13 +82,14 @@ The system has four main layers:
 - Calls appropriate backend endpoints.
 
 ### Backend
-- Validates and stores user profile and preferences.
-- Maintains the ingredient and recipe catalogs (including user-created recipes).
-- Enforces diet types and allergen constraints when selecting candidate recipes.
+- Validates and stores user profile and preferences via **NestJS controllers and services**.
+- Maintains the ingredient and recipe catalogs (including user-created recipes) using **RecipeService**.
+- Enforces diet types and allergen constraints when selecting candidate recipes via **PlanEngineService**.
 - Builds candidate recipe lists for each day and meal slot.
-- Calls LLM agents through the orchestrator to build or update weekly plans.
-- Computes nutritional values and cost from ingredient data.
-- Derives shopping lists from finalized plans and handles pantry & price overrides.
+- Calls LLM agents through the **AgentOrchestratorService** to build or update weekly plans.
+- Computes nutritional values and cost from ingredient data in **domain services**.
+- Derives shopping lists from finalized plans and handles pantry & price overrides via **ShoppingListService**.
+- Uses **dependency injection** for clean testability and modularity.
 
 ### LLM Agents
 - **Review Agent**: Converts UI actions + optional free-text reasons into a structured `ReviewInstruction` object for the orchestrator.
