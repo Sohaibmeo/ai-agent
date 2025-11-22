@@ -4,9 +4,10 @@ import { RecipesService } from './recipes.service';
 import { RecipesController } from './recipes.controller';
 import { Recipe, RecipeIngredient, Ingredient } from '../database/entities';
 import { UsersModule } from '../users/users.module';
+import { IngredientsModule } from '../ingredients/ingredients.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Recipe, RecipeIngredient, Ingredient]), UsersModule],
+  imports: [TypeOrmModule.forFeature([Recipe, RecipeIngredient, Ingredient]), UsersModule, IngredientsModule],
   providers: [RecipesService],
   controllers: [RecipesController],
   exports: [RecipesService],

@@ -13,4 +13,9 @@ export class IngredientsService {
   findAll() {
     return this.ingredientRepo.find();
   }
+
+  findByIds(ids: string[]) {
+    if (!ids.length) return Promise.resolve([]);
+    return this.ingredientRepo.findBy({ id: ids as any });
+  }
 }

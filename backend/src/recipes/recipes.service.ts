@@ -4,6 +4,7 @@ import { Brackets, Repository } from 'typeorm';
 import { Recipe, RecipeIngredient } from '../database/entities';
 import { RecipeCandidatesQueryDto } from './dto/recipe-candidates-query.dto';
 import { UsersService } from '../users/users.service';
+import { IngredientsService } from '../ingredients/ingredients.service';
 
 @Injectable()
 export class RecipesService {
@@ -13,6 +14,7 @@ export class RecipesService {
     @InjectRepository(RecipeIngredient)
     private readonly recipeIngredientRepo: Repository<RecipeIngredient>,
     private readonly usersService: UsersService,
+    private readonly ingredientsService: IngredientsService,
   ) {}
 
   findAll() {
@@ -98,9 +100,16 @@ export class RecipesService {
     });
     const savedRecipe = await this.recipeRepo.save(recipe);
 
+    const ingredientIds = input.ingredientItems.map((i) => i.ingredientId);
+    const ingredients = await this.ingredientsService.findByIds(ingredientIds);
+    const ingredientMap = new Map(ingredients.map((ing) => [ing.id, ing]));
+
     const ris: RecipeIngredient[] = [];
     for (const item of input.ingredientItems) {
-      const ingredient = { id: item.ingredientId } as any;
+      const ingredient = ingredientMap.get(item.ingredientId);
+      if (!ingredient) {
+        throw new Error(`Ingredient not found: ${item.ingredientId}`);
+      }
       const ri = this.recipeIngredientRepo.create({
         recipe: savedRecipe,
         ingredient,
@@ -111,14 +120,47 @@ export class RecipesService {
     }
     await this.recipeIngredientRepo.save(ris);
 
-    // TODO: recompute macros/cost from ingredients; for now, copy base values.
-    savedRecipe.base_kcal = base.base_kcal;
-    savedRecipe.base_protein = base.base_protein;
-    savedRecipe.base_carbs = base.base_carbs;
-    savedRecipe.base_fat = base.base_fat;
-    savedRecipe.base_cost_gbp = base.base_cost_gbp;
+    const { kcal, protein, carbs, fat, cost } = this.computeMacrosAndCost(ris);
+    savedRecipe.base_kcal = kcal;
+    savedRecipe.base_protein = protein;
+    savedRecipe.base_carbs = carbs;
+    savedRecipe.base_fat = fat;
+    savedRecipe.base_cost_gbp = cost;
     await this.recipeRepo.save(savedRecipe);
 
     return savedRecipe;
+  }
+
+  private computeMacrosAndCost(ris: RecipeIngredient[]) {
+    let kcal = 0;
+    let protein = 0;
+    let carbs = 0;
+    let fat = 0;
+    let cost = 0;
+
+    for (const ri of ris) {
+      const ing = ri.ingredient;
+      const quantity = Number(ri.quantity);
+      const unitType = ing.unit_type || '';
+      const unit = ri.unit || '';
+
+      // Basic unit handling: per_100g with grams, per_piece with piece, per_ml with ml. Fallback: multiply by quantity.
+      let factor = quantity;
+      if (unitType === 'per_100g' && unit === 'g') {
+        factor = quantity / 100;
+      } else if (unitType === 'per_piece' && unit === 'piece') {
+        factor = quantity;
+      } else if (unitType === 'per_ml' && unit === 'ml') {
+        factor = quantity / 100;
+      }
+
+      kcal += (ing.kcal_per_unit || 0) * factor;
+      protein += (ing.protein_per_unit || 0) * factor;
+      carbs += (ing.carbs_per_unit || 0) * factor;
+      fat += (ing.fat_per_unit || 0) * factor;
+      cost += (ing.estimated_price_per_unit_gbp || 0) * factor;
+    }
+
+    return { kcal, protein, carbs, fat, cost };
   }
 }
