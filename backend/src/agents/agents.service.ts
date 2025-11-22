@@ -1,6 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import OpenAI from 'openai';
 import { z } from 'zod';
+import { ExplanationRequestDto, ExplanationResponseDto } from './dto/explanation.dto';
+import {
+  NutritionAdviceItem,
+  NutritionAdviceRequestDto,
+  NutritionAdviceResponseDto,
+} from './dto/nutrition-advice.dto';
 
 const ReviewInstructionSchema = z.object({
   action: z.string(),
@@ -29,6 +35,8 @@ const WeeklyPlanSchema = z.object({
 export class AgentsService {
   private reviewModel = process.env.LLM_MODEL_REVIEW || 'llama3.1:8b-instruct-q4_K_M';
   private coachModel = process.env.LLM_MODEL_COACH || 'llama3.1:8b-instruct-q4_K_M';
+  private explainModel = process.env.LLM_MODEL_EXPLAIN || this.coachModel;
+  private nutritionModel = process.env.LLM_MODEL_NUTRITION || this.coachModel;
   private client = new OpenAI({
     baseURL: process.env.LLM_BASE_URL || 'http://localhost:11434/v1',
     apiKey: process.env.LLM_API_KEY || 'ollama',
@@ -95,5 +103,48 @@ export class AgentsService {
     } catch (e) {
       throw new Error('Failed to parse LLM JSON');
     }
+  }
+
+  async explain(request: ExplanationRequestDto): Promise<ExplanationResponseDto> {
+    const prompt: { role: 'system' | 'user'; content: string }[] = [
+      {
+        role: 'system',
+        content:
+          'You are Explanation Agent. Given a question and context (plan/profile/reasons), reply ONLY with JSON {explanation: string, evidence: string[]}. Be concise, no prose.',
+      },
+      {
+        role: 'user',
+        content: JSON.stringify(request),
+      },
+    ];
+    const raw = await this.callModel(this.explainModel, prompt);
+    const schema = z.object({
+      explanation: z.string(),
+      evidence: z.array(z.string()).default([]),
+    });
+    const parsed = schema.parse(raw);
+    return parsed;
+  }
+
+  async nutritionAdvice(request: NutritionAdviceRequestDto): Promise<NutritionAdviceResponseDto> {
+    const prompt: { role: 'system' | 'user'; content: string }[] = [
+      {
+        role: 'system',
+        content:
+          'You are Nutrition Advisor. Provide 3-6 concise suggestions in JSON {advice:[{title, detail, category?}]}. Focus on diet improvements, hydration, or timing. No prose.',
+      },
+      { role: 'user', content: JSON.stringify(request) },
+    ];
+    const raw = await this.callModel(this.nutritionModel, prompt);
+    const schema = z.object({
+      advice: z.array(
+        z.object({
+          title: z.string(),
+          detail: z.string(),
+          category: z.string().optional(),
+        }),
+      ),
+    });
+    return schema.parse(raw);
   }
 }
