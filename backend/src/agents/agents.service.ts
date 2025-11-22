@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import OpenAI from 'openai';
 import { z } from 'zod';
 
 const ReviewInstructionSchema = z.object({
@@ -26,26 +27,73 @@ const WeeklyPlanSchema = z.object({
 
 @Injectable()
 export class AgentsService {
-  private reviewModel = process.env.LLM_MODEL_REVIEW || 'local-review';
-  private coachModel = process.env.LLM_MODEL_COACH || 'local-coach';
-  private baseUrl = process.env.LLM_BASE_URL || 'http://localhost:11434/v1';
+  private reviewModel = process.env.LLM_MODEL_REVIEW || 'llama3.1:8b-instruct-q4_K_M';
+  private coachModel = process.env.LLM_MODEL_COACH || 'llama3.1:8b-instruct-q4_K_M';
+  private client = new OpenAI({
+    baseURL: process.env.LLM_BASE_URL || 'http://localhost:11434/v1',
+    apiKey: process.env.LLM_API_KEY || 'ollama',
+  });
 
-  async reviewAction(payload: unknown) {
-    // Placeholder: in future, call LLM and validate with Zod.
-    const result = ReviewInstructionSchema.parse({
-      action: 'noop',
-      notes: 'stubbed review action',
-      ...((payload as any) || {}),
-    });
-    return result;
+  async reviewAction(payload: { text?: string; currentPlanSnippet?: unknown }) {
+    const prompt: { role: 'system' | 'user'; content: string }[] = [
+      {
+        role: 'system',
+        content:
+          'You are Review Agent. Return ONLY compact JSON matching {action, targetMealId?, notes?, constraints?}. No prose.',
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          text: payload.text,
+          currentPlanSnippet: payload.currentPlanSnippet,
+        }),
+      },
+    ];
+    const raw = await this.callModel(this.reviewModel, prompt);
+    return ReviewInstructionSchema.parse(raw);
   }
 
-  async coachPlan(payload: { profile: unknown; candidates: unknown }) {
-    // Placeholder: in future, call LLM and validate with Zod.
-    const result = WeeklyPlanSchema.parse({
-      week_start_date: new Date().toISOString().slice(0, 10),
-      days: [],
+  async coachPlan(payload: {
+    profile: any;
+    candidates: any;
+    week_start_date?: string;
+  }) {
+    const prompt: { role: 'system' | 'user'; content: string }[] = [
+      {
+        role: 'system',
+        content:
+          'You are Coach Agent. Choose recipes from provided candidates for each day/meal. Output JSON {week_start_date, days:[{day_index, meals:[{meal_slot, recipe_id, portion_multiplier}]}]}. Use only provided recipe_id values.',
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          profile: payload.profile,
+          candidates: payload.candidates,
+          week_start_date: payload.week_start_date || new Date().toISOString().slice(0, 10),
+        }),
+      },
+    ];
+    const raw = await this.callModel(this.coachModel, prompt);
+    return WeeklyPlanSchema.parse(raw);
+  }
+
+  private async callModel(
+    model: string,
+    messages: { role: 'system' | 'user'; content: string }[],
+  ): Promise<any> {
+    const res = await this.client.chat.completions.create({
+      model,
+      messages,
+      temperature: 0,
+      max_tokens: 800,
+      response_format: { type: 'json_object' },
     });
-    return result;
+    const content = res.choices?.[0]?.message?.content;
+    if (!content) throw new Error('LLM returned empty content');
+    try {
+      return JSON.parse(content);
+    } catch (e) {
+      throw new Error('Failed to parse LLM JSON');
+    }
   }
 }
