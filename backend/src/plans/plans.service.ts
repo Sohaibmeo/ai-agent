@@ -104,6 +104,8 @@ export class PlansService {
         day_index: dayIdx,
       });
       const savedDay = await this.planDayRepo.save(day);
+      let currentDayKcal = 0;
+      let currentDayProtein = 0;
 
       for (const slot of mealSlots) {
         const candidates = await this.recipesService.findCandidatesForUser({
@@ -113,10 +115,18 @@ export class PlansService {
         });
         const selected = selectRecipe(candidates, {
           avoidNames: new Set(), // could track weekly variety
-          budgetCap: profile.weekly_budget_gbp || undefined,
+          costCapPerMeal: profile.weekly_budget_gbp
+            ? Number(profile.weekly_budget_gbp) / (mealSlots.length * 7)
+            : undefined,
         });
         if (!selected) continue;
-        const portion = portionTowardsTarget(selected, day.daily_kcal || 0, targets.dailyCalories);
+        const portion = portionTowardsTarget(
+          selected,
+          currentDayKcal,
+          targets.dailyCalories,
+          currentDayProtein,
+          targets.dailyProtein,
+        );
         const meal = this.planMealRepo.create({
           planDay: savedDay,
           meal_slot: slot,
@@ -129,6 +139,8 @@ export class PlansService {
           meal_cost_gbp: selected.base_cost_gbp ? Number(selected.base_cost_gbp) * portion : undefined,
         });
         await this.planMealRepo.save(meal);
+        currentDayKcal += Number(meal.meal_kcal || 0);
+        currentDayProtein += Number(meal.meal_protein || 0);
       }
 
       dayEntities.push(savedDay);
