@@ -8,7 +8,8 @@
     "start:dev": "nodemon --watch src --ext ts --exec \"ts-node --project tsconfig.json --require tsconfig-paths/register src/main.ts\"",
     "build": "tsc -p tsconfig.json",
     "lint": "echo \"TODO: add lint\" && exit 0",
-    "test": "echo \"No tests yet\" && exit 0"
+    "test": "echo \"No tests yet\" && exit 0",
+    "typeorm": "node --require ts-node/register --require tsconfig-paths/register ./node_modules/typeorm/cli.js -d ormconfig.ts"
   },
   "keywords": [],
   "author": "",
