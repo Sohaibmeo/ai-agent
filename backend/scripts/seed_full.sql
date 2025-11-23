@@ -124,6 +124,14 @@ WITH rec AS (
 )
 SELECT 1;
 
+-- Drinkable recipes (meal_type = drinkable)
+INSERT INTO recipes (id, name, meal_slot, meal_type, diet_tags, difficulty, base_kcal, base_protein, base_carbs, base_fat, base_cost_gbp, is_custom, instructions)
+VALUES
+  (uuid_generate_v4(), 'Banana Oat Protein Shake', 'breakfast', 'drinkable', ARRAY['halal', 'vegetarian'], 'super_easy', 320, 20, 45, 9, 0.95, FALSE, 'Blend banana, oats, peanut butter, and yogurt with water.'),
+  (uuid_generate_v4(), 'Green Yogurt Smoothie', 'snack', 'drinkable', ARRAY['halal', 'vegetarian'], 'super_easy', 220, 17, 28, 7, 0.85, FALSE, 'Blend yogurt with spinach and banana until smooth.'),
+  (uuid_generate_v4(), 'Peanut Butter Oat Smoothie', 'breakfast', 'drinkable', ARRAY['halal', 'vegetarian'], 'easy', 380, 22, 46, 14, 1.05, FALSE, 'Blend oats, banana, peanut butter, and yogurt.')
+RETURNING id, name;
+
 -- Recipe Ingredients (resolve IDs by name)
 -- Run together with scripts/seed_recipe_ingredients.sql, e.g.:
 -- cat scripts/seed_full.sql scripts/seed_recipe_ingredients.sql | psql ...

@@ -403,6 +403,7 @@ export class PlansService {
       userId,
       mealSlot: meal.meal_slot,
       maxDifficulty: profile.max_difficulty,
+      mealType: params?.preferMealType,
     });
     const filtered = candidates.filter((r) => r.id !== meal.recipe?.id);
     const pick = selectRecipe(filtered.length ? filtered : candidates, {

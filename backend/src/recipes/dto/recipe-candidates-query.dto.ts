@@ -11,4 +11,8 @@ export class RecipeCandidatesQueryDto {
   @IsOptional()
   @IsString()
   maxDifficulty?: string;
+
+  @IsOptional()
+  @IsString()
+  mealType?: 'solid' | 'drinkable';
 }

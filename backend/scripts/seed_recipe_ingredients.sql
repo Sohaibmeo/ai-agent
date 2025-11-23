@@ -126,4 +126,16 @@ VALUES
   ((SELECT id FROM recipes WHERE name = 'Egg & Cucumber Bites'), (SELECT id FROM ingredients WHERE name = 'Cucumber'), 40, 'g'),
   ((SELECT id FROM recipes WHERE name = 'Apple Peanut Oat Bites'), (SELECT id FROM ingredients WHERE name = 'Apple'), 1, 'piece'),
   ((SELECT id FROM recipes WHERE name = 'Apple Peanut Oat Bites'), (SELECT id FROM ingredients WHERE name = 'Peanut Butter'), 15, 'g'),
-  ((SELECT id FROM recipes WHERE name = 'Apple Peanut Oat Bites'), (SELECT id FROM ingredients WHERE name = 'Oats'), 15, 'g');
+  ((SELECT id FROM recipes WHERE name = 'Apple Peanut Oat Bites'), (SELECT id FROM ingredients WHERE name = 'Oats'), 15, 'g'),
+  -- Drinkable recipes
+  ((SELECT id FROM recipes WHERE name = 'Banana Oat Protein Shake'), (SELECT id FROM ingredients WHERE name = 'Banana'), 1, 'piece'),
+  ((SELECT id FROM recipes WHERE name = 'Banana Oat Protein Shake'), (SELECT id FROM ingredients WHERE name = 'Oats'), 40, 'g'),
+  ((SELECT id FROM recipes WHERE name = 'Banana Oat Protein Shake'), (SELECT id FROM ingredients WHERE name = 'Peanut Butter'), 15, 'g'),
+  ((SELECT id FROM recipes WHERE name = 'Banana Oat Protein Shake'), (SELECT id FROM ingredients WHERE name = 'Greek Yogurt'), 100, 'g'),
+  ((SELECT id FROM recipes WHERE name = 'Green Yogurt Smoothie'), (SELECT id FROM ingredients WHERE name = 'Greek Yogurt'), 120, 'g'),
+  ((SELECT id FROM recipes WHERE name = 'Green Yogurt Smoothie'), (SELECT id FROM ingredients WHERE name = 'Spinach'), 40, 'g'),
+  ((SELECT id FROM recipes WHERE name = 'Green Yogurt Smoothie'), (SELECT id FROM ingredients WHERE name = 'Banana'), 1, 'piece'),
+  ((SELECT id FROM recipes WHERE name = 'Peanut Butter Oat Smoothie'), (SELECT id FROM ingredients WHERE name = 'Oats'), 50, 'g'),
+  ((SELECT id FROM recipes WHERE name = 'Peanut Butter Oat Smoothie'), (SELECT id FROM ingredients WHERE name = 'Peanut Butter'), 20, 'g'),
+  ((SELECT id FROM recipes WHERE name = 'Peanut Butter Oat Smoothie'), (SELECT id FROM ingredients WHERE name = 'Greek Yogurt'), 80, 'g'),
+  ((SELECT id FROM recipes WHERE name = 'Peanut Butter Oat Smoothie'), (SELECT id FROM ingredients WHERE name = 'Banana'), 1, 'piece');

@@ -20,6 +20,9 @@ export class Recipe {
   @Column({ type: 'varchar', length: 50 })
   meal_slot!: string;
 
+  @Column({ type: 'varchar', length: 20, default: 'solid' })
+  meal_type!: 'solid' | 'drinkable';
+
   @Column({ type: 'text', array: true, default: () => 'ARRAY[]::text[]' })
   diet_tags!: string[];
 

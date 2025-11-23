@@ -40,7 +40,9 @@ export class RecipesService {
   }
 
   async findCandidatesForUser(query: RecipeCandidatesQueryDto) {
-    this.logger.log(`findCandidates user=${query.userId} slot=${query.mealSlot ?? 'any'}`);
+    this.logger.log(
+      `findCandidates user=${query.userId} slot=${query.mealSlot ?? 'any'} type=${query.mealType ?? 'any'}`,
+    );
     const profile = await this.usersService.getProfile(query.userId);
 
     const allowedDifficulty = this.allowedDifficulties(query.maxDifficulty || profile.max_difficulty);
@@ -48,6 +50,10 @@ export class RecipesService {
 
     if (query.mealSlot) {
       qb.andWhere('recipe.meal_slot = :mealSlot', { mealSlot: query.mealSlot });
+    }
+
+    if (query.mealType) {
+      qb.andWhere('recipe.meal_type = :mealType', { mealType: query.mealType });
     }
 
     if (profile.diet_type) {
