@@ -8,7 +8,7 @@
     "start:dev": "nodemon --watch src --ext ts --exec \"ts-node --project tsconfig.json --require tsconfig-paths/register src/main.ts\"",
     "build": "tsc -p tsconfig.json",
     "lint": "echo \"TODO: add lint\" && exit 0",
-    "test": "echo \"No tests yet\" && exit 0",
+    "test": "jest",
     "typeorm": "node --require ts-node/register --require tsconfig-paths/register ./node_modules/typeorm/cli.js -d ormconfig.ts"
   },
   "keywords": [],
@@ -30,8 +30,11 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/node": "^24.10.1",
+    "jest": "^30.2.0",
     "nodemon": "^3.1.11",
+    "ts-jest": "^29.4.5",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "tsconfig-paths": "^4.2.0",
