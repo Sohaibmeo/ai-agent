@@ -30,7 +30,7 @@ export class AgentsController {
   @Post('review-and-swap')
   async reviewAndSwap(@Body() body: { planMealId: string; text?: string; currentPlanSnippet?: unknown; candidates?: any[] }) {
     const review = await this.agentsService.reviewAction({ text: body.text, currentPlanSnippet: body.currentPlanSnippet });
-    if (review.action === 'swap' && body.planMealId && body.candidates?.length) {
+    if ((review.action === 'swap_ingredient' || review.action === 'regenerate_meal') && body.planMealId && body.candidates?.length) {
       const chosen = body.candidates[0];
       if (chosen?.id) {
         await this.plansService.setMealRecipe(body.planMealId, chosen.id);

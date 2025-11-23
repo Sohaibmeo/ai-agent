@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
-import { Recipe, RecipeIngredient, UserRecipeScore } from '../database/entities';
+import { Recipe, RecipeIngredient, UserIngredientScore, UserRecipeScore } from '../database/entities';
 import { RecipeCandidatesQueryDto } from './dto/recipe-candidates-query.dto';
 import { UsersService } from '../users/users.service';
 import { IngredientsService } from '../ingredients/ingredients.service';
@@ -44,6 +44,11 @@ export class RecipesService {
       `findCandidates user=${query.userId} slot=${query.mealSlot ?? 'any'} type=${query.mealType ?? 'any'}`,
     );
     const profile = await this.usersService.getProfile(query.userId);
+    const weeklyBudget = query.weeklyBudgetGbp ?? (profile.weekly_budget_gbp ? Number(profile.weekly_budget_gbp) : undefined);
+    const mealsPerDay = query.mealsPerDay || 4;
+    const dailyBudget = weeklyBudget ? weeklyBudget / 7 : undefined;
+    const perMealBudget = dailyBudget ? dailyBudget / Math.max(1, mealsPerDay) : undefined;
+    const estimatedDayCost = query.estimatedDayCost ? Number(query.estimatedDayCost) : 0;
 
     const allowedDifficulty = this.allowedDifficulties(query.maxDifficulty || profile.max_difficulty);
     const qb = this.recipeRepo.createQueryBuilder('recipe');
@@ -89,11 +94,45 @@ export class RecipesService {
       userId: query.userId,
     })
       .addSelect('COALESCE(urs.score, 0)', 'recipe_score')
+      .addSelect(
+        `(SELECT COALESCE(SUM(uis.score), 0)
+          FROM recipe_ingredients ri
+          LEFT JOIN user_ingredient_score uis
+            ON uis.ingredient_id = ri.ingredient_id
+           AND uis.user_id = :userId
+         WHERE ri.recipe_id = recipe.id)`,
+        'ingredient_penalty_raw',
+      )
       .orderBy('recipe_score', 'DESC');
 
-    const recipes = await qb.getMany();
-    this.logger.log(`candidates user=${query.userId} count=${recipes.length}`);
-    return recipes;
+    const { entities, raw } = await qb.getRawAndEntities();
+    const scored = entities.map((recipe, idx) => {
+      const recipeScore = Number(raw[idx]?.recipe_score ?? 0);
+      const ingredientPenaltyRaw = Number(raw[idx]?.ingredient_penalty_raw ?? 0);
+      const ingredientPenalty = ingredientPenaltyRaw < 0 ? Math.abs(ingredientPenaltyRaw) : 0;
+      const cost = Number(recipe.base_cost_gbp || 0);
+      let costPenalty = 0;
+      if (perMealBudget && cost) {
+        if (cost > perMealBudget * 1.3) costPenalty += 2;
+        else if (cost > perMealBudget) costPenalty += 1;
+      }
+      if (dailyBudget && estimatedDayCost && cost) {
+        const projected = estimatedDayCost + cost;
+        if (projected > dailyBudget * 1.3) costPenalty += 2;
+        else if (projected > dailyBudget) costPenalty += 1;
+      }
+      const score = recipeScore - ingredientPenalty - costPenalty;
+      return { recipe, score, costPenalty, recipeScore, ingredientPenalty };
+    });
+
+    scored.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return Number(a.recipe.base_cost_gbp || 0) - Number(b.recipe.base_cost_gbp || 0);
+    });
+
+    const ordered = scored.map((s) => s.recipe);
+    this.logger.log(`candidates user=${query.userId} count=${ordered.length}`);
+    return ordered;
   }
 
   async getIngredientIdsForRecipe(recipeId: string) {

@@ -153,6 +153,7 @@ export class PlansService {
       const savedDay = await this.planDayRepo.save(day);
       let currentDayKcal = 0;
       let currentDayProtein = 0;
+      let currentDayCost = 0;
 
       const agentMealsForDay = agentPlan?.days?.find((d) => d.day_index === dayIdx)?.meals;
       if (agentMealsForDay?.length) {
@@ -174,6 +175,7 @@ export class PlansService {
           await this.planMealRepo.save(meal);
           currentDayKcal += Number(meal.meal_kcal || 0);
           currentDayProtein += Number(meal.meal_protein || 0);
+          currentDayCost += Number(meal.meal_cost_gbp || 0);
         }
       } else {
         for (const slot of mealSlots) {
@@ -181,6 +183,9 @@ export class PlansService {
             userId,
             mealSlot: slot,
             maxDifficulty: profile.max_difficulty,
+            weeklyBudgetGbp: profile.weekly_budget_gbp ? Number(profile.weekly_budget_gbp) : undefined,
+            mealsPerDay: mealSlots.length,
+            estimatedDayCost: currentDayCost,
           });
           const selected = selectRecipe(candidates, {
             avoidNames: new Set(), // could track weekly variety
@@ -210,6 +215,7 @@ export class PlansService {
           await this.planMealRepo.save(meal);
           currentDayKcal += Number(meal.meal_kcal || 0);
           currentDayProtein += Number(meal.meal_protein || 0);
+          currentDayCost += Number(meal.meal_cost_gbp || 0);
         }
       }
 
@@ -264,6 +270,7 @@ export class PlansService {
 
   private async buildCandidatesPayload(userId: string, mealSlots: string[], maxDifficulty: string) {
     const days: any[] = [];
+    const profile = await this.usersService.getProfile(userId);
     for (let dayIdx = 0; dayIdx < 7; dayIdx += 1) {
       const day: any = { day_index: dayIdx, meals: [] };
       for (const slot of mealSlots) {
@@ -271,6 +278,8 @@ export class PlansService {
           userId,
           mealSlot: slot,
           maxDifficulty,
+          weeklyBudgetGbp: profile.weekly_budget_gbp ? Number(profile.weekly_budget_gbp) : undefined,
+          mealsPerDay: mealSlots.length,
         });
         day.meals.push({
           meal_slot: slot,
@@ -351,11 +360,7 @@ export class PlansService {
         break;
       case 'avoid_ingredient_future':
         if (instruction.targetIds?.ingredientId) {
-          await this.preferencesService.incrementIngredientPreference(
-            userId,
-            'dislike',
-            instruction.targetIds.ingredientId,
-          );
+          await this.preferencesService.setAvoidIngredient(userId, instruction.targetIds.ingredientId);
         }
         break;
       case 'adjust_portion':
@@ -404,6 +409,8 @@ export class PlansService {
       mealSlot: meal.meal_slot,
       maxDifficulty: profile.max_difficulty,
       mealType: params?.preferMealType,
+      weeklyBudgetGbp: profile.weekly_budget_gbp ? Number(profile.weekly_budget_gbp) : undefined,
+      mealsPerDay: 4,
     });
     const filtered = candidates.filter((r) => r.id !== meal.recipe?.id);
     const pick = selectRecipe(filtered.length ? filtered : candidates, {
