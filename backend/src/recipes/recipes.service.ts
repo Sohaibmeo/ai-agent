@@ -76,23 +76,8 @@ export class RecipesService {
 
     const recipes = await qb.getMany();
 
-    const prefs = await this.preferencesService.getForUser(query.userId);
-    if (!prefs || !prefs.disliked_ingredients || !recipes.length) return recipes;
-
-    const dislikedEntries = Object.entries(prefs.disliked_ingredients).filter(([_, count]) => Number(count) >= 2);
-    const dislikedIds = dislikedEntries.map(([id]) => id);
-    if (!dislikedIds.length) return recipes;
-
-    const ris = await this.recipeIngredientRepo.find({
-      where: { recipe: { id: In(recipes.map((r) => r.id)) } as any },
-      relations: ['ingredient', 'recipe'],
-    });
-    const dislikedSet = new Set(dislikedIds);
-    const filtered = recipes.filter((r) => {
-      const ingIds = ris.filter((ri) => ri.recipe.id === r.id).map((ri) => ri.ingredient.id);
-      return !ingIds.some((id) => dislikedSet.has(id));
-    });
-    return filtered.length ? filtered : recipes;
+    // Preference filtering disabled for now
+    return recipes;
   }
 
   async getIngredientIdsForRecipe(recipeId: string) {

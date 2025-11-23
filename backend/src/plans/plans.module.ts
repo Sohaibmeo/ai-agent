@@ -7,6 +7,7 @@ import { RecipesModule } from '../recipes/recipes.module';
 import { UsersModule } from '../users/users.module';
 import { ShoppingListModule } from '../shopping-list/shopping-list.module';
 import { PreferencesModule } from '../preferences/preferences.module';
+import { AgentsModule } from '../agents/agents.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { PreferencesModule } from '../preferences/preferences.module';
     UsersModule,
     ShoppingListModule,
     forwardRef(() => PreferencesModule),
+    AgentsModule,
   ],
   providers: [PlansService],
   controllers: [PlansController],
