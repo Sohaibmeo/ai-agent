@@ -1,9 +1,10 @@
+import { NavLink } from 'react-router-dom';
 import { useMemo } from 'react';
 
 const navItems = [
-  { key: 'profile', label: 'Profile' },
-  { key: 'plans', label: 'Plans' },
-  { key: 'groceries', label: 'Groceries' },
+  { key: 'profile', label: 'Profile', to: '/' },
+  { key: 'plans', label: 'Plans', to: '/plans' },
+  { key: 'groceries', label: 'Groceries', to: '/groceries' },
 ];
 
 export function Sidebar() {
@@ -20,12 +21,19 @@ export function Sidebar() {
         </div>
         <nav className="space-y-1">
           {items.map((item) => (
-            <button
+            <NavLink
               key={item.key}
-              className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100"
+              to={item.to}
+              className={({ isActive }) =>
+                [
+                  'block w-full rounded-lg px-3 py-2 text-left text-sm font-medium',
+                  isActive ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100',
+                ].join(' ')
+              }
+              end={item.to === '/'}
             >
               {item.label}
-            </button>
+            </NavLink>
           ))}
         </nav>
       </div>
