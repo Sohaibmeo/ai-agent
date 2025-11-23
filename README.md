@@ -1,141 +1,163 @@
-🧠 AI-Powered Meal Planning Platform
-Enterprise-Grade Nutrition, Cost Optimization & Preference-Learning System
+# 🧠 AI-Powered Meal Planning Platform
+### Enterprise-Grade Nutrition, Cost Optimization & Preference-Learning System  
+Built with **NestJS**, **Postgres**, **Local LLM Agents**, **TypeScript**, and **Structured AI Orchestration**
 
-Built with NestJS, Postgres, Local LLM Agents, TypeScript, and Structured AI Orchestration
+---
 
-📌 Overview
+## 📌 Overview
 
-This repository contains a production-ready AI-Assisted Meal Planning System, designed for the UK market.
-It generates 7-day meal plans tailored to:
+This repository contains a **production-ready AI-Assisted Meal Planning System**, designed for the UK market.  
+It generates **7-day meal plans** tailored to:
 
-Body composition goals (lose / maintain / gain)
-
-Diet requirements (Halal, Vegan, Vegetarian, Keto, etc.)
-
-UK’s 14 allergen categories
-
-Weekly budget constraints
-
-Recipe difficulty
-
-Meal schedule preferences
-
-User behaviour (likes, dislikes, swaps, custom recipes)
+- Body composition goals (lose / maintain / gain)  
+- Diet requirements (Halal, Vegan, Vegetarian, Keto, etc.)  
+- UK’s 14 allergen categories  
+- Weekly budget constraints  
+- Recipe difficulty  
+- Meal schedule preferences  
+- User behaviour (likes, dislikes, swaps, custom recipes)
 
 The system combines:
 
-Local LLM agents (Review Agent + Coach Agent)
+- **Local LLM agents** (Review Agent + Coach Agent)  
+- **Strong deterministic backend logic** (macro/cost engine, filtering, targets)  
+- **Preference learning**  
+- **Recipe + Ingredient catalogs with cost estimation**  
+- **Shopping list generation with price overrides + pantry tracking**
 
-Strong deterministic backend logic (macro/cost engine, filtering, targets)
+This architecture prioritises **reliability**, **explainability**, and **cost efficiency** while still benefiting from AI reasoning where helpful.
 
-Preference learning
+---
 
-Recipe + Ingredient catalogs with cost estimation
+## 🧩 System Flow (Figma Diagram)
 
-Shopping list generation with price overrides + pantry tracking
-
-This architecture prioritises reliability, explainability, and cost efficiency while still benefiting from AI reasoning where helpful.
-
-🧩 System Flow (Figma Diagram)
-
-Prototype Workflow (to be updated in future iterations):
+Prototype Workflow:  
 👉 https://github.com/Sohaibmeo/ai-agent/raw/adv-fitness-agent/docs/Figma.png
 
+This illustrates user navigation: **Profile → Plans → Groceries**, including swaps, modifications, price overrides, and ingredient interactions.
+
+---
+
+## 🏗️ Core Architecture
+
+### **Backend**
+- **NestJS + TypeScript**
+- **PostgreSQL (TypeORM)**
+- **Modular domain architecture**
+- **Zod validation for all AI structured outputs**
+- **Local compatible LLM endpoints** for agents
+- **Deterministic domain logic** for macros and cost calculations
+
+### **AI Layer**
+- **Review Agent** – interprets user intent into structured instructions  
+- **Coach Agent** – selects recipes per day/meal slot using ranked candidates  
+- **Structured JSON I/O with Zod validation**  
+- **Fallback logic** ensures reliability if AI fails validation  
+
+---
+
+## 📦 Features Implemented
+
+### ✅ **User Profile**
+- Age, height, weight, activity level  
+- Goal (lose/maintain/gain)  
+- Diet type (Halal, Vegan, etc.)  
+- Allergens (14 UK categories)  
+- Default plan settings (optional)
+- Meal schedule defaults
+
+### ✅ **Recipe & Ingredient Catalog**
+- Ingredient macros, allergens, cost per unit  
+- Recipes with difficulty, diet tags, base macros & cost  
+- Linking via RecipeIngredient with quantities and units  
+
+### ✅ **User Preferences & Learning**
+- Recipe-level likes/dislikes  
+- Ingredient-level scoring  
+- Automatic learning when swapping meals  
+
+### ✅ **Weekly Plan Generation**
+- 7-day plan  
+- Daily meal slots  
+- Portion scaling toward calorie/protein targets  
+- Diet, allergen, difficulty filtering  
+- Optional LLM-assisted selection  
+- Deterministic fallback generation  
+
+### ✅ **Shopping List Engine**
+- Aggregates ingredients across the week  
+- Applies user price overrides  
+- Pantry tracking (“already have this”)  
+
+### ✅ **LLM Agents**
+- Structured-review instructions  
+- Recipe selection  
+- Nutrition insights  
+- Error handling + JSON schema enforcement  
+
+---
+
+## 🔧 Backend Structure
+
+```
 src/
  ├─ agents/
- │   ├─ agents.service.ts      # Review & Coach agent wrappers
- │   ├─ schemas/               # Zod schemas for AI IO
- │
  ├─ plans/
- │   ├─ plans.service.ts       # Weekly plan generation core logic
- │   ├─ plans.controller.ts
- │
  ├─ recipes/
- │   ├─ recipes.service.ts     # Candidate selection, difficulty, diets
- │   ├─ entities/              # Recipe + RecipeIngredients
- │
  ├─ ingredients/
- │   ├─ ingredients.service.ts
- │   ├─ entities/              # Ingredient + price overrides + pantry
- │
  ├─ preferences/
- │   ├─ preferences.service.ts # Learning engine for likes/dislikes
- │
  ├─ shopping-list/
- │   ├─ shopping-list.service.ts   # Aggregation logic
- │
  ├─ users/
- │   ├─ profiles.service.ts
- │   ├─ preferences.service.ts
- │
  ├─ database/
- │   ├─ migrations/
- │   ├─ seeding/
- │
  └─ common/
-     ├─ utils/
-     ├─ interceptors/
-     ├─ filters/
+```
 
-🧠 AI Orchestration (V1 Logic)
-Review Agent
+---
 
-Inputs: user action (swap/modify), reason, meal/day/week context
+## 🧠 AI Orchestration
 
-Output: a structured ReviewInstruction
+### **Review Agent**
+Inputs:
+- Action (swap/modify)
+- Reason  
+- Plan context  
 
-Use cases:
+Outputs:  
+- `ReviewInstruction` with actionable structure  
 
-“Make this lighter”
+### **Coach Agent**
+Inputs:
+- Profile  
+- Targets  
+- Candidate recipes  
 
-“Remove this ingredient”
+Outputs:  
+- `{ days: [ { day_index, meals: [ { recipe_id, portion_multiplier } ] } ] }`  
 
-“I want something cheaper”
+Backend recalculates macros & cost deterministically.
 
-“I want a drink instead”
+---
 
-Coach Agent
+## 🧮 Deterministic Engine
 
-Inputs: profile, daily targets, candidate recipes
+The backend—not the LLM—handles:
 
-Output: weekly plan structure:
+- Calorie targets  
+- Protein targets  
+- Portion scaling  
+- Budget logic (upcoming)  
+- Difficulty filtering  
+- Allergen filtering  
+- Macro calculations  
+- Shopping list generation  
 
-{
-  days: [
-    { day_index: 0, meals: [
-      { meal_slot: 'breakfast', recipe_id: 'abc123', portion_multiplier: 1.2 }
-    ]}
-  ]
-}
+This ensures **accuracy** and **consistency**.
 
-Must choose from available candidates, not invent recipes
+---
 
-Backend still recalculates macros & costs deterministically
+## 📊 Database Schema (Summary)
 
-🧮 Deterministic Domain Engine
-
-Even when LLM is used, backend handles:
-
-Exact calorie targets
-
-Protein prioritisation
-
-Portion multiplier calculation
-
-Budget logic (upcoming)
-
-Difficulty filtering
-
-Allergen safety
-
-Recipe → ingredient → macro breakdown
-
-Shopping list aggregation
-
-This ensures accuracy + consistency, not dependent on model creativity.
-
-📊 PostgreSQL Schema (Simplified)
-
+```
 users
 user_profile
 ingredients
@@ -149,100 +171,80 @@ plan_meals
 shopping_list_items
 user_recipe_score
 user_ingredient_score
-🧪 Development Status
-✔ Backend foundations: Complete
-✔ LLM agent wrappers: Implemented
-✔ Weekly plan generator: Working (AI + heuristics)
-✔ Shopping list: Working
-✔ Preference learning: Working
-✔ Ingredient/Recipe schema: Operational
-△ Budget-aware selection: Next phase
-△ Frontend UI: To be built
-△ Figma prototype: Needs update
-🚀 Next Milestones
-1. Frontend MVP
+```
 
-Profile page
+---
 
-Generate Week page
+## 🧪 Development Status
 
-Current week plan view
+### ✔ Backend foundations  
+### ✔ AI agent wrappers  
+### ✔ Weekly plan generator  
+### ✔ Shopping list engine  
+### ✔ Preference learning  
+### ✔ Ingredients/recipes schema  
+### △ Budget-aware AI selection (upcoming)  
+### △ Frontend UI (next phase)  
+### △ Figma update needed  
 
-Meal swap modal
+---
 
-Groceries view
+## 🚀 Next Milestones
 
-2. Enhanced Coach Agent
+### **1. Frontend MVP**
+- Profile  
+- Generate Week  
+- Current Plan  
+- Swap Recipe  
+- Groceries  
 
-Add calorie/parsing/cost metadata to candidates
+### **2. Improved Coach Agent**
+Include metadata for calorie/cost-awareness.
 
-Teach the model to respect daily targets
+### **3. Weekly Plan Settings Modal**
+Replace reliance on profile-only settings.
 
-3. Plan Settings (Per Week)
+### **4. Enhanced Review Agent Schema**
+Add structured action parameters.
 
-Instead of reading from profile, add a modal when generating a new week:
+### **5. Recipe expansion**
+Improve coverage across diets and meal slots.
 
-breakfast/snack/lunch/dinner toggles
+---
 
-difficulty
+## 🛠️ Getting Started
 
-weekly budget
-
-4. Improved Review Agent Schema
-
-Add structured action + params:
-
-regenerate_day, swap_ingredient, change_portion, etc.
-
-5. Recipe expansion
-
-Seed more recipes for each:
-
-diet type
-
-meal slot
-
-difficulty range
-
-🛠️ Getting Started
-1. Install Dependencies
-
+### Install
+```bash
 npm install
+```
 
-2. Configure Environment
-
+### Environment variables
+```env
 DATABASE_URL=postgres://...
 LLM_BASE_URL=http://localhost:11434/v1
 LLM_MODEL_REVIEW=llama3
 LLM_MODEL_COACH=llama3
+```
 
-3. Start Postgres
+### Start Postgres
+```bash
 docker-compose up -d
+```
 
-4. Run DB Migrations & Seeders
-
+### Run migrations & seeds
+```bash
 npm run typeorm:migration:run
 npm run seed
+```
 
-5. Start Backend
-
+### Start backend
+```bash
 npm run start:dev
+```
 
+---
 
-🧩 Contributing
+## 📄 License
+[MIT License](https://github.com/Sohaibmeo/ai-agent/blob/main/LICENSE)
 
-This system is designed with:
-
-full modularity
-
-future agent expansion
-
-clean domain-driven boundaries
-
-multiple integration points for UI or mobile clients
-
-Pull requests and architectural enhancements are welcome.
-
-📄 License
-
-MIT (Working on it)
