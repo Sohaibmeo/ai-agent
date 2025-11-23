@@ -8,6 +8,7 @@ import { RecipesModule } from './recipes/recipes.module';
 import { PlansModule } from './plans/plans.module';
 import { ShoppingListModule } from './shopping-list/shopping-list.module';
 import { AgentsModule } from './agents/agents.module';
+import { PreferencesModule } from './preferences/preferences.module';
 import { AppDataSource } from '../ormconfig';
 
 @Module({
@@ -21,6 +22,7 @@ import { AppDataSource } from '../ormconfig';
     PlansModule,
     ShoppingListModule,
     AgentsModule,
+    PreferencesModule,
   ],
 })
 export class AppModule {}

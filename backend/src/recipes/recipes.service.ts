@@ -1,21 +1,26 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
-import { Recipe, RecipeIngredient } from '../database/entities';
+import { Recipe, RecipeIngredient, UserRecipeScore } from '../database/entities';
 import { RecipeCandidatesQueryDto } from './dto/recipe-candidates-query.dto';
 import { UsersService } from '../users/users.service';
 import { IngredientsService } from '../ingredients/ingredients.service';
+import { PreferencesService } from '../preferences/preferences.service';
 
 @Injectable()
 export class RecipesService {
+  private readonly logger = new Logger(RecipesService.name);
   constructor(
     @InjectRepository(Recipe)
     private readonly recipeRepo: Repository<Recipe>,
     @InjectRepository(RecipeIngredient)
-    private readonly recipeIngredientRepo: Repository<RecipeIngredient>,
-    private readonly usersService: UsersService,
-    private readonly ingredientsService: IngredientsService,
-  ) {}
+  private readonly recipeIngredientRepo: Repository<RecipeIngredient>,
+  @InjectRepository(UserRecipeScore)
+  private readonly recipeScoreRepo: Repository<UserRecipeScore>,
+  private readonly usersService: UsersService,
+  private readonly ingredientsService: IngredientsService,
+  private readonly preferencesService: PreferencesService,
+) {}
 
   findAll() {
     return this.recipeRepo.find({ relations: ['ingredients'] });
@@ -35,6 +40,7 @@ export class RecipesService {
   }
 
   async findCandidatesForUser(query: RecipeCandidatesQueryDto) {
+    this.logger.log(`findCandidates user=${query.userId} slot=${query.mealSlot ?? 'any'}`);
     const profile = await this.usersService.getProfile(query.userId);
 
     const allowedDifficulty = this.allowedDifficulties(query.maxDifficulty || profile.max_difficulty);
@@ -72,8 +78,24 @@ export class RecipesService {
 
     qb.limit(10);
 
+    // Join recipe scores for ranking
+    qb.leftJoin(UserRecipeScore, 'urs', 'urs.recipe_id = recipe.id AND urs.user_id = :userId', {
+      userId: query.userId,
+    })
+      .addSelect('COALESCE(urs.score, 0)', 'recipe_score')
+      .orderBy('recipe_score', 'DESC');
+
     const recipes = await qb.getMany();
+    this.logger.log(`candidates user=${query.userId} count=${recipes.length}`);
     return recipes;
+  }
+
+  async getIngredientIdsForRecipe(recipeId: string) {
+    const ris = await this.recipeIngredientRepo.find({
+      where: { recipe: { id: recipeId } as any },
+      relations: ['ingredient'],
+    });
+    return ris.map((ri) => ri.ingredient.id);
   }
 
   async createCustomFromExisting(input: {

@@ -7,20 +7,27 @@ import { UsersService } from '../users/users.service';
 import { calculateTargets } from './utils/profile-targets';
 import { ShoppingListService } from '../shopping-list/shopping-list.service';
 import { portionTowardsTarget, selectRecipe } from './utils/selection';
+import { PreferencesService } from '../preferences/preferences.service';
+import { AgentsService } from '../agents/agents.service';
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class PlansService {
+  private readonly logger = new Logger(PlansService.name);
+
   constructor(
     @InjectRepository(WeeklyPlan)
-  private readonly weeklyPlanRepo: Repository<WeeklyPlan>,
-  @InjectRepository(PlanDay)
-  private readonly planDayRepo: Repository<PlanDay>,
-  @InjectRepository(PlanMeal)
-  private readonly planMealRepo: Repository<PlanMeal>,
-  private readonly recipesService: RecipesService,
-  private readonly usersService: UsersService,
-  private readonly shoppingListService: ShoppingListService,
-) {}
+    private readonly weeklyPlanRepo: Repository<WeeklyPlan>,
+    @InjectRepository(PlanDay)
+    private readonly planDayRepo: Repository<PlanDay>,
+    @InjectRepository(PlanMeal)
+    private readonly planMealRepo: Repository<PlanMeal>,
+    private readonly recipesService: RecipesService,
+    private readonly usersService: UsersService,
+    private readonly shoppingListService: ShoppingListService,
+    private readonly preferencesService: PreferencesService,
+    private readonly agentsService: AgentsService,
+  ) {}
 
   findAll() {
     return this.weeklyPlanRepo.find({ relations: ['days', 'days.meals'] });
@@ -41,17 +48,20 @@ export class PlansService {
   }
 
   async setStatus(planId: string, status: string) {
-    const plan = await this.weeklyPlanRepo.findOne({ where: { id: planId } });
+    const plan = await this.weeklyPlanRepo.findOne({ where: { id: planId }, relations: ['user'] });
     if (!plan) throw new Error('Plan not found');
+    if (status === 'active' && plan.user?.id) {
+      await this.weeklyPlanRepo.update({ user: { id: plan.user.id } as any, status: 'active' }, { status: 'archived' });
+    }
     plan.status = status;
-    await this.weeklyPlanRepo.save(plan);
-    return plan;
+    this.logger.log(`setStatus plan=${planId} status=${status} user=${plan.user?.id}`);
+    return this.weeklyPlanRepo.save(plan);
   }
 
   async setMealRecipe(planMealId: string, newRecipeId: string) {
     const meal = await this.planMealRepo.findOne({
       where: { id: planMealId },
-      relations: ['planDay', 'planDay.weeklyPlan'],
+      relations: ['planDay', 'planDay.weeklyPlan', 'planDay.weeklyPlan.user', 'recipe'],
     });
     if (!meal) {
       throw new Error('Plan meal not found');
@@ -60,6 +70,10 @@ export class PlansService {
     if (!recipe) {
       throw new Error('Recipe not found');
     }
+    this.logger.log(`setMealRecipe planMeal=${planMealId} newRecipe=${newRecipeId}`);
+    const userId = (meal.planDay.weeklyPlan as any).user?.id;
+    const oldIngredients = (meal.recipe as any)?.ingredients?.map((ri: any) => ri.ingredient?.id).filter(Boolean) || [];
+
     meal.recipe = recipe as any;
     meal.meal_kcal = recipe.base_kcal;
     meal.meal_protein = recipe.base_protein;
@@ -67,6 +81,18 @@ export class PlansService {
     meal.meal_fat = recipe.base_fat;
     meal.meal_cost_gbp = recipe.base_cost_gbp;
     await this.planMealRepo.save(meal);
+
+    // Preference signals: swapped out old recipe ingredients = dislike, new recipe ingredients = like.
+    if (userId) {
+      const newIngredients = await this.recipesService.getIngredientIdsForRecipe(newRecipeId);
+      if (oldIngredients.length) {
+        await this.preferencesService.incrementManyIngredients(userId, 'dislike', oldIngredients);
+      }
+      if (newIngredients.length) {
+        await this.preferencesService.incrementManyIngredients(userId, 'like', newIngredients);
+        await this.preferencesService.incrementMealPreference(userId, 'like', newRecipeId);
+      }
+    }
 
     // Recompute aggregates & shopping list
     await this.recomputeAggregates(meal.planDay.weeklyPlan.id);
@@ -77,7 +103,8 @@ export class PlansService {
     });
   }
 
-  async generateWeek(userId: string, weekStartDate: string) {
+  async generateWeek(userId: string, weekStartDate: string, useAgent = false) {
+    this.logger.log(`generateWeek start user=${userId} date=${weekStartDate} useAgent=${useAgent}`);
     const profile = await this.usersService.getProfile(userId);
     const targets = calculateTargets(profile);
 
@@ -96,8 +123,27 @@ export class PlansService {
       status: 'draft',
     });
     const savedPlan = await this.weeklyPlanRepo.save(plan);
+    this.logger.log(`plan persisted id=${savedPlan.id} user=${userId}`);
 
     const dayEntities: PlanDay[] = [];
+    let agentPlan:
+      | { week_start_date?: string; days?: { day_index: number; meals: any[] }[] }
+      | undefined;
+    if (useAgent) {
+      try {
+        const candidatesPayload = await this.buildCandidatesPayload(userId, mealSlots, profile.max_difficulty);
+        agentPlan = await this.agentsService.coachPlan({
+          profile,
+          candidates: candidatesPayload,
+          week_start_date: weekStartDate,
+        });
+        this.logger.log(`coachPlan succeeded user=${userId}`);
+      } catch (e) {
+        this.logger.warn(`coachPlan failed user=${userId} fallback to heuristic`);
+        agentPlan = undefined;
+      }
+    }
+
     for (let dayIdx = 0; dayIdx < 7; dayIdx += 1) {
       const day = this.planDayRepo.create({
         weeklyPlan: savedPlan,
@@ -107,40 +153,63 @@ export class PlansService {
       let currentDayKcal = 0;
       let currentDayProtein = 0;
 
-      for (const slot of mealSlots) {
-        const candidates = await this.recipesService.findCandidatesForUser({
-          userId,
-          mealSlot: slot,
-          maxDifficulty: profile.max_difficulty,
-        });
-        const selected = selectRecipe(candidates, {
-          avoidNames: new Set(), // could track weekly variety
-          costCapPerMeal: profile.weekly_budget_gbp
-            ? Number(profile.weekly_budget_gbp) / (mealSlots.length * 7)
-            : undefined,
-        });
-        if (!selected) continue;
-        const portion = portionTowardsTarget(
-          selected,
-          currentDayKcal,
-          targets.dailyCalories,
-          currentDayProtein,
-          targets.dailyProtein,
-        );
-        const meal = this.planMealRepo.create({
-          planDay: savedDay,
-          meal_slot: slot,
-          recipe: selected,
-          portion_multiplier: portion,
-          meal_kcal: selected.base_kcal ? Number(selected.base_kcal) * portion : undefined,
-          meal_protein: selected.base_protein ? Number(selected.base_protein) * portion : undefined,
-          meal_carbs: selected.base_carbs ? Number(selected.base_carbs) * portion : undefined,
-          meal_fat: selected.base_fat ? Number(selected.base_fat) * portion : undefined,
-          meal_cost_gbp: selected.base_cost_gbp ? Number(selected.base_cost_gbp) * portion : undefined,
-        });
-        await this.planMealRepo.save(meal);
-        currentDayKcal += Number(meal.meal_kcal || 0);
-        currentDayProtein += Number(meal.meal_protein || 0);
+      const agentMealsForDay = agentPlan?.days?.find((d) => d.day_index === dayIdx)?.meals;
+      if (agentMealsForDay?.length) {
+        for (const m of agentMealsForDay) {
+          const recipe = m.recipe_id ? await this.recipesService.findOneById(m.recipe_id) : null;
+          if (!recipe) continue;
+          const portion = m.portion_multiplier ?? 1;
+          const meal = this.planMealRepo.create({
+            planDay: savedDay,
+            meal_slot: m.meal_slot,
+            recipe,
+            portion_multiplier: portion,
+            meal_kcal: recipe.base_kcal ? Number(recipe.base_kcal) * portion : undefined,
+            meal_protein: recipe.base_protein ? Number(recipe.base_protein) * portion : undefined,
+            meal_carbs: recipe.base_carbs ? Number(recipe.base_carbs) * portion : undefined,
+            meal_fat: recipe.base_fat ? Number(recipe.base_fat) * portion : undefined,
+            meal_cost_gbp: recipe.base_cost_gbp ? Number(recipe.base_cost_gbp) * portion : undefined,
+          });
+          await this.planMealRepo.save(meal);
+          currentDayKcal += Number(meal.meal_kcal || 0);
+          currentDayProtein += Number(meal.meal_protein || 0);
+        }
+      } else {
+        for (const slot of mealSlots) {
+          const candidates = await this.recipesService.findCandidatesForUser({
+            userId,
+            mealSlot: slot,
+            maxDifficulty: profile.max_difficulty,
+          });
+          const selected = selectRecipe(candidates, {
+            avoidNames: new Set(), // could track weekly variety
+            costCapPerMeal: profile.weekly_budget_gbp
+              ? Number(profile.weekly_budget_gbp) / (mealSlots.length * 7)
+              : undefined,
+          });
+          if (!selected) continue;
+          const portion = portionTowardsTarget(
+            selected,
+            currentDayKcal,
+            targets.dailyCalories,
+            currentDayProtein,
+            targets.dailyProtein,
+          );
+          const meal = this.planMealRepo.create({
+            planDay: savedDay,
+            meal_slot: slot,
+            recipe: selected,
+            portion_multiplier: portion,
+            meal_kcal: selected.base_kcal ? Number(selected.base_kcal) * portion : undefined,
+            meal_protein: selected.base_protein ? Number(selected.base_protein) * portion : undefined,
+            meal_carbs: selected.base_carbs ? Number(selected.base_carbs) * portion : undefined,
+            meal_fat: selected.base_fat ? Number(selected.base_fat) * portion : undefined,
+            meal_cost_gbp: selected.base_cost_gbp ? Number(selected.base_cost_gbp) * portion : undefined,
+          });
+          await this.planMealRepo.save(meal);
+          currentDayKcal += Number(meal.meal_kcal || 0);
+          currentDayProtein += Number(meal.meal_protein || 0);
+        }
       }
 
       dayEntities.push(savedDay);
@@ -151,10 +220,12 @@ export class PlansService {
 
     await this.shoppingListService.rebuildForPlan(savedPlan.id);
 
-    return this.weeklyPlanRepo.findOne({
+    const result = await this.weeklyPlanRepo.findOne({
       where: { id: savedPlan.id },
       relations: ['days', 'days.meals', 'days.meals.recipe'],
     });
+    this.logger.log(`generateWeek done id=${savedPlan.id}`);
+    return result;
   }
 
   private async recomputeAggregates(planId: string) {
@@ -188,5 +259,25 @@ export class PlansService {
 
   generateDraft() {
     return { id: 'draft_plan_id', status: 'draft' };
+  }
+
+  private async buildCandidatesPayload(userId: string, mealSlots: string[], maxDifficulty: string) {
+    const days: any[] = [];
+    for (let dayIdx = 0; dayIdx < 7; dayIdx += 1) {
+      const day: any = { day_index: dayIdx, meals: [] };
+      for (const slot of mealSlots) {
+        const candidates = await this.recipesService.findCandidatesForUser({
+          userId,
+          mealSlot: slot,
+          maxDifficulty,
+        });
+        day.meals.push({
+          meal_slot: slot,
+          candidates: candidates.map((r) => ({ id: r.id, name: r.name, meal_slot: r.meal_slot })),
+        });
+      }
+      days.push(day);
+    }
+    return { days };
   }
 }

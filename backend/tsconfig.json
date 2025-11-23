@@ -17,8 +17,9 @@
     "moduleResolution": "node",
     "paths": {
       "*": ["src/*"]
-    }
+    },
+    "types": ["node", "jest"]
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "tests/**/*"],
   "exclude": ["node_modules", "dist"]
 }

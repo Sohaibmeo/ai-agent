@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -15,6 +15,8 @@ import { EntityManager } from 'typeorm';
 
 @Injectable()
 export class ShoppingListService {
+  private readonly logger = new Logger(ShoppingListService.name);
+
   constructor(
     @InjectRepository(ShoppingListItem)
     private readonly shoppingListRepo: Repository<ShoppingListItem>,
@@ -34,6 +36,12 @@ export class ShoppingListService {
   }
 
   async rebuildForPlan(planId: string) {
+    const plan = await this.weeklyPlanRepo.findOne({ where: { id: planId }, relations: ['user'] });
+    if (!plan) throw new Error('Plan not found');
+    const userId = plan.user?.id;
+    if (!userId) throw new Error('Plan user missing');
+    this.logger.log(`rebuild shopping list plan=${planId} user=${userId}`);
+
     // Clear existing
     await this.shoppingListRepo.delete({ weeklyPlan: { id: planId } as any });
 
@@ -45,11 +53,12 @@ export class ShoppingListService {
     if (!meals.length) return [];
 
     // Load recipe ingredients for all recipes in plan
-    const recipeIds = meals.map((m) => m.recipe.id);
+    const recipeIds = meals.map((m) => m.recipe?.id).filter(Boolean);
     const recipeIngredients = await this.entityManager
       .getRepository(RecipeIngredient)
       .createQueryBuilder('ri')
       .innerJoinAndSelect('ri.ingredient', 'ingredient')
+      .innerJoinAndSelect('ri.recipe', 'recipe')
       .where('ri.recipe_id IN (:...recipeIds)', { recipeIds })
       .getMany();
 
@@ -59,6 +68,7 @@ export class ShoppingListService {
     >();
 
     for (const meal of meals) {
+      if (!meal.recipe?.id) continue;
       const portion = Number(meal.portion_multiplier || 1);
       const ris = recipeIngredients.filter((ri) => ri.recipe.id === meal.recipe.id);
       for (const ri of ris) {
@@ -81,7 +91,6 @@ export class ShoppingListService {
     }
 
     // Apply user price overrides and pantry flags
-    const userId = meals[0].planDay.weeklyPlan.user.id;
     const overrides = await this.priceRepo.find({ where: { user: { id: userId } as any } });
     const overrideMap = new Map(overrides.map((o) => [o.ingredient.id, Number(o.price_per_unit_gbp)]));
     const pantry = await this.pantryRepo.find({ where: { user: { id: userId } as any } });
@@ -104,6 +113,7 @@ export class ShoppingListService {
     }
 
     await this.shoppingListRepo.save(toSave);
+    this.logger.log(`shopping list rebuilt plan=${planId} items=${toSave.length}`);
     return this.getForPlan(planId);
   }
 
@@ -115,7 +125,10 @@ export class ShoppingListService {
       });
       targetPlanId = plan?.id;
     }
-    if (!targetPlanId) return [];
+    if (!targetPlanId) {
+      throw new Error('No active plan for this user');
+    }
+    this.logger.log(`get active shopping list plan=${targetPlanId} user=${userId}`);
     return this.getForPlan(targetPlanId);
   }
 }

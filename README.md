@@ -1,152 +1,248 @@
-# AI-Assisted Meal Planning System (UK-Focused)
+🧠 AI-Powered Meal Planning Platform
+Enterprise-Grade Nutrition, Cost Optimization & Preference-Learning System
 
-This repository contains an enterprise-grade AI-powered meal planning system built with:
+Built with NestJS, Postgres, Local LLM Agents, TypeScript, and Structured AI Orchestration
 
-- **React + TypeScript** (Frontend)
-- **Node.js + TypeScript + Express** (Backend)
-- **Postgres** (Database)
-- **LangChain JS + Local LLM** (AI Orchestration)
-- **Zod** (Validation)
+📌 Overview
 
-The system generates **7-day meal plans** tailored to UK users, respecting:
+This repository contains a production-ready AI-Assisted Meal Planning System, designed for the UK market.
+It generates 7-day meal plans tailored to:
 
-- Body composition goals (lose/maintain/gain)
-- Diet types (Halal, Vegan, Vegetarian, Keto, etc.)
-- **14 major UK allergens**
-- Weekly budgets
-- Recipe difficulty
-- Meal schedules (breakfast/snacks/lunch/dinner)
+Body composition goals (lose / maintain / gain)
 
-Meals are selected—not generated—by the AI from a curated recipe database.  
-All nutrition and cost calculations are backend-driven.
+Diet requirements (Halal, Vegan, Vegetarian, Keto, etc.)
 
----
+UK’s 14 allergen categories
 
-## 📁 Documentation
+Weekly budget constraints
 
-Complete system documentation is split into structured sections:
+Recipe difficulty
 
-- `INSTRUCTIONS-01-Overview.md`
-- `INSTRUCTIONS-02-Architecture.md`
-- `INSTRUCTIONS-03-Domain-Rules.md`
-- `INSTRUCTIONS-04-Frontend.md`
-- `INSTRUCTIONS-05-Data-Model.md`
-- `INSTRUCTIONS-06-Agents-Orchestrator.md`
-- `INSTRUCTIONS-07-Flows.md`
-- `INSTRUCTIONS-08-LLM-Usage.md`
-- `INSTRUCTIONS-09-Future-Extensibility.md`
+Meal schedule preferences
 
-These documents describe the full blueprint: architecture, flows, DB schema, agents, and future roadmap.
+User behaviour (likes, dislikes, swaps, custom recipes)
 
----
+The system combines:
 
-## 🧠 Core Features (V1)
+Local LLM agents (Review Agent + Coach Agent)
 
-- User profile with diet & allergy constraints  
-- Weekly meal plan generation  
-- Meal swapping & ingredient-level modifications  
-- Custom recipe creation  
-- Grocery list with:
-  - pantry tracking  
-  - price overrides  
-- Local LLM orchestration (Review + Coach Agents)  
-- Strict JSON validation using Zod  
-- Backend-calculated macros & cost  
+Strong deterministic backend logic (macro/cost engine, filtering, targets)
 
----
+Preference learning
 
-## 🏗️ Tech Stack
+Recipe + Ingredient catalogs with cost estimation
 
-- **Frontend:** React, TypeScript  
-- **Backend:** Node.js, Express, TypeScript  
-- **Database:** Postgres  
-- **AI:** LangChain JS + Local OpenAI-Compatible LLM  
-- **Validation:** Zod  
+Shopping list generation with price overrides + pantry tracking
 
----
+This architecture prioritises reliability, explainability, and cost efficiency while still benefiting from AI reasoning where helpful.
 
-## 🚀 Getting Started
+🧩 System Flow (Figma Diagram)
 
-### 1. Install dependencies
-```bash
+Prototype Workflow (to be updated in future iterations):
+👉 https://github.com/Sohaibmeo/ai-agent/raw/adv-fitness-agent/docs/Figma.png
+
+src/
+ ├─ agents/
+ │   ├─ agents.service.ts      # Review & Coach agent wrappers
+ │   ├─ schemas/               # Zod schemas for AI IO
+ │
+ ├─ plans/
+ │   ├─ plans.service.ts       # Weekly plan generation core logic
+ │   ├─ plans.controller.ts
+ │
+ ├─ recipes/
+ │   ├─ recipes.service.ts     # Candidate selection, difficulty, diets
+ │   ├─ entities/              # Recipe + RecipeIngredients
+ │
+ ├─ ingredients/
+ │   ├─ ingredients.service.ts
+ │   ├─ entities/              # Ingredient + price overrides + pantry
+ │
+ ├─ preferences/
+ │   ├─ preferences.service.ts # Learning engine for likes/dislikes
+ │
+ ├─ shopping-list/
+ │   ├─ shopping-list.service.ts   # Aggregation logic
+ │
+ ├─ users/
+ │   ├─ profiles.service.ts
+ │   ├─ preferences.service.ts
+ │
+ ├─ database/
+ │   ├─ migrations/
+ │   ├─ seeding/
+ │
+ └─ common/
+     ├─ utils/
+     ├─ interceptors/
+     ├─ filters/
+
+🧠 AI Orchestration (V1 Logic)
+Review Agent
+
+Inputs: user action (swap/modify), reason, meal/day/week context
+
+Output: a structured ReviewInstruction
+
+Use cases:
+
+“Make this lighter”
+
+“Remove this ingredient”
+
+“I want something cheaper”
+
+“I want a drink instead”
+
+Coach Agent
+
+Inputs: profile, daily targets, candidate recipes
+
+Output: weekly plan structure:
+
+{
+  days: [
+    { day_index: 0, meals: [
+      { meal_slot: 'breakfast', recipe_id: 'abc123', portion_multiplier: 1.2 }
+    ]}
+  ]
+}
+
+Must choose from available candidates, not invent recipes
+
+Backend still recalculates macros & costs deterministically
+
+🧮 Deterministic Domain Engine
+
+Even when LLM is used, backend handles:
+
+Exact calorie targets
+
+Protein prioritisation
+
+Portion multiplier calculation
+
+Budget logic (upcoming)
+
+Difficulty filtering
+
+Allergen safety
+
+Recipe → ingredient → macro breakdown
+
+Shopping list aggregation
+
+This ensures accuracy + consistency, not dependent on model creativity.
+
+📊 PostgreSQL Schema (Simplified)
+
+users
+user_profile
+ingredients
+user_ingredient_price
+pantry_items
+recipes
+recipe_ingredients
+weekly_plans
+plan_days
+plan_meals
+shopping_list_items
+user_recipe_score
+user_ingredient_score
+🧪 Development Status
+✔ Backend foundations: Complete
+✔ LLM agent wrappers: Implemented
+✔ Weekly plan generator: Working (AI + heuristics)
+✔ Shopping list: Working
+✔ Preference learning: Working
+✔ Ingredient/Recipe schema: Operational
+△ Budget-aware selection: Next phase
+△ Frontend UI: To be built
+△ Figma prototype: Needs update
+🚀 Next Milestones
+1. Frontend MVP
+
+Profile page
+
+Generate Week page
+
+Current week plan view
+
+Meal swap modal
+
+Groceries view
+
+2. Enhanced Coach Agent
+
+Add calorie/parsing/cost metadata to candidates
+
+Teach the model to respect daily targets
+
+3. Plan Settings (Per Week)
+
+Instead of reading from profile, add a modal when generating a new week:
+
+breakfast/snack/lunch/dinner toggles
+
+difficulty
+
+weekly budget
+
+4. Improved Review Agent Schema
+
+Add structured action + params:
+
+regenerate_day, swap_ingredient, change_portion, etc.
+
+5. Recipe expansion
+
+Seed more recipes for each:
+
+diet type
+
+meal slot
+
+difficulty range
+
+🛠️ Getting Started
+1. Install Dependencies
+
 npm install
-```
 
-### 2. Start Postgres (via Docker)
-```bash
+2. Configure Environment
+
+DATABASE_URL=postgres://...
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_MODEL_REVIEW=llama3
+LLM_MODEL_COACH=llama3
+
+3. Start Postgres
 docker-compose up -d
-```
 
-### 3. Run migrations
-```bash
-npm run migrate
-```
+4. Run DB Migrations & Seeders
 
-### 4. Start development servers
-Frontend:
-```bash
-npm run dev
-```
-Backend:
-```bash
-npm run dev:server
-```
+npm run typeorm:migration:run
+npm run seed
 
-Local LLM (example: Ollama):
-```bash
-ollama run your-model
-```
+5. Start Backend
 
----
+npm run start:dev
 
-## 📦 Suggested Folder Structure
 
-```
-/frontend
-/backend
-/docs
-  INSTRUCTIONS-01-Overview.md
-  INSTRUCTIONS-02-Architecture.md
-  ...
-```
+🧩 Contributing
 
----
+This system is designed with:
 
-## 📌 Status
+full modularity
 
-This repository contains the **full technical blueprint** required for implementation.  
-You may now begin building the backend, frontend, or LLM orchestration layer.
+future agent expansion
 
----
+clean domain-driven boundaries
 
-## 🛠️ Development Phases
+multiple integration points for UI or mobile clients
 
-### Phase 1: Core System & MVP
-- User profile onboarding (diet, allergies, goals, meal schedule, difficulty, budget)
-- Recipe/ingredient database setup (with diet tags, allergens, nutrition, cost)
-- Weekly meal plan generation (backend logic)
-- Simple meal swap and custom recipe creation
-- Shopping list generation (pantry tracking, price overrides)
-- Local LLM integration (Review Agent, Coach Agent) for plan selection only
-- Strict JSON validation (Zod schemas)
-- Basic REST API
+Pull requests and architectural enhancements are welcome.
 
-**Frontend will be built only after backend and agents are complete.**
+📄 License
 
-### Phase 2: Advanced Editing & User Experience
-- Plan history and multi-week support
-- Enhanced swap/modify flows (LLM-driven suggestions: cheaper, higher protein, etc.)
-- Ingredient-level likes/dislikes and preference learning
-- Improved UI/UX (modals, feedback, error handling)
-
-### Phase 3: Extensibility & Integrations
-- Cloud LLM support (easy migration)
-- Workout/gym integration (logging, per-day nutrition tweaks)
-- Localization (diet types, recipes, pricing)
-- Security and compliance (auth, GDPR, audit logs)
-
-### Phase 4: Analytics & Personalization
-- Usage analytics and reporting
-- Preference Agent, Explanation Agent, Nutrition Advisor Agent
-- Advanced ranking and recommendation logic
-
+MIT (Working on it)
