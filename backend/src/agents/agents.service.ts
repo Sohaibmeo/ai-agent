@@ -1,12 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import OpenAI from 'openai';
+import { ChatOpenAI } from '@langchain/openai';
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
 import { ExplanationRequestDto, ExplanationResponseDto } from './dto/explanation.dto';
-import {
-  NutritionAdviceItem,
-  NutritionAdviceRequestDto,
-  NutritionAdviceResponseDto,
-} from './dto/nutrition-advice.dto';
+import { NutritionAdviceRequestDto, NutritionAdviceResponseDto } from './dto/nutrition-advice.dto';
 
 const ReviewInstructionSchema = z.object({
   action: z.string(),
@@ -38,10 +35,9 @@ export class AgentsService {
   private coachModel = process.env.LLM_MODEL_COACH || 'llama3.1:8b-instruct-q4_K_M';
   private explainModel = process.env.LLM_MODEL_EXPLAIN || this.coachModel;
   private nutritionModel = process.env.LLM_MODEL_NUTRITION || this.coachModel;
-  private client = new OpenAI({
-    baseURL: process.env.LLM_BASE_URL || 'http://localhost:11434/v1',
-    apiKey: process.env.LLM_API_KEY || 'ollama',
-  });
+  private llmMode = process.env.LLM_MODE || 'local'; // 'local' | 'cloud'
+  private llmBaseUrl = process.env.LLM_BASE_URL || '';
+  private llmApiKey = process.env.LLM_API_KEY || '';
 
   async reviewAction(payload: { text?: string; currentPlanSnippet?: unknown }) {
     const prompt: { role: 'system' | 'user'; content: string }[] = [
@@ -92,14 +88,26 @@ export class AgentsService {
     model: string,
     messages: { role: 'system' | 'user'; content: string }[],
   ): Promise<any> {
-    const res = await this.client.chat.completions.create({
+    if (!this.llmBaseUrl) {
+      throw new Error('LLM_BASE_URL must be configured');
+    }
+    const chat = new ChatOpenAI({
       model,
-      messages,
-      temperature: 0,
-      max_tokens: 800,
-      response_format: { type: 'json_object' },
+      maxTokens: 800,
+      apiKey: this.llmApiKey,
+      configuration: {
+        baseURL: this.llmBaseUrl,
+      },
+      modelKwargs: {
+        response_format: { type: 'json_object' },
+      },
     });
-    const content = res.choices?.[0]?.message?.content;
+
+    const lcMessages = messages.map((m) =>
+      m.role === 'system' ? new SystemMessage(m.content) : new HumanMessage(m.content),
+    );
+    const res = await chat.invoke(lcMessages);
+    const content = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
     if (!content) throw new Error('LLM returned empty content');
     try {
       return JSON.parse(content);
