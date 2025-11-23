@@ -4,6 +4,7 @@ import { GeneratePlanDto } from './dto/generate-plan.dto';
 import { SetMealRecipeDto } from './dto/set-meal-recipe.dto';
 import { ActivatePlanDto } from './dto/set-plan-status.dto';
 import { UserIdParamDto } from './dto/user-id-param.dto';
+import { PlanActionDto } from './dto/plan-action.dto';
 
 @Controller('plans')
 export class PlansController {
@@ -38,5 +39,14 @@ export class PlansController {
   @Get(':id')
   getById(@Param('id') id: string) {
     return this.plansService.findById(id);
+  }
+
+  @Post(':weeklyPlanId/actions')
+  applyAction(@Param('weeklyPlanId') weeklyPlanId: string, @Body() body: PlanActionDto) {
+    return this.plansService.applyAction(weeklyPlanId, {
+      actionContext: body.actionContext,
+      reasonText: body.reasonText,
+      userId: body.userId,
+    });
   }
 }

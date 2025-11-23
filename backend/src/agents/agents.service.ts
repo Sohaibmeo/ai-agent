@@ -35,7 +35,16 @@ export class AgentsService {
   private llmBaseUrl = process.env.LLM_BASE_URL || '';
   private llmApiKey = process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
 
-  async reviewAction(payload: { text?: string; currentPlanSnippet?: unknown }): Promise<ReviewInstruction> {
+  async reviewAction(payload: {
+    userId?: string;
+    weeklyPlanId?: string;
+    actionContext?: any;
+    reasonText?: string;
+    text?: string;
+    profileSnippet?: any;
+    currentPlanSummary?: unknown;
+    currentPlanSnippet?: unknown; // legacy shape
+  }): Promise<ReviewInstruction> {
     const prompt: { role: 'system' | 'user'; content: string }[] = [
       {
         role: 'system',
@@ -45,8 +54,12 @@ export class AgentsService {
       {
         role: 'user',
         content: JSON.stringify({
-          text: payload.text,
-          currentPlanSnippet: payload.currentPlanSnippet,
+          userId: payload.userId,
+          weeklyPlanId: payload.weeklyPlanId,
+          actionContext: payload.actionContext,
+          reasonText: payload.reasonText || payload.text,
+          profileSnippet: payload.profileSnippet,
+          currentPlanSummary: payload.currentPlanSummary || payload.currentPlanSnippet,
         }),
       },
     ];
