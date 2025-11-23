@@ -4,13 +4,7 @@ import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
 import { ExplanationRequestDto, ExplanationResponseDto } from './dto/explanation.dto';
 import { NutritionAdviceRequestDto, NutritionAdviceResponseDto } from './dto/nutrition-advice.dto';
-
-const ReviewInstructionSchema = z.object({
-  action: z.string(),
-  targetMealId: z.string().optional(),
-  notes: z.string().optional(),
-  constraints: z.array(z.string()).optional(),
-});
+import { reviewInstructionSchema, ReviewInstruction } from './schemas/review-instruction.schema';
 
 const PlanMealSchema = z.object({
   meal_slot: z.string(),
@@ -31,20 +25,22 @@ const WeeklyPlanSchema = z.object({
 @Injectable()
 export class AgentsService {
   private readonly logger = new Logger(AgentsService.name);
-  private reviewModel = process.env.LLM_MODEL_REVIEW || 'llama3.1:8b-instruct-q4_K_M';
-  private coachModel = process.env.LLM_MODEL_COACH || 'llama3.1:8b-instruct-q4_K_M';
-  private explainModel = process.env.LLM_MODEL_EXPLAIN || this.coachModel;
-  private nutritionModel = process.env.LLM_MODEL_NUTRITION || this.coachModel;
-  private llmMode = process.env.LLM_MODE || 'local'; // 'local' | 'cloud'
+  private provider = (process.env.LLM_PROVIDER || process.env.LLM_MODE || 'local').toLowerCase();
+  private reviewModel = process.env.LLM_MODEL_REVIEW || process.env.OPENAI_MODEL_REVIEW || 'llama3';
+  private coachModel = process.env.LLM_MODEL_COACH || process.env.OPENAI_MODEL_COACH || 'llama3';
+  private explainModel =
+    process.env.LLM_MODEL_EXPLAIN || process.env.OPENAI_MODEL_EXPLAIN || this.coachModel;
+  private nutritionModel =
+    process.env.LLM_MODEL_NUTRITION || process.env.OPENAI_MODEL_NUTRITION || this.coachModel;
   private llmBaseUrl = process.env.LLM_BASE_URL || '';
-  private llmApiKey = process.env.LLM_API_KEY || '';
+  private llmApiKey = process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
 
-  async reviewAction(payload: { text?: string; currentPlanSnippet?: unknown }) {
+  async reviewAction(payload: { text?: string; currentPlanSnippet?: unknown }): Promise<ReviewInstruction> {
     const prompt: { role: 'system' | 'user'; content: string }[] = [
       {
         role: 'system',
         content:
-          'You are Review Agent. Return ONLY compact JSON matching {action, targetMealId?, notes?, constraints?}. No prose.',
+          'You are Review Agent. Map the user action + context to structured JSON ReviewInstruction. Return ONLY JSON.',
       },
       {
         role: 'user',
@@ -54,9 +50,9 @@ export class AgentsService {
         }),
       },
     ];
-    const raw = await this.callModel(this.reviewModel, prompt);
+    const raw = await this.callModel(this.reviewModel, prompt, 'review');
     this.logger.log(`reviewAction called model=${this.reviewModel}`);
-    return ReviewInstructionSchema.parse(raw);
+    return reviewInstructionSchema.parse(raw);
   }
 
   async coachPlan(payload: {
@@ -79,7 +75,7 @@ export class AgentsService {
         }),
       },
     ];
-    const raw = await this.callModel(this.coachModel, prompt);
+    const raw = await this.callModel(this.coachModel, prompt, 'coach');
     this.logger.log(`coachPlan called model=${this.coachModel}`);
     return WeeklyPlanSchema.parse(raw);
   }
@@ -87,16 +83,15 @@ export class AgentsService {
   private async callModel(
     model: string,
     messages: { role: 'system' | 'user'; content: string }[],
+    kind: 'review' | 'coach' | 'explain' | 'nutrition',
   ): Promise<any> {
-    if (!this.llmBaseUrl) {
-      throw new Error('LLM_BASE_URL must be configured');
-    }
+    const client = this.createClient(kind);
     const chat = new ChatOpenAI({
       model,
       maxTokens: 800,
-      apiKey: this.llmApiKey,
+      apiKey: client.apiKey,
       configuration: {
-        baseURL: this.llmBaseUrl,
+        baseURL: client.baseUrl,
       },
       modelKwargs: {
         response_format: { type: 'json_object' },
@@ -116,6 +111,27 @@ export class AgentsService {
     }
   }
 
+  private createClient(kind: 'review' | 'coach' | 'explain' | 'nutrition') {
+    const provider = this.provider === 'openai' ? 'openai' : 'local';
+    const apiKey = provider === 'openai' ? process.env.OPENAI_API_KEY || this.llmApiKey : this.llmApiKey;
+    const baseUrl =
+      provider === 'openai'
+        ? process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
+        : this.llmBaseUrl;
+    if (!baseUrl) {
+      throw new Error('LLM_BASE_URL must be configured for local provider');
+    }
+    const model =
+      kind === 'review'
+        ? this.reviewModel
+        : kind === 'coach'
+          ? this.coachModel
+          : kind === 'explain'
+            ? this.explainModel
+            : this.nutritionModel;
+    return { baseUrl, apiKey, model };
+  }
+
   async explain(request: ExplanationRequestDto): Promise<ExplanationResponseDto> {
     const prompt: { role: 'system' | 'user'; content: string }[] = [
       {
@@ -128,7 +144,7 @@ export class AgentsService {
         content: JSON.stringify(request),
       },
     ];
-    const raw = await this.callModel(this.explainModel, prompt);
+    const raw = await this.callModel(this.explainModel, prompt, 'explain');
     const schema = z.object({
       explanation: z.string(),
       evidence: z.array(z.string()).default([]),
@@ -146,7 +162,7 @@ export class AgentsService {
       },
       { role: 'user', content: JSON.stringify(request) },
     ];
-    const raw = await this.callModel(this.nutritionModel, prompt);
+    const raw = await this.callModel(this.nutritionModel, prompt, 'nutrition');
     const schema = z.object({
       advice: z.array(
         z.object({
