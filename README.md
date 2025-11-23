@@ -246,4 +246,5 @@ npm run start:dev
 ---
 
 ## 📄 License
-MIT
+[MIT License](https://github.com/Sohaibmeo/ai-agent/blob/main/LICENSE)
+
