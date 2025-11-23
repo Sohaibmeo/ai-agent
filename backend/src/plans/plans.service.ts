@@ -45,11 +45,13 @@ export class PlansService {
   }
 
   async setStatus(planId: string, status: string) {
-    const plan = await this.weeklyPlanRepo.findOne({ where: { id: planId } });
+    const plan = await this.weeklyPlanRepo.findOne({ where: { id: planId }, relations: ['user'] });
     if (!plan) throw new Error('Plan not found');
+    if (status === 'active' && plan.user?.id) {
+      await this.weeklyPlanRepo.update({ user: { id: plan.user.id } as any, status: 'active' }, { status: 'archived' });
+    }
     plan.status = status;
-    await this.weeklyPlanRepo.save(plan);
-    return plan;
+    return this.weeklyPlanRepo.save(plan);
   }
 
   async setMealRecipe(planMealId: string, newRecipeId: string) {

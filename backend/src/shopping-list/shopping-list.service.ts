@@ -115,7 +115,9 @@ export class ShoppingListService {
       });
       targetPlanId = plan?.id;
     }
-    if (!targetPlanId) return [];
+    if (!targetPlanId) {
+      throw new Error('No active plan for this user');
+    }
     return this.getForPlan(targetPlanId);
   }
 }
