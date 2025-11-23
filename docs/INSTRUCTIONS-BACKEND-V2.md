@@ -159,71 +159,20 @@ The Review Agent responds with `ReviewInstruction` JSON, validated by Zod and re
 
 ---
 
-## 4. Orchestrator: `/plans/actions` flow
+## 4. Plan actions flow (handled in PlansService)
 
-### 4.1. New endpoint
-
-Add an endpoint such as:
-
-```http
-POST /plans/:weeklyPlanId/actions
-```
-
-Body:
-
-```json
-{
-  "actionContext": {
-    "type": "regenerate_meal",
-    "planDayId": "day-uuid",
-    "planMealId": "meal-uuid"
-  },
-  "reasonText": "Make this lighter and cheaper"
-}
-```
-
-Internal flow:
-
-1. Load **user**, **profile**, and **current plan**.
-2. Build `ReviewAgentInput` with `actionContext`, `reasonText`, `profileSnippet`, and `currentPlanSummary`.
-3. Call `reviewAgent.reviewAction(input)` → get `ReviewInstruction`.
-4. Pass `ReviewInstruction` to a **PlanUpdateOrchestrator**.
-
-### 4.2. PlanUpdateOrchestrator
-
-Create a small orchestration module, e.g.:
-
-```ts
-class PlanUpdateOrchestrator {
-  async handleInstruction(
-    userId: string,
-    weeklyPlanId: string,
-    instruction: ReviewInstruction,
-  ): Promise<WeeklyPlan> {
-    switch (instruction.action) {
-      case 'regenerate_meal':
-        return this.regenerateMeal(...);
-      case 'regenerate_day':
-        return this.regenerateDay(...);
-      case 'swap_ingredient':
-        return this.swapIngredient(...);
-      case 'remove_ingredient':
-        return this.removeIngredient(...);
-      case 'avoid_ingredient_future':
-        return this.avoidIngredientFuture(...);
-      case 'change_meal_type':
-        return this.changeMealType(...);
-      case 'adjust_portion':
-        return this.adjustPortion(...);
-      default:
-        // For unknown actions, just return the unchanged plan
-        return this.getPlan(weeklyPlanId);
-    }
-  }
-}
-```
-
-In V2, **most of these should call deterministic logic**. Where needed, they may call **Coach Agent** to regenerate parts of the plan, but recipe selection and constraints remain within predictable boundaries.
+- Endpoint: `POST /plans/:weeklyPlanId/actions`.
+- Flow:
+  1. Load **user**, **profile**, and **current plan**.
+  2. Build `ReviewAgentInput` with `actionContext`, `reasonText`, `profileSnippet`, and `currentPlanSummary`.
+  3. Call `reviewAgent.reviewAction(input)` → get `ReviewInstruction` (Zod validated; ingredient params must be UUIDs).
+  4. `PlansService` applies the instruction directly:
+     - `regenerate_meal` / `regenerate_day` / `regenerate_week` (deterministic selection with optional coach assist).
+     - `swap_ingredient` / `remove_ingredient` / add-only (via swap with only `ingredientToAdd`): clone recipe with ingredient UUIDs.
+     - `avoid_ingredient_future`: strong negative in `user_ingredient_score`.
+     - `change_meal_type`: replace recipe with solid/drinkable respecting diet/allergy/budget/difficulty.
+     - `adjust_portion`: small multiplier change.
+  5. Recompute aggregates and rebuild shopping list; return updated plan.
 
 ---
 

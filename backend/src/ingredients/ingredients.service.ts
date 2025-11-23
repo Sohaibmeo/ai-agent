@@ -1,14 +1,30 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Ingredient } from '../database/entities';
 
 @Injectable()
-export class IngredientsService {
+export class IngredientsService implements OnModuleInit {
+  private readonly logger = new Logger(IngredientsService.name);
+
   constructor(
     @InjectRepository(Ingredient)
     private readonly ingredientRepo: Repository<Ingredient>,
   ) {}
+
+  async onModuleInit() {
+    try {
+      const res = await this.ingredientRepo.query(
+        `SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm') AS enabled`,
+      );
+      const enabled = Boolean(res?.[0]?.enabled);
+      if (!enabled) {
+        this.logger.warn('pg_trgm extension is not enabled; fuzzy ingredient search will degrade to basic ILIKE');
+      }
+    } catch (err) {
+      this.logger.warn(`Unable to check pg_trgm extension: ${(err as Error).message}`);
+    }
+  }
 
   findAll() {
     return this.ingredientRepo.find();

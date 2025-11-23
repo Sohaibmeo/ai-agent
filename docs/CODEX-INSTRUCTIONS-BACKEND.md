@@ -299,55 +299,19 @@ The Review Agent must **NOT** choose specific new recipes; that is the responsib
 
 ---
 
-## 7. Plan Update Orchestrator
+## 7. Plan Actions Endpoint (no separate orchestrator)
 
-Create a dedicated orchestration layer (class/service) responsible for applying `ReviewInstruction` to a given plan.
-
-### 7.1. New endpoint
-
-Add an endpoint like:
-
-```http
-POST /plans/:weeklyPlanId/actions
-```
-
-Body:
-
-```json
-{
-  "actionContext": {
-    "type": "regenerate_meal",
-    "planDayId": "day-uuid",
-    "planMealId": "meal-uuid"
-  },
-  "reasonText": "Make this lighter and cheaper"
-}
-```
-
-### 7.2. Flow
-
-1. Load `user`, `user_profile`, and current plan for `weeklyPlanId`.
-2. Build `ReviewAgentInput` (including compact plan summary).
-3. Call Review Agent: `reviewAction(input)`.
-4. Validate and get `ReviewInstruction`.
-5. Pass `ReviewInstruction` to `PlanUpdateOrchestrator.handleInstruction(...)`.
-6. Orchestrator performs the correct mutation:
-   - `regenerate_meal` / `regenerate_day`:
-     - Option 1: call Coach Agent in "update" mode with current plan & instruction.
-     - Option 2: re-run deterministic selection and apply constraints (e.g., skip certain ingredients, prefer cheaper recipes).
-   - `swap_ingredient` / `remove_ingredient`:
-     - Apply ingredient changes to the recipe for that plan meal (creating a custom recipe as needed).
-   - `avoid_ingredient_future`:
-     - Update `user_ingredient_score` with a strong negative score.
-   - `change_meal_type`:
-     - Change to a solid/drinkable recipe by querying appropriate candidates.
-   - `adjust_portion`:
-     - Modify `portion_multiplier` by a small factor based on `smallerPortion`/`largerPortion`.
-
-7. After mutating the plan:
-   - Recompute affected daily and weekly aggregates.
-   - Rebuild shopping list (fully or incrementally) for that plan.
-   - Return the updated plan to the caller.
+- Endpoint: `POST /plans/:weeklyPlanId/actions` (implemented in `PlansService`).
+- Flow:
+  1. Load `user`, `user_profile`, and current plan.
+  2. Build `ReviewAgentInput` (compact plan summary) and call Review Agent → validated `ReviewInstruction` (Zod).
+  3. `PlansService` applies the instruction directly:
+     - `regenerate_meal` / `regenerate_day` / `regenerate_week`: deterministic selection (with optional agent if available).
+     - `swap_ingredient` / `remove_ingredient` / add-only (via swap with only `ingredientToAdd`): clone recipe with ingredient changes using UUIDs.
+     - `avoid_ingredient_future`: set strong negative score in `user_ingredient_score`.
+     - `change_meal_type`: replace with solid/drinkable candidates respecting diet/allergy/budget/difficulty.
+     - `adjust_portion`: small multiplier change.
+  4. Recompute aggregates and rebuild shopping list; return updated plan.
 
 ---
 

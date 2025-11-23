@@ -1,7 +1,7 @@
-import { ArrayMinSize, IsArray, IsOptional, IsString } from 'class-validator';
+import { ArrayMinSize, IsArray, IsOptional, IsString, IsUUID } from 'class-validator';
 
 class IngredientCandidateDto {
-  @IsString()
+  @IsUUID()
   id!: string;
 
   @IsString()
