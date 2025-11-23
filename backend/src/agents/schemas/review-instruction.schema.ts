@@ -63,8 +63,8 @@ export const reviewInstructionSchema = z.object({
   ]),
   params: z
     .object({
-      ingredientToRemove: z.string().optional(),
-      ingredientToAdd: z.string().optional(),
+      ingredientToRemove: z.string().uuid().optional(),
+      ingredientToAdd: z.string().uuid().optional(),
       applyToWholeWeek: z.boolean().optional(),
       makeHealthier: z.boolean().optional(),
       makeCheaper: z.boolean().optional(),
