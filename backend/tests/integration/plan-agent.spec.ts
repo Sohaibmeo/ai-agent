@@ -8,24 +8,29 @@ describe('Plan generation with agent (mocked)', () => {
   let app: INestApplication;
   const userId = '11111111-1111-1111-1111-111111111111'; // seeded test user
 
+  const mockCoach = jest.fn(async (payload: any) => {
+    const days = (payload?.candidates?.days || []).map((d: any) => ({
+      day_index: d.day_index,
+      meals: d.meals.map((m: any) => ({
+        meal_slot: m.meal_slot,
+        recipe_id: m.candidates?.[0]?.id,
+        portion_multiplier: 1,
+      })),
+    }));
+    return {
+      week_start_date: payload.week_start_date,
+      days,
+    };
+  });
+
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(AgentsService)
       .useValue({
-        coachPlan: jest.fn(async (payload: any) => {
-          const days = (payload?.candidates?.days || []).map((d: any) => ({
-            day_index: d.day_index,
-            meals: d.meals.map((m: any) => ({
-              meal_slot: m.meal_slot,
-              recipe_id: m.candidates?.[0]?.id,
-              portion_multiplier: 1,
-            })),
-          }));
-          return {
-            week_start_date: payload.week_start_date,
-            days,
-          };
-        }),
+        coachPlan: mockCoach,
+        reviewAction: jest.fn(),
+        explain: jest.fn(),
+        nutritionAdvice: jest.fn(),
       })
       .compile();
 
@@ -48,5 +53,6 @@ describe('Plan generation with agent (mocked)', () => {
     const firstMeal = plan.days[0].meals[0];
     expect(firstMeal).toBeDefined();
     expect(firstMeal.recipe.id).toBeTruthy();
+    expect(mockCoach).toHaveBeenCalled();
   });
 });
