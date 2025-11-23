@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import OpenAI from 'openai';
 import { z } from 'zod';
 import { ExplanationRequestDto, ExplanationResponseDto } from './dto/explanation.dto';
@@ -33,6 +33,7 @@ const WeeklyPlanSchema = z.object({
 
 @Injectable()
 export class AgentsService {
+  private readonly logger = new Logger(AgentsService.name);
   private reviewModel = process.env.LLM_MODEL_REVIEW || 'llama3.1:8b-instruct-q4_K_M';
   private coachModel = process.env.LLM_MODEL_COACH || 'llama3.1:8b-instruct-q4_K_M';
   private explainModel = process.env.LLM_MODEL_EXPLAIN || this.coachModel;
@@ -58,6 +59,7 @@ export class AgentsService {
       },
     ];
     const raw = await this.callModel(this.reviewModel, prompt);
+    this.logger.log(`reviewAction called model=${this.reviewModel}`);
     return ReviewInstructionSchema.parse(raw);
   }
 
@@ -82,6 +84,7 @@ export class AgentsService {
       },
     ];
     const raw = await this.callModel(this.coachModel, prompt);
+    this.logger.log(`coachPlan called model=${this.coachModel}`);
     return WeeklyPlanSchema.parse(raw);
   }
 

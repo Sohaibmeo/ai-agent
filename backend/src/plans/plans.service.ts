@@ -9,15 +9,18 @@ import { ShoppingListService } from '../shopping-list/shopping-list.service';
 import { portionTowardsTarget, selectRecipe } from './utils/selection';
 import { PreferencesService } from '../preferences/preferences.service';
 import { AgentsService } from '../agents/agents.service';
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class PlansService {
+  private readonly logger = new Logger(PlansService.name);
+
   constructor(
     @InjectRepository(WeeklyPlan)
-  private readonly weeklyPlanRepo: Repository<WeeklyPlan>,
-  @InjectRepository(PlanDay)
-  private readonly planDayRepo: Repository<PlanDay>,
-  @InjectRepository(PlanMeal)
+    private readonly weeklyPlanRepo: Repository<WeeklyPlan>,
+    @InjectRepository(PlanDay)
+    private readonly planDayRepo: Repository<PlanDay>,
+    @InjectRepository(PlanMeal)
     private readonly planMealRepo: Repository<PlanMeal>,
     private readonly recipesService: RecipesService,
     private readonly usersService: UsersService,
@@ -51,6 +54,7 @@ export class PlansService {
       await this.weeklyPlanRepo.update({ user: { id: plan.user.id } as any, status: 'active' }, { status: 'archived' });
     }
     plan.status = status;
+    this.logger.log(`setStatus plan=${planId} status=${status} user=${plan.user?.id}`);
     return this.weeklyPlanRepo.save(plan);
   }
 
@@ -99,6 +103,7 @@ export class PlansService {
   }
 
   async generateWeek(userId: string, weekStartDate: string, useAgent = false) {
+    this.logger.log(`generateWeek start user=${userId} date=${weekStartDate} useAgent=${useAgent}`);
     const profile = await this.usersService.getProfile(userId);
     const targets = calculateTargets(profile);
 
@@ -117,6 +122,7 @@ export class PlansService {
       status: 'draft',
     });
     const savedPlan = await this.weeklyPlanRepo.save(plan);
+    this.logger.log(`plan persisted id=${savedPlan.id} user=${userId}`);
 
     const dayEntities: PlanDay[] = [];
     let agentPlan:
@@ -130,8 +136,9 @@ export class PlansService {
           candidates: candidatesPayload,
           week_start_date: weekStartDate,
         });
+        this.logger.log(`coachPlan succeeded user=${userId}`);
       } catch (e) {
-        // fallback silently
+        this.logger.warn(`coachPlan failed user=${userId} fallback to heuristic`);
         agentPlan = undefined;
       }
     }
@@ -212,10 +219,12 @@ export class PlansService {
 
     await this.shoppingListService.rebuildForPlan(savedPlan.id);
 
-    return this.weeklyPlanRepo.findOne({
+    const result = await this.weeklyPlanRepo.findOne({
       where: { id: savedPlan.id },
       relations: ['days', 'days.meals', 'days.meals.recipe'],
     });
+    this.logger.log(`generateWeek done id=${savedPlan.id}`);
+    return result;
   }
 
   private async recomputeAggregates(planId: string) {

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
 import { Recipe, RecipeIngredient, UserRecipeScore } from '../database/entities';
@@ -9,17 +9,18 @@ import { PreferencesService } from '../preferences/preferences.service';
 
 @Injectable()
 export class RecipesService {
+  private readonly logger = new Logger(RecipesService.name);
   constructor(
     @InjectRepository(Recipe)
     private readonly recipeRepo: Repository<Recipe>,
     @InjectRepository(RecipeIngredient)
-    private readonly recipeIngredientRepo: Repository<RecipeIngredient>,
-    @InjectRepository(UserRecipeScore)
-    private readonly recipeScoreRepo: Repository<UserRecipeScore>,
-    private readonly usersService: UsersService,
-    private readonly ingredientsService: IngredientsService,
-    private readonly preferencesService: PreferencesService,
-  ) {}
+  private readonly recipeIngredientRepo: Repository<RecipeIngredient>,
+  @InjectRepository(UserRecipeScore)
+  private readonly recipeScoreRepo: Repository<UserRecipeScore>,
+  private readonly usersService: UsersService,
+  private readonly ingredientsService: IngredientsService,
+  private readonly preferencesService: PreferencesService,
+) {}
 
   findAll() {
     return this.recipeRepo.find({ relations: ['ingredients'] });
@@ -39,6 +40,7 @@ export class RecipesService {
   }
 
   async findCandidatesForUser(query: RecipeCandidatesQueryDto) {
+    this.logger.log(`findCandidates user=${query.userId} slot=${query.mealSlot ?? 'any'}`);
     const profile = await this.usersService.getProfile(query.userId);
 
     const allowedDifficulty = this.allowedDifficulties(query.maxDifficulty || profile.max_difficulty);
@@ -84,6 +86,7 @@ export class RecipesService {
       .orderBy('recipe_score', 'DESC');
 
     const recipes = await qb.getMany();
+    this.logger.log(`candidates user=${query.userId} count=${recipes.length}`);
     return recipes;
   }
 

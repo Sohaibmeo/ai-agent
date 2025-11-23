@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -15,6 +15,8 @@ import { EntityManager } from 'typeorm';
 
 @Injectable()
 export class ShoppingListService {
+  private readonly logger = new Logger(ShoppingListService.name);
+
   constructor(
     @InjectRepository(ShoppingListItem)
     private readonly shoppingListRepo: Repository<ShoppingListItem>,
@@ -38,6 +40,7 @@ export class ShoppingListService {
     if (!plan) throw new Error('Plan not found');
     const userId = plan.user?.id;
     if (!userId) throw new Error('Plan user missing');
+    this.logger.log(`rebuild shopping list plan=${planId} user=${userId}`);
 
     // Clear existing
     await this.shoppingListRepo.delete({ weeklyPlan: { id: planId } as any });
@@ -110,6 +113,7 @@ export class ShoppingListService {
     }
 
     await this.shoppingListRepo.save(toSave);
+    this.logger.log(`shopping list rebuilt plan=${planId} items=${toSave.length}`);
     return this.getForPlan(planId);
   }
 
@@ -124,6 +128,7 @@ export class ShoppingListService {
     if (!targetPlanId) {
       throw new Error('No active plan for this user');
     }
+    this.logger.log(`get active shopping list plan=${targetPlanId} user=${userId}`);
     return this.getForPlan(targetPlanId);
   }
 }
