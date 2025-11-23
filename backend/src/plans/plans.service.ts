@@ -11,6 +11,7 @@ import { PreferencesService } from '../preferences/preferences.service';
 import { AgentsService } from '../agents/agents.service';
 import { Logger } from '@nestjs/common';
 import { ReviewInstruction } from '../agents/schemas/review-instruction.schema';
+import { IngredientsService } from '../ingredients/ingredients.service';
 
 @Injectable()
 export class PlansService {
@@ -28,6 +29,7 @@ export class PlansService {
     private readonly shoppingListService: ShoppingListService,
     private readonly preferencesService: PreferencesService,
     private readonly agentsService: AgentsService,
+    private readonly ingredientsService: IngredientsService,
   ) {}
 
   findAll() {
@@ -467,16 +469,24 @@ export class PlansService {
     // Remove entries matching name
     const filteredIngredients =
       ingredientNameToRemove && ingredientNameToRemove.trim()
-        ? baseIngredients.filter((ri: any) => ri.ingredient?.name?.toLowerCase() !== ingredientNameToRemove.toLowerCase())
+        ? baseIngredients.filter(
+            (ri: any) => ri.ingredient?.name?.toLowerCase() !== ingredientNameToRemove.toLowerCase(),
+          )
         : baseIngredients;
-    // Optionally add a placeholder ingredient if provided
+
+    // Optionally add a real ingredient if found by name
+    let addIngredientId: string | undefined;
     if (ingredientNameToAdd && ingredientNameToAdd.trim()) {
-      filteredIngredients.push({
-        ingredient: { id: `placeholder-${ingredientNameToAdd}`, name: ingredientNameToAdd },
-        quantity: 0,
-        unit: '',
-      });
+      const ing = await this.ingredientsService.findByNameCaseInsensitive(ingredientNameToAdd);
+      if (ing?.id) {
+        addIngredientId = ing.id;
+      } else {
+        this.logger.warn(
+          `swapIngredient unable to find ingredient by name=${ingredientNameToAdd}; skipping addition to avoid placeholder`,
+        );
+      }
     }
+
     // Create a custom recipe clone
     const cloned = await this.recipesService.createCustomFromExisting({
       baseRecipeId: recipe.id,
@@ -487,7 +497,18 @@ export class PlansService {
           ingredientId: ri.ingredient.id,
           quantity: Number(ri.quantity || 0),
           unit: ri.unit || '',
-        })),
+        }))
+        .concat(
+          addIngredientId
+            ? [
+                {
+                  ingredientId: addIngredientId,
+                  quantity: 0,
+                  unit: '',
+                },
+              ]
+            : [],
+        ),
     });
     await this.setMealRecipe(meal.id, cloned.id);
   }

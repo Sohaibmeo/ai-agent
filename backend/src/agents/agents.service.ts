@@ -117,14 +117,22 @@ export class AgentsService {
     const lcMessages = messages.map((m) =>
       m.role === 'system' ? new SystemMessage(m.content) : new HumanMessage(m.content),
     );
-    const res = await chat.invoke(lcMessages);
-    const content = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
-    if (!content) throw new Error('LLM returned empty content');
+    const start = Date.now();
     try {
-      return JSON.parse(content);
-    } catch (e) {
-      this.logger.error(`[${kind}] Failed to parse LLM JSON: ${content?.slice?.(0, 200) ?? ''}`);
-      throw new Error('Failed to parse LLM JSON');
+      const res = await chat.invoke(lcMessages);
+      const content = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
+      if (!content) {
+        this.logAgent(kind, `empty response model=${model}`);
+        throw new Error('LLM returned empty content');
+      }
+      const parsed = JSON.parse(content);
+      this.logAgent(kind, `success model=${model} provider=${this.provider} latency_ms=${Date.now() - start}`);
+      return parsed;
+    } catch (err) {
+      this.logger.error(
+        `[${kind}] model=${model} provider=${this.provider} failed: ${(err as Error).message}`,
+      );
+      throw err;
     }
   }
 

@@ -18,4 +18,14 @@ export class IngredientsService {
     if (!ids.length) return Promise.resolve([]);
     return this.ingredientRepo.findBy({ id: ids as any });
   }
+
+  async findByNameCaseInsensitive(name: string) {
+    if (!name) return null;
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    return this.ingredientRepo
+      .createQueryBuilder('ingredient')
+      .where('LOWER(ingredient.name) = LOWER(:name)', { name: trimmed })
+      .getOne();
+  }
 }
