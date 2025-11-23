@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { ExplanationRequestDto, ExplanationResponseDto } from './dto/explanation.dto';
 import { NutritionAdviceRequestDto, NutritionAdviceResponseDto } from './dto/nutrition-advice.dto';
 import { reviewInstructionSchema, ReviewInstruction } from './schemas/review-instruction.schema';
+import { ChooseIngredientDto } from './dto/choose-ingredient.dto';
 
 const PlanMealSchema = z.object({
   meal_slot: z.string(),
@@ -198,5 +199,30 @@ export class AgentsService {
       ),
     });
     return schema.parse(raw);
+  }
+
+  async chooseIngredient(payload: ChooseIngredientDto): Promise<{ ingredient_id: string }> {
+    const candidateIds = new Set(payload.candidates.map((c) => c.id));
+    const prompt: { role: 'system' | 'user'; content: string }[] = [
+      {
+        role: 'system',
+        content:
+          'You are Ingredient Selector. Choose the most likely ingredient from the provided candidates. Return ONLY JSON {ingredient_id}. Do not invent new ids.',
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          reasonText: payload.reasonText,
+          candidates: payload.candidates,
+        }),
+      },
+    ];
+    const schema = z.object({ ingredient_id: z.string() });
+    const raw = await this.callModel(this.reviewModel, prompt, 'review');
+    const parsed = schema.parse(raw);
+    if (!candidateIds.has(parsed.ingredient_id)) {
+      throw new Error('LLM returned ingredient_id not in provided candidates');
+    }
+    return parsed;
   }
 }

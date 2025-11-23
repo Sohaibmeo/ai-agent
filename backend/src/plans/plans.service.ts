@@ -458,7 +458,11 @@ export class PlansService {
     await this.planMealRepo.save(meal);
   }
 
-  private async swapIngredient(planMealId: string, ingredientNameToRemove?: string | null, ingredientNameToAdd?: string | null) {
+  private async swapIngredient(
+    planMealId: string,
+    ingredientIdentifierToRemove?: string | null,
+    ingredientIdentifierToAdd?: string | null,
+  ) {
     const meal = await this.planMealRepo.findOne({
       where: { id: planMealId },
       relations: ['recipe', 'recipe.ingredients', 'recipe.ingredients.ingredient', 'planDay', 'planDay.weeklyPlan'],
@@ -466,31 +470,45 @@ export class PlansService {
     if (!meal || !meal.recipe) return;
     const recipe = meal.recipe as any;
     const baseIngredients = recipe.ingredients || [];
-    // Remove entries matching name
-    const filteredIngredients =
-      ingredientNameToRemove && ingredientNameToRemove.trim()
-        ? baseIngredients.filter(
-            (ri: any) => ri.ingredient?.name?.toLowerCase() !== ingredientNameToRemove.toLowerCase(),
-          )
-        : baseIngredients;
+    const uuidRegex = /^[0-9a-fA-F-]{36}$/;
+    const removeIdTarget =
+      ingredientIdentifierToRemove && uuidRegex.test(ingredientIdentifierToRemove.trim())
+        ? ingredientIdentifierToRemove.trim()
+        : undefined;
+    if (ingredientIdentifierToRemove && !removeIdTarget) {
+      throw new Error('ingredientToRemove must be a valid UUID');
+    }
+    const addIdTarget =
+      ingredientIdentifierToAdd && uuidRegex.test(ingredientIdentifierToAdd.trim())
+        ? ingredientIdentifierToAdd.trim()
+        : undefined;
+    if (ingredientIdentifierToAdd && !addIdTarget) {
+      throw new Error('ingredientToAdd must be a valid UUID');
+    }
 
-    // Optionally add a real ingredient if found by name
+    // Remove entries matching id only
+    const filteredIngredients = removeIdTarget
+      ? baseIngredients.filter((ri: any) => ri.ingredient?.id !== removeIdTarget)
+      : baseIngredients;
+
+    if (removeIdTarget && filteredIngredients.length === baseIngredients.length) {
+      throw new Error(`No ingredient matched removal target id=${removeIdTarget}`);
+    }
+
+    // Validate addition ingredient
     let addIngredientId: string | undefined;
-    if (ingredientNameToAdd && ingredientNameToAdd.trim()) {
-      const ing = await this.ingredientsService.findByNameCaseInsensitive(ingredientNameToAdd);
-      if (ing?.id) {
-        addIngredientId = ing.id;
-      } else {
-        this.logger.warn(
-          `swapIngredient unable to find ingredient by name=${ingredientNameToAdd}; skipping addition to avoid placeholder`,
-        );
+    if (addIdTarget) {
+      const ing = await this.ingredientsService.findById(addIdTarget);
+      if (!ing) {
+        throw new Error(`Ingredient not found for id=${addIdTarget}`);
       }
+      addIngredientId = ing.id;
     }
 
     // Create a custom recipe clone
     const cloned = await this.recipesService.createCustomFromExisting({
       baseRecipeId: recipe.id,
-      newName: `${recipe.name} (custom)`,
+      newName: `${recipe.name} (custom swap)`,
       ingredientItems: filteredIngredients
         .filter((ri: any) => ri.ingredient?.id)
         .map((ri: any) => ({
@@ -503,8 +521,8 @@ export class PlansService {
             ? [
                 {
                   ingredientId: addIngredientId,
-                  quantity: 0,
-                  unit: '',
+                  quantity: 1,
+                  unit: 'piece',
                 },
               ]
             : [],

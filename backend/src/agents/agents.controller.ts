@@ -5,6 +5,7 @@ import { CoachRequestDto } from './dto/coach.dto';
 import { ExplanationRequestDto } from './dto/explanation.dto';
 import { NutritionAdviceRequestDto } from './dto/nutrition-advice.dto';
 import { PlansService } from '../plans/plans.service';
+import { ChooseIngredientDto } from './dto/choose-ingredient.dto';
 
 @Controller('agents')
 export class AgentsController {
@@ -47,5 +48,10 @@ export class AgentsController {
   @Post('nutrition-advice')
   nutrition(@Body() body: NutritionAdviceRequestDto) {
     return this.agentsService.nutritionAdvice(body);
+  }
+
+  @Post('choose-ingredient')
+  chooseIngredient(@Body() body: ChooseIngredientDto) {
+    return this.agentsService.chooseIngredient(body);
   }
 }
