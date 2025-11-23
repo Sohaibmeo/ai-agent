@@ -9,6 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "lint": "echo \"TODO: add lint\" && exit 0",
     "test": "jest",
+    "test:e2e": "jest --config jest.e2e.config.js --runInBand",
     "typeorm": "node --require ts-node/register --require tsconfig-paths/register ./node_modules/typeorm/cli.js -d ormconfig.ts"
   },
   "keywords": [],
@@ -30,10 +31,13 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@nestjs/testing": "^11.1.9",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.10.1",
+    "@types/supertest": "^6.0.3",
     "jest": "^30.2.0",
     "nodemon": "^3.1.11",
+    "supertest": "^7.1.4",
     "ts-jest": "^29.4.5",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",

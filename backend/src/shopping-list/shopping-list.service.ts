@@ -34,6 +34,11 @@ export class ShoppingListService {
   }
 
   async rebuildForPlan(planId: string) {
+    const plan = await this.weeklyPlanRepo.findOne({ where: { id: planId }, relations: ['user'] });
+    if (!plan) throw new Error('Plan not found');
+    const userId = plan.user?.id;
+    if (!userId) throw new Error('Plan user missing');
+
     // Clear existing
     await this.shoppingListRepo.delete({ weeklyPlan: { id: planId } as any });
 
@@ -45,11 +50,12 @@ export class ShoppingListService {
     if (!meals.length) return [];
 
     // Load recipe ingredients for all recipes in plan
-    const recipeIds = meals.map((m) => m.recipe.id);
+    const recipeIds = meals.map((m) => m.recipe?.id).filter(Boolean);
     const recipeIngredients = await this.entityManager
       .getRepository(RecipeIngredient)
       .createQueryBuilder('ri')
       .innerJoinAndSelect('ri.ingredient', 'ingredient')
+      .innerJoinAndSelect('ri.recipe', 'recipe')
       .where('ri.recipe_id IN (:...recipeIds)', { recipeIds })
       .getMany();
 
@@ -59,6 +65,7 @@ export class ShoppingListService {
     >();
 
     for (const meal of meals) {
+      if (!meal.recipe?.id) continue;
       const portion = Number(meal.portion_multiplier || 1);
       const ris = recipeIngredients.filter((ri) => ri.recipe.id === meal.recipe.id);
       for (const ri of ris) {
@@ -81,7 +88,6 @@ export class ShoppingListService {
     }
 
     // Apply user price overrides and pantry flags
-    const userId = meals[0].planDay.weeklyPlan.user.id;
     const overrides = await this.priceRepo.find({ where: { user: { id: userId } as any } });
     const overrideMap = new Map(overrides.map((o) => [o.ingredient.id, Number(o.price_per_unit_gbp)]));
     const pantry = await this.pantryRepo.find({ where: { user: { id: userId } as any } });
