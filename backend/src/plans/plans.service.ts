@@ -374,7 +374,19 @@ export class PlansService {
         }
         break;
       case 'swap_ingredient':
+        if (instruction.targetIds?.planMealId) {
+          await this.swapIngredient(
+            instruction.targetIds.planMealId,
+            instruction.params?.ingredientToRemove,
+            instruction.params?.ingredientToAdd,
+          );
+        }
+        break;
       case 'remove_ingredient':
+        if (instruction.targetIds?.planMealId) {
+          await this.swapIngredient(instruction.targetIds.planMealId, instruction.params?.ingredientToRemove, null);
+        }
+        break;
       default:
         this.logger.warn(`Action ${instruction.action} not yet implemented; no-op`);
         break;
@@ -442,5 +454,41 @@ export class PlansService {
       ? Number(recipe.base_cost_gbp) * meal.portion_multiplier
       : meal.meal_cost_gbp;
     await this.planMealRepo.save(meal);
+  }
+
+  private async swapIngredient(planMealId: string, ingredientNameToRemove?: string | null, ingredientNameToAdd?: string | null) {
+    const meal = await this.planMealRepo.findOne({
+      where: { id: planMealId },
+      relations: ['recipe', 'recipe.ingredients', 'recipe.ingredients.ingredient', 'planDay', 'planDay.weeklyPlan'],
+    });
+    if (!meal || !meal.recipe) return;
+    const recipe = meal.recipe as any;
+    const baseIngredients = recipe.ingredients || [];
+    // Remove entries matching name
+    const filteredIngredients =
+      ingredientNameToRemove && ingredientNameToRemove.trim()
+        ? baseIngredients.filter((ri: any) => ri.ingredient?.name?.toLowerCase() !== ingredientNameToRemove.toLowerCase())
+        : baseIngredients;
+    // Optionally add a placeholder ingredient if provided
+    if (ingredientNameToAdd && ingredientNameToAdd.trim()) {
+      filteredIngredients.push({
+        ingredient: { id: `placeholder-${ingredientNameToAdd}`, name: ingredientNameToAdd },
+        quantity: 0,
+        unit: '',
+      });
+    }
+    // Create a custom recipe clone
+    const cloned = await this.recipesService.createCustomFromExisting({
+      baseRecipeId: recipe.id,
+      newName: `${recipe.name} (custom)`,
+      ingredientItems: filteredIngredients
+        .filter((ri: any) => ri.ingredient?.id)
+        .map((ri: any) => ({
+          ingredientId: ri.ingredient.id,
+          quantity: Number(ri.quantity || 0),
+          unit: ri.unit || '',
+        })),
+    });
+    await this.setMealRecipe(meal.id, cloned.id);
   }
 }

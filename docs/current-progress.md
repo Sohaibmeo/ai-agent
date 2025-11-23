@@ -15,8 +15,8 @@
 - Tests cover selection basics, but no unit/e2e coverage for V2 flows (plan actions, budget-aware ranking, meal_type handling, avoid ingredient).
 
 ## Near-term goals
-1) Implement `ReviewInstruction` schema + Zod, update Review Agent prompt, and add `/plans/:weeklyPlanId/actions` with a PlanUpdateOrchestrator covering regenerate/swap/remove/avoid/change_meal_type/adjust_portion.
-2) Add `meal_type` column migration/entity updates and seed drinkable recipes; extend candidate search and orchestrator change-meal-type handler.
-3) Extend candidate ranking with ingredient-score penalties and simple budget heuristics; add endpoint/service logic for explicit “avoid ingredient in future”.
-4) Add LLM provider factory + envs for `local|openai` with JSON response enforcement and validation + fallbacks.
-5) Backfill unit/e2e tests for plan generation, candidate ranking, and plan actions with mocked LLMs.
+1) Add stronger action handlers for swap/remove ingredient (done; basic custom-clone approach).
+2) Add logging/metrics around agent usage to differentiate LLM vs fallback (partial: logging added in AgentsService).
+3) Backfill more tests (change_meal_type, avoid ingredient, ranking budgets) and run full suite regularly.
+4) Optional: persist custom recipe creation provenance and ingredient additions for swap to avoid placeholder IDs; tighten validation.
+5) Postman/testing guide for LLM vs deterministic comparisons (document flow).

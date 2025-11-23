@@ -34,6 +34,9 @@ export class AgentsService {
     process.env.LLM_MODEL_NUTRITION || process.env.OPENAI_MODEL_NUTRITION || this.coachModel;
   private llmBaseUrl = process.env.LLM_BASE_URL || '';
   private llmApiKey = process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
+  private logAgent(kind: string, message: string) {
+    this.logger.log(`[${kind}] ${message}`);
+  }
 
   async reviewAction(payload: {
     userId?: string;
@@ -64,7 +67,7 @@ export class AgentsService {
       },
     ];
     const raw = await this.callModel(this.reviewModel, prompt, 'review');
-    this.logger.log(`reviewAction called model=${this.reviewModel}`);
+    this.logAgent('review', `model=${this.reviewModel}`);
     return reviewInstructionSchema.parse(raw);
   }
 
@@ -89,7 +92,7 @@ export class AgentsService {
       },
     ];
     const raw = await this.callModel(this.coachModel, prompt, 'coach');
-    this.logger.log(`coachPlan called model=${this.coachModel}`);
+    this.logAgent('coach', `model=${this.coachModel}`);
     return WeeklyPlanSchema.parse(raw);
   }
 
@@ -120,6 +123,7 @@ export class AgentsService {
     try {
       return JSON.parse(content);
     } catch (e) {
+      this.logger.error(`[${kind}] Failed to parse LLM JSON: ${content?.slice?.(0, 200) ?? ''}`);
       throw new Error('Failed to parse LLM JSON');
     }
   }
