@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Ingredient } from '../database/entities';
 
 @Injectable()
@@ -16,7 +16,7 @@ export class IngredientsService {
 
   findByIds(ids: string[]) {
     if (!ids.length) return Promise.resolve([]);
-    return this.ingredientRepo.findBy({ id: ids as any });
+    return this.ingredientRepo.findBy({ id: In(ids) });
   }
 
   async findByNameCaseInsensitive(name: string) {
@@ -62,6 +62,21 @@ export class IngredientsService {
 
   async searchFuzzy(query: string, limit = 5) {
     if (!query.trim()) return [];
+    // Check if pg_trgm is available
+    const trgmCheck = await this.ingredientRepo.query(
+      `SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm') AS enabled`,
+    );
+    const hasTrgm = Boolean(trgmCheck?.[0]?.enabled);
+    if (!hasTrgm) {
+      const fallback = await this.ingredientRepo
+        .createQueryBuilder('ingredient')
+        .where('ingredient.name ILIKE :like', { like: `%${query}%` })
+        .orderBy('ingredient.name', 'ASC')
+        .limit(limit)
+        .getMany();
+      return fallback.map((ent) => ({ ingredient: ent, score: 0 }));
+    }
+
     const qb = this.ingredientRepo
       .createQueryBuilder('ingredient')
       .addSelect(`similarity(ingredient.name, :q)`, 'sim')

@@ -506,27 +506,29 @@ export class PlansService {
     }
 
     // Create a custom recipe clone
+    const ingredientItems = filteredIngredients
+      .filter((ri: any) => ri.ingredient?.id && uuidRegex.test(String(ri.ingredient.id)))
+      .map((ri: any) => ({
+        ingredientId: String(ri.ingredient.id),
+        quantity: Number(ri.quantity || 0),
+        unit: ri.unit || '',
+      }))
+      .concat(
+        addIngredientId
+          ? [
+              {
+                ingredientId: addIngredientId,
+                quantity: 1,
+                unit: 'piece',
+              },
+            ]
+          : [],
+      );
+
     const cloned = await this.recipesService.createCustomFromExisting({
       baseRecipeId: recipe.id,
       newName: `${recipe.name} (custom swap)`,
-      ingredientItems: filteredIngredients
-        .filter((ri: any) => ri.ingredient?.id)
-        .map((ri: any) => ({
-          ingredientId: ri.ingredient.id,
-          quantity: Number(ri.quantity || 0),
-          unit: ri.unit || '',
-        }))
-        .concat(
-          addIngredientId
-            ? [
-                {
-                  ingredientId: addIngredientId,
-                  quantity: 1,
-                  unit: 'piece',
-                },
-              ]
-            : [],
-        ),
+      ingredientItems,
     });
     await this.setMealRecipe(meal.id, cloned.id);
   }
