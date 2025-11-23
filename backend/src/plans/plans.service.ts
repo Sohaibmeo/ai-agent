@@ -70,6 +70,7 @@ export class PlansService {
     if (!recipe) {
       throw new Error('Recipe not found');
     }
+    this.logger.log(`setMealRecipe planMeal=${planMealId} newRecipe=${newRecipeId}`);
     const userId = (meal.planDay.weeklyPlan as any).user?.id;
     const oldIngredients = (meal.recipe as any)?.ingredients?.map((ri: any) => ri.ingredient?.id).filter(Boolean) || [];
 

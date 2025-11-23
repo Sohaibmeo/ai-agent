@@ -22,7 +22,7 @@ export class PlansController {
   @Post('generate')
   generate(@Body() body: GeneratePlanDto) {
     const weekStartDate = body.weekStartDate || new Date().toISOString().slice(0, 10);
-    return this.plansService.generateWeek(body.userId, weekStartDate);
+    return this.plansService.generateWeek(body.userId, weekStartDate, body.useAgent);
   }
 
   @Post('set-meal-recipe')
