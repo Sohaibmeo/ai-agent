@@ -105,7 +105,11 @@ export class RecipesService {
       )
       .orderBy('recipe_score', 'DESC');
 
-    const { entities, raw } = await qb.getRawAndEntities();
+    const rawAndEntities = (qb as any).getRawAndEntities
+      ? await (qb as any).getRawAndEntities()
+      : { entities: await qb.getMany(), raw: [] as any[] };
+    const entities = rawAndEntities.entities as Recipe[];
+    const raw = rawAndEntities.raw || [];
     const scored = entities.map((recipe, idx) => {
       const recipeScore = Number(raw[idx]?.recipe_score ?? 0);
       const ingredientPenaltyRaw = Number(raw[idx]?.ingredient_penalty_raw ?? 0);
