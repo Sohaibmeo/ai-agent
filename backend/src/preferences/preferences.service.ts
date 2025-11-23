@@ -1,13 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { UserPreferences } from '../database/entities';
+import { UserPreferences, UserIngredientScore, UserRecipeScore } from '../database/entities';
 
 @Injectable()
 export class PreferencesService {
   constructor(
     @InjectRepository(UserPreferences)
     private readonly prefRepo: Repository<UserPreferences>,
+    @InjectRepository(UserIngredientScore)
+    private readonly ingScoreRepo: Repository<UserIngredientScore>,
+    @InjectRepository(UserRecipeScore)
+    private readonly recipeScoreRepo: Repository<UserRecipeScore>,
   ) {}
 
   async getForUser(userId: string) {
@@ -33,7 +37,21 @@ export class PreferencesService {
     const map = { ...(prefs as any)[key] } as Record<string, number>;
     map[ingredientId] = (map[ingredientId] || 0) + 1;
     (prefs as any)[key] = map;
-    return this.prefRepo.save(prefs);
+    await this.prefRepo.save(prefs);
+    const delta = type === 'like' ? 1 : -1;
+    await this.ingScoreRepo.upsert(
+      {
+        user: { id: userId } as any,
+        ingredient: { id: ingredientId } as any,
+        score: delta,
+      },
+      {
+        conflictPaths: ['user', 'ingredient'],
+        upsertType: 'on-conflict-do-update',
+        upsertColumns: ['score', 'updated_at'],
+      } as any,
+    );
+    return prefs;
   }
 
   async incrementMealPreference(userId: string, type: 'like' | 'dislike', recipeId: string) {
@@ -42,7 +60,21 @@ export class PreferencesService {
     const map = { ...(prefs as any)[key] } as Record<string, number>;
     map[recipeId] = (map[recipeId] || 0) + 1;
     (prefs as any)[key] = map;
-    return this.prefRepo.save(prefs);
+    await this.prefRepo.save(prefs);
+    const delta = type === 'like' ? 2 : -2;
+    await this.recipeScoreRepo.upsert(
+      {
+        user: { id: userId } as any,
+        recipe: { id: recipeId } as any,
+        score: delta,
+      },
+      {
+        conflictPaths: ['user', 'recipe'],
+        upsertType: 'on-conflict-do-update',
+        upsertColumns: ['score', 'updated_at'],
+      } as any,
+    );
+    return prefs;
   }
 
   async incrementManyIngredients(userId: string, type: 'like' | 'dislike', ingredientIds: string[]) {

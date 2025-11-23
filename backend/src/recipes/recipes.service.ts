@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, In, Repository } from 'typeorm';
-import { Recipe, RecipeIngredient } from '../database/entities';
+import { Brackets, Repository } from 'typeorm';
+import { Recipe, RecipeIngredient, UserRecipeScore } from '../database/entities';
 import { RecipeCandidatesQueryDto } from './dto/recipe-candidates-query.dto';
 import { UsersService } from '../users/users.service';
 import { IngredientsService } from '../ingredients/ingredients.service';
@@ -14,6 +14,8 @@ export class RecipesService {
     private readonly recipeRepo: Repository<Recipe>,
     @InjectRepository(RecipeIngredient)
     private readonly recipeIngredientRepo: Repository<RecipeIngredient>,
+    @InjectRepository(UserRecipeScore)
+    private readonly recipeScoreRepo: Repository<UserRecipeScore>,
     private readonly usersService: UsersService,
     private readonly ingredientsService: IngredientsService,
     private readonly preferencesService: PreferencesService,
@@ -74,9 +76,14 @@ export class RecipesService {
 
     qb.limit(10);
 
-    const recipes = await qb.getMany();
+    // Join recipe scores for ranking
+    qb.leftJoin(UserRecipeScore, 'urs', 'urs.recipe_id = recipe.id AND urs.user_id = :userId', {
+      userId: query.userId,
+    })
+      .addSelect('COALESCE(urs.score, 0)', 'recipe_score')
+      .orderBy('recipe_score', 'DESC');
 
-    // Preference filtering disabled for now
+    const recipes = await qb.getMany();
     return recipes;
   }
 
