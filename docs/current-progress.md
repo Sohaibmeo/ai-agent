@@ -1,15 +1,14 @@
-# Current Progress – Backend V2
+# Unfinished items
 
-## Current state
-- Plan actions handled in PlansService with `ReviewInstruction` (UUIDs enforced): regenerate week/day/meal, change_meal_type, swap/remove/add (via swap), avoid_ingredient_future, adjust_portion; aggregates + shopping list recomputed.
-- LLM provider toggle, Zod validation, and logging (provider/model/latency); choose-ingredient endpoint validates IDs against provided candidates.
-- Meal type migration applied; drinkable seeds present; candidate queries filter by meal_type.
-- Candidate ranking includes budget heuristics and ingredient-avoid penalties; avoid endpoint persists strong negatives.
-- Ingredient resolver supports exact + fuzzy (pg_trgm) with fallback; pg_trgm migration applied and startup warns if missing.
-- Tests: `npm test` all green; e2e plan actions and resolver passing.
+## Backend
 
-## Open items / next steps
-- Add targeted tests: change_meal_type outcomes, avoid-ingredient penalty effects in ranking.
-- Optional: integrate choose-ingredient into action flow when multiple candidates remain (validated IDs) or keep UI-driven.
-- Enhance logging/metrics: structured counters for agent success/failure/fallback, per-action audit.
-- Optional: richer budget heuristics (day-level tracking) and variety constraints.
+Structured logs/metrics (agent success/failure, per-action audit).
+Budget/variety heuristics: richer day-level budget handling and variety constraints
+
+## Frontend
+
+Recipe detail still uses stub data; needs real recipe/ingredient/method data and a save endpoint to persist ingredient edits/add/remove and AI notes.
+Swap dialog: show real macros/prices, add esc/outside-click close, and hook “auto decide” to backend/LLM when ready.
+Plans page: History tab and stronger empty/error/toast states; advanced settings flow is not implemented.
+Groceries: week selector/history not implemented; need derived estimated total from backend (now UI-only) and better grouping.
+Design system gaps: shadcn/ui not integrated; unit dropdown in ingredient modal still TODO; responsive tweaks still pending.
