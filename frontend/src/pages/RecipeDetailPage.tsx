@@ -31,6 +31,7 @@ export function RecipeDetailPage() {
   const [ingredients, setIngredients] = useState<IngredientRow[]>(defaultIngredients);
   const [swapTarget, setSwapTarget] = useState<IngredientRow | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [addMode, setAddMode] = useState(false);
 
   const meal = useMemo(() => {
     if (!plan || !mealId) return undefined;
@@ -56,8 +57,13 @@ export function RecipeDetailPage() {
 
   const handleSwap = (replacementName: string) => {
     if (!swapTarget) return;
-    setIngredients((prev) => prev.map((ing) => (ing.id === swapTarget.id ? { ...ing, name: replacementName } : ing)));
+    if (addMode) {
+      setIngredients((prev) => [...prev, { id: `ing-${Date.now()}`, name: replacementName, amount: 100, unit: 'g' }]);
+    } else {
+      setIngredients((prev) => prev.map((ing) => (ing.id === swapTarget.id ? { ...ing, name: replacementName } : ing)));
+    }
     setSwapTarget(null);
+    setAddMode(false);
     setDirty(true);
   };
 
@@ -119,7 +125,21 @@ export function RecipeDetailPage() {
       </Card>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Card title="Ingredients" subtitle={macrosLine}>
+        <Card
+          title="Ingredients"
+          subtitle={macrosLine}
+          action={
+            <button
+              className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+              onClick={() => {
+                setSwapTarget({ id: 'new', name: '', amount: 100, unit: 'g' });
+                setAddMode(true);
+              }}
+            >
+              <span className="text-lg leading-none">＋</span> Add
+            </button>
+          }
+        >
           <ul className="space-y-2 text-sm text-slate-800">
             {ingredients.map((ing) => (
               <li
@@ -142,6 +162,17 @@ export function RecipeDetailPage() {
                     className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-right text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-200"
                   />
                   <span className="text-slate-500 whitespace-nowrap">{ing.unit}</span>
+                  <button
+                    className="text-red-500 text-lg px-2"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIngredients((prev) => prev.filter((row) => row.id !== ing.id));
+                      setDirty(true);
+                    }}
+                    title="Remove ingredient"
+                  >
+                    🗑
+                  </button>
                 </div>
               </li>
             ))}
@@ -190,7 +221,10 @@ export function RecipeDetailPage() {
         currentAmount={`${swapTarget?.amount || ''} ${swapTarget?.unit || ''}`}
         suggestions={[...new Set([...defaultIngredients.map((i) => i.name), ...ingredients.map((i) => i.name)])]}
         onSelect={handleSwap}
-        onClose={() => setSwapTarget(null)}
+        onClose={() => {
+          setSwapTarget(null);
+          setAddMode(false);
+        }}
       />
     </div>
   );
