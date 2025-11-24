@@ -25,12 +25,12 @@ export function PlansPage() {
 
   const formatCurrency = (val?: number | null) => (val || val === 0 ? `£${Number(val).toFixed(2)}` : '—');
   const formatKcal = (val?: number | null) => (val || val === 0 ? `${Math.round(Number(val))} kcal` : '—');
-  const formatProtein = (val?: number | null) => (val || val === 0 ? `P: ${Math.round(Number(val))}g` : 'P: —');
+  const formatProtein = (val?: number | null) => (val || val === 0 ? `Protein: ${Math.round(Number(val))}g` : 'Protein: —');
   const formatMacros = (meal: any) => {
     const p = meal.meal_protein ?? meal.recipe?.base_protein;
     const c = meal.meal_carbs ?? meal.recipe?.base_carbs;
     const f = meal.meal_fat ?? meal.recipe?.base_fat;
-    return `P: ${p ? Math.round(Number(p)) : '—'}g  C: ${c ? Math.round(Number(c)) : '—'}g  F: ${f ? Math.round(
+    return `Protein: ${p ? Math.round(Number(p)) : '—'}g  Carbs: ${c ? Math.round(Number(c)) : '—'}g  Fats: ${f ? Math.round(
       Number(f),
     ) : '—'}g`;
   };
