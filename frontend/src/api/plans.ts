@@ -16,3 +16,7 @@ export function applyPlanAction(weeklyPlanId: string, body: any) {
 export function setMealRecipe(body: { planMealId: string; newRecipeId: string }) {
   return apiClient.post<WeeklyPlan>('/plans/set-meal-recipe', body);
 }
+
+export function activatePlan(planId: string) {
+  return apiClient.post<WeeklyPlan>('/plans/activate', { planId });
+}

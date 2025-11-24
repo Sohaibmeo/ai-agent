@@ -6,7 +6,7 @@ import { Skeleton } from '../components/shared/Skeleton';
 import { useActivePlan } from '../hooks/usePlan';
 import { DEMO_USER_ID } from '../lib/config';
 import { SwapDialog } from '../components/plans/SwapDialog';
-import { fetchActivePlan, setMealRecipe } from '../api/plans';
+import { activatePlan, fetchActivePlan, setMealRecipe } from '../api/plans';
 
 const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const pillClass = 'rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 border border-slate-200';
@@ -21,6 +21,7 @@ export function PlansPage() {
   const [note, setNote] = useState('');
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
   const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
+  const [isActivating, setIsActivating] = useState(false);
 
   const formatCurrency = (val?: number | null) => (val || val === 0 ? `£${Number(val).toFixed(2)}` : '—');
   const formatKcal = (val?: number | null) => (val || val === 0 ? `${Math.round(Number(val))} kcal` : '—');
@@ -64,6 +65,21 @@ export function PlansPage() {
 
   const toggleDay = (id: string) => {
     setExpandedDays((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const markAsActive = async () => {
+    if (!plan?.id || plan.status === 'active') return;
+    try {
+      setIsActivating(true);
+      await activatePlan(plan.id);
+      await queryClient.invalidateQueries({ queryKey: ['plan', 'active', DEMO_USER_ID] });
+      await queryClient.fetchQuery({
+        queryKey: ['plan', 'active', DEMO_USER_ID],
+        queryFn: () => fetchActivePlan(DEMO_USER_ID),
+      });
+    } finally {
+      setIsActivating(false);
+    }
   };
 
   return (
@@ -125,19 +141,31 @@ export function PlansPage() {
         </div>
       </Card>
 
-      <div className="flex items-center gap-6 border-b border-slate-200 text-sm">
-        <button
-          className={`pb-2 ${activeTab === 'current' ? 'border-b-2 border-emerald-700 font-semibold text-emerald-700' : 'text-slate-600'}`}
-          onClick={() => setActiveTab('current')}
-        >
-          Current Week
-        </button>
-        <button
-          className={`pb-2 ${activeTab === 'history' ? 'border-b-2 border-emerald-700 font-semibold text-emerald-700' : 'text-slate-600'}`}
-          onClick={() => setActiveTab('history')}
-        >
-          History
-        </button>
+      <div className="flex items-center justify-between border-b border-slate-200 text-sm">
+        <div className="flex items-center gap-6">
+          <button
+            className={`pb-2 ${activeTab === 'current' ? 'border-b-2 border-emerald-700 font-semibold text-emerald-700' : 'text-slate-600'}`}
+            onClick={() => setActiveTab('current')}
+          >
+            Current Week
+          </button>
+          <button
+            className={`pb-2 ${activeTab === 'history' ? 'border-b-2 border-emerald-700 font-semibold text-emerald-700' : 'text-slate-600'}`}
+            onClick={() => setActiveTab('history')}
+          >
+            History
+          </button>
+        </div>
+        {plan && plan.status !== 'active' && (
+          <button
+            className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+            onClick={markAsActive}
+            disabled={isActivating}
+            title="Mark this plan as active"
+          >
+            {isActivating ? 'Activating...' : 'Mark as active'}
+          </button>
+        )}
       </div>
 
       {activeTab === 'current' && (
