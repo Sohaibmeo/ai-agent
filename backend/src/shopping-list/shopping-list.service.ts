@@ -162,4 +162,62 @@ export class ShoppingListService {
     this.logger.log(`get active shopping list plan=${targetPlanId} user=${userId}`);
     return this.getForPlan(targetPlanId, userId);
   }
+
+  async updatePantry(userId: string, ingredientId: string, hasItem: boolean, planId?: string) {
+    const existing = await this.pantryRepo.findOne({
+      where: { user: { id: userId } as any, ingredient: { id: ingredientId } as any },
+    });
+    if (existing) {
+      existing.has_item = hasItem;
+      await this.pantryRepo.save(existing);
+    } else {
+      await this.pantryRepo.save({
+        user: { id: userId } as any,
+        ingredient: { id: ingredientId } as any,
+        has_item: hasItem,
+      });
+    }
+    const targetPlanId = planId || (await this.weeklyPlanRepo.findOne({ where: { user: { id: userId } as any, status: 'active' } }))?.id;
+    if (targetPlanId) {
+      return this.getForPlan(targetPlanId, userId);
+    }
+    return this.getActive(userId);
+  }
+
+  async updatePrice(
+    userId: string,
+    ingredientId: string,
+    pricePaid: number,
+    quantity: number,
+    unit: string,
+    planId?: string,
+  ) {
+    const perUnit = quantity > 0 ? pricePaid / quantity : null;
+    if (!perUnit) {
+      throw new Error('quantity must be greater than zero');
+    }
+    const existing = await this.priceRepo.findOne({
+      where: { user: { id: userId } as any, ingredient: { id: ingredientId } as any },
+    });
+    if (existing) {
+      existing.price_per_unit_gbp = perUnit;
+      await this.priceRepo.save(existing);
+    } else {
+      await this.priceRepo.save({
+        user: { id: userId } as any,
+        ingredient: { id: ingredientId } as any,
+        price_per_unit_gbp: perUnit,
+      });
+    }
+    let targetPlanId = planId;
+    if (!targetPlanId) {
+      const plan = await this.weeklyPlanRepo.findOne({ where: { user: { id: userId } as any, status: 'active' } });
+      targetPlanId = plan?.id;
+    }
+    if (targetPlanId) {
+      await this.rebuildForPlan(targetPlanId);
+      return this.getForPlan(targetPlanId, userId);
+    }
+    return this.getActive(userId);
+  }
 }

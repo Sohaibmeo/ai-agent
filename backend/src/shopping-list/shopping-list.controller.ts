@@ -2,6 +2,8 @@ import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { ShoppingListService } from './shopping-list.service';
 import { ActiveListDto } from './dto/active-list.dto';
 import { UserIdParamDto } from './dto/user-id-param.dto';
+import { UpdatePantryDto } from './dto/update-pantry.dto';
+import { UpdatePriceDto } from './dto/update-price.dto';
 
 @Controller('shopping-list')
 export class ShoppingListController {
@@ -15,5 +17,15 @@ export class ShoppingListController {
   @Get('active/:userId')
   getActiveByUser(@Param() params: UserIdParamDto) {
     return this.shoppingListService.getActive(params.userId);
+  }
+
+  @Post('pantry')
+  async updatePantry(@Body() body: UpdatePantryDto) {
+    return this.shoppingListService.updatePantry(body.userId, body.ingredientId, body.hasItem, body.planId);
+  }
+
+  @Post('price')
+  async updatePrice(@Body() body: UpdatePriceDto) {
+    return this.shoppingListService.updatePrice(body.userId, body.ingredientId, body.pricePaid, body.quantity, body.unit, body.planId);
   }
 }

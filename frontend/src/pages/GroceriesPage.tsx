@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { UpdatePriceModal } from '../components/groceries/UpdatePriceModal';
 import type { ShoppingListItem } from '../api/types';
 import { notify } from '../lib/toast';
+import { updatePantry, updatePrice } from '../api/shoppingList';
 
 export function GroceriesPage() {
   const { data: list, isLoading } = useActiveShoppingList(DEMO_USER_ID);
@@ -19,11 +20,21 @@ export function GroceriesPage() {
   }, [list]);
 
   const toggleItem = (id: string) => {
-    setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, has_item: !item.has_item } : item)),
-    );
-    notify.info('Pantry status updated');
-    // TODO: wire to pantry toggle endpoint for persistence
+    const target = items.find((i) => i.id === id);
+    if (!target) return;
+    const next = !target.has_item;
+    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, has_item: next } : item)));
+    updatePantry({
+      userId: DEMO_USER_ID,
+      ingredientId: target.ingredient.id,
+      hasItem: next,
+      planId: list?.weekly_plan_id,
+    })
+      .then((res) => {
+        setItems(res.items || []);
+        notify.success('Pantry status updated');
+      })
+      .catch(() => notify.error('Could not update pantry'));
   };
 
   return (
@@ -116,21 +127,20 @@ export function GroceriesPage() {
         item={priceTarget || undefined}
         onClose={() => setPriceTarget(null)}
         onSave={(payload) => {
-          // TODO: wire API to persist override; for now just close and adjust local
-          setItems((prev) =>
-            prev.map((it) =>
-              it.id === payload.itemId
-                ? {
-                    ...it,
-                    estimated_cost_gbp: payload.pricePaid,
-                    total_quantity: payload.quantity,
-                    unit: payload.unit,
-                  }
-                : it,
-            ),
-          );
-          notify.success('Price saved');
-          setPriceTarget(null);
+          updatePrice({
+            userId: DEMO_USER_ID,
+            ingredientId: priceTarget?.ingredient.id || '',
+            pricePaid: payload.pricePaid,
+            quantity: payload.quantity,
+            unit: payload.unit,
+            planId: list?.weekly_plan_id,
+          })
+            .then((res) => {
+              setItems(res.items || []);
+              notify.success('Price saved');
+            })
+            .catch(() => notify.error('Could not save price'))
+            .finally(() => setPriceTarget(null));
         }}
       />
     </div>

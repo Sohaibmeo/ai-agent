@@ -75,3 +75,19 @@ export interface ShoppingList {
   weekly_plan_id: string;
   items: ShoppingListItem[];
 }
+
+export interface UpdatePantryPayload {
+  userId: string;
+  ingredientId: string;
+  hasItem: boolean;
+  planId?: string;
+}
+
+export interface UpdatePricePayload {
+  userId: string;
+  ingredientId: string;
+  pricePaid: number;
+  quantity: number;
+  unit: string;
+  planId?: string;
+}
