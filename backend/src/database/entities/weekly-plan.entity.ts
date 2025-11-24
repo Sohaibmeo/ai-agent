@@ -23,6 +23,15 @@ export class WeeklyPlan {
   @Column({ type: 'numeric', nullable: true })
   total_kcal?: number;
 
+  @Column({ type: 'numeric', nullable: true })
+  total_protein?: number;
+
+  @Column({ type: 'numeric', nullable: true })
+  total_carbs?: number;
+
+  @Column({ type: 'numeric', nullable: true })
+  total_fat?: number;
+
   @OneToMany(() => PlanDay, (day) => day.weeklyPlan)
   days!: PlanDay[];
 }

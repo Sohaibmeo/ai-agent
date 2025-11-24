@@ -24,6 +24,12 @@ export class PlanDay {
   daily_protein?: number;
 
   @Column({ type: 'numeric', nullable: true })
+  daily_carbs?: number;
+
+  @Column({ type: 'numeric', nullable: true })
+  daily_fat?: number;
+
+  @Column({ type: 'numeric', nullable: true })
   daily_cost_gbp?: number;
 
   @OneToMany(() => PlanMeal, (meal) => meal.planDay)

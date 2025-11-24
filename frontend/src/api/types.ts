@@ -57,6 +57,8 @@ export interface WeeklyPlan {
   total_estimated_cost_gbp?: number | null;
   total_kcal?: number | null;
   total_protein?: number | null;
+  total_carbs?: number | null;
+  total_fat?: number | null;
   days: PlanDay[];
 }
 

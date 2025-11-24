@@ -258,23 +258,41 @@ export class PlansService {
 
     let weeklyKcal = 0;
     let weeklyCost = 0;
+    let weeklyProtein = 0;
+    let weeklyCarbs = 0;
+    let weeklyFat = 0;
 
     for (const d of plan.days) {
       let dayKcal = 0;
       let dayCost = 0;
+      let dayProtein = 0;
+      let dayCarbs = 0;
+      let dayFat = 0;
       for (const m of d.meals || []) {
         dayKcal += Number(m.meal_kcal || 0);
         dayCost += Number(m.meal_cost_gbp || 0);
+        dayProtein += Number(m.meal_protein || 0);
+        dayCarbs += Number(m.meal_carbs || 0);
+        dayFat += Number(m.meal_fat || 0);
       }
       d.daily_kcal = dayKcal;
       d.daily_cost_gbp = dayCost;
+      d.daily_protein = dayProtein;
+      d.daily_carbs = dayCarbs;
+      d.daily_fat = dayFat;
       weeklyKcal += dayKcal;
       weeklyCost += dayCost;
+      weeklyProtein += dayProtein;
+      weeklyCarbs += dayCarbs;
+      weeklyFat += dayFat;
       await this.planDayRepo.save(d);
     }
 
     plan.total_kcal = weeklyKcal;
     plan.total_estimated_cost_gbp = weeklyCost;
+    plan.total_protein = weeklyProtein;
+    plan.total_carbs = weeklyCarbs;
+    plan.total_fat = weeklyFat;
     await this.weeklyPlanRepo.save(plan);
   }
 
