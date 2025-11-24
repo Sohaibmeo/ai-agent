@@ -1,3 +1,5 @@
+import { Card } from '../components/shared/Card';
+
 const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const mealSlots = ['Breakfast', 'Snack', 'Lunch', 'Dinner'];
 
@@ -19,8 +21,8 @@ export function PlansPage() {
         </div>
       </div>
 
-      <section className="card p-4 space-y-2">
-        <div className="flex flex-wrap items-center gap-4 text-sm text-slate-700">
+      <Card>
+        <div className="flex flex-wrap items-center gap-6 text-sm text-slate-700">
           <div>
             <div className="text-xs uppercase text-slate-500">Week start</div>
             <div className="font-semibold text-slate-900">2025-11-24</div>
@@ -33,12 +35,18 @@ export function PlansPage() {
             <div className="text-xs uppercase text-slate-500">Est. cost</div>
             <div className="font-semibold text-slate-900">£38.50</div>
           </div>
+          <div>
+            <div className="text-xs uppercase text-slate-500">Plan status</div>
+            <div className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
+              Active
+            </div>
+          </div>
         </div>
-      </section>
+      </Card>
 
       <div className="grid grid-cols-1 gap-4">
         {days.map((day) => (
-          <section key={day} className="card p-4 space-y-3">
+          <Card key={day}>
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-slate-900">{day}</h2>
               <span className="text-xs text-slate-500">~2000 kcal · £5.50</span>
@@ -63,7 +71,7 @@ export function PlansPage() {
                 </article>
               ))}
             </div>
-          </section>
+          </Card>
         ))}
       </div>
     </div>

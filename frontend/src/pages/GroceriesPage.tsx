@@ -1,3 +1,5 @@
+import { Card } from '../components/shared/Card';
+
 const sampleItems = [
   { name: 'Chicken Breast', quantity: '500 g', cost: '£4.00' },
   { name: 'Oats', quantity: '1 kg', cost: '£1.50' },
@@ -15,7 +17,7 @@ export function GroceriesPage() {
         <div className="text-xs text-slate-500">Week of 2025-11-24</div>
       </div>
 
-      <section className="card p-4">
+      <Card>
         <div className="grid grid-cols-1 gap-3">
           {sampleItems.map((item) => (
             <div
@@ -38,7 +40,7 @@ export function GroceriesPage() {
             </div>
           ))}
         </div>
-      </section>
+      </Card>
     </div>
   );
 }
