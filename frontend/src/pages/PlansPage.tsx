@@ -196,7 +196,7 @@ export function PlansPage() {
                 className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
                 onClick={() =>
                   plan.id &&
-                  setPlanStatus(plan.id, 'archived').then(() => {
+                  setPlanStatus(plan.id, 'draft').then(() => {
                     notify.success('Plan stored as draft');
                     queryClient.invalidateQueries({ queryKey: ['plans', 'all'] });
                   })
