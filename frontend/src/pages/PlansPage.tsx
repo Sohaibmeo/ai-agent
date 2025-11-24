@@ -1,16 +1,44 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Card } from '../components/shared/Card';
 import { useActivePlan } from '../hooks/usePlan';
 import { DEMO_USER_ID } from '../lib/config';
+import { SwapDialog } from '../components/plans/SwapDialog';
+import { setMealRecipe, fetchActivePlan } from '../api/plans';
+import { useQueryClient } from '@tanstack/react-query';
 
 const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 export function PlansPage() {
+  const queryClient = useQueryClient();
   const { data: plan, isLoading, generatePlan, isGenerating } = useActivePlan(DEMO_USER_ID);
   const days = useMemo(() => plan?.days || [], [plan]);
+  const [swapMealId, setSwapMealId] = useState<string | null>(null);
+  const [swapMealSlot, setSwapMealSlot] = useState<string | undefined>(undefined);
 
   const formatCurrency = (val?: number | null) => (val || val === 0 ? `£${Number(val).toFixed(2)}` : '—');
   const formatKcal = (val?: number | null) => (val || val === 0 ? `${Math.round(Number(val))} kcal` : '—');
+
+  const openSwap = (mealId: string, slot?: string) => {
+    setSwapMealId(mealId);
+    setSwapMealSlot(slot);
+  };
+
+  const closeSwap = () => {
+    setSwapMealId(null);
+    setSwapMealSlot(undefined);
+  };
+
+  const handleSwapSelect = async (recipeId: string) => {
+    if (!swapMealId) return;
+    await setMealRecipe({ planMealId: swapMealId, newRecipeId: recipeId });
+    closeSwap();
+    // Refresh active plan without regenerating
+    queryClient.invalidateQueries({ queryKey: ['plan', 'active', DEMO_USER_ID] });
+    await queryClient.fetchQuery({
+      queryKey: ['plan', 'active', DEMO_USER_ID],
+      queryFn: () => fetchActivePlan(DEMO_USER_ID),
+    });
+  };
 
   return (
     <div className="p-6 space-y-4">
@@ -84,7 +112,10 @@ export function PlansPage() {
                       {formatCurrency(meal.meal_cost_gbp)}
                     </div>
                     <div className="mt-3 flex items-center gap-2">
-                      <button className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100">
+                      <button
+                        className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
+                        onClick={() => openSwap(meal.id, meal.meal_slot)}
+                      >
                         Swap
                       </button>
                       <button className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100">
@@ -97,6 +128,7 @@ export function PlansPage() {
             </Card>
           ))}
       </div>
+      <SwapDialog open={Boolean(swapMealId)} mealSlot={swapMealSlot} onClose={closeSwap} onSelect={handleSwapSelect} />
     </div>
   );
 }
