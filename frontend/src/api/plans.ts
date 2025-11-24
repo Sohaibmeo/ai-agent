@@ -24,3 +24,7 @@ export function setMealRecipe(body: { planMealId: string; newRecipeId: string })
 export function activatePlan(planId: string) {
   return apiClient.post<WeeklyPlan>('/plans/activate', { planId });
 }
+
+export function setPlanStatus(planId: string, status: 'systemdraft' | 'draft' | 'active' | 'archived') {
+  return apiClient.post<WeeklyPlan>('/plans/status', { planId, status });
+}

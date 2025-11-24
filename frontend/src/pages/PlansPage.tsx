@@ -7,7 +7,7 @@ import { useActivePlan } from '../hooks/usePlan';
 import { usePlansList } from '../hooks/usePlansList';
 import { DEMO_USER_ID } from '../lib/config';
 import { SwapDialog } from '../components/plans/SwapDialog';
-import { activatePlan, fetchActivePlan, setMealRecipe } from '../api/plans';
+import { activatePlan, fetchActivePlan, setMealRecipe, setPlanStatus } from '../api/plans';
 import { notify } from '../lib/toast';
 
 const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -39,6 +39,11 @@ export function PlansPage() {
   };
 
   const totalMeals = useMemo(() => days.reduce((acc, d) => acc + (d.meals?.length || 0), 0), [days]);
+  const sortedPlans = useMemo(() => {
+    if (!plansList) return [];
+    return [...plansList].sort((a, b) => (a.week_start_date > b.week_start_date ? -1 : 1));
+  }, [plansList]);
+
   const avgKcal = plan && days.length ? (plan.total_kcal ? Math.round(Number(plan.total_kcal) / days.length) : null) : null;
   const avgProtein = plan && days.length ? (plan.total_protein ? Math.round(Number(plan.total_protein) / days.length) : null) : null;
 
@@ -185,14 +190,30 @@ export function PlansPage() {
           </button>
         </div>
         {plan && plan.status !== 'active' && (
-          <button
-            className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-            onClick={markAsActive}
-            disabled={isActivating}
-            title="Mark this plan as active"
-          >
-            {isActivating ? 'Activating...' : 'Mark as active'}
-          </button>
+          <div className="flex items-center gap-2">
+            {plan.status !== 'archived' && (
+              <button
+                className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+                onClick={() =>
+                  plan.id &&
+                  setPlanStatus(plan.id, 'archived').then(() => {
+                    notify.success('Plan stored as draft');
+                    queryClient.invalidateQueries({ queryKey: ['plans', 'all'] });
+                  })
+                }
+              >
+                Store draft
+              </button>
+            )}
+            <button
+              className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+              onClick={markAsActive}
+              disabled={isActivating}
+              title="Mark this plan as active"
+            >
+              {isActivating ? 'Activating...' : 'Mark as active'}
+            </button>
+          </div>
         )}
       </div>
 
@@ -330,8 +351,8 @@ export function PlansPage() {
             </button>
           </div>
           <div className="mt-3 space-y-2 text-sm">
-            {plansList?.length
-              ? plansList.map((p) => (
+            {sortedPlans?.length
+              ? sortedPlans.map((p) => (
                   <div
                     key={p.id}
                     className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2"
@@ -340,19 +361,35 @@ export function PlansPage() {
                       <span className="font-semibold text-slate-900">{p.week_start_date}</span>
                       <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] text-slate-600">{p.status}</span>
                     </div>
-                    {p.status !== 'active' && (
-                      <button
-                        className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                        onClick={() =>
-                          activatePlan(p.id).then(() => {
-                            notify.success('Plan activated from history');
-                            queryClient.invalidateQueries({ queryKey: ['plan', 'active', DEMO_USER_ID] });
-                          })
-                        }
-                      >
-                        Activate
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {p.status !== 'active' && (
+                        <>
+                          <button
+                            className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                            onClick={() =>
+                              activatePlan(p.id).then(() => {
+                                notify.success('Plan activated from history');
+                                queryClient.invalidateQueries({ queryKey: ['plan', 'active', DEMO_USER_ID] });
+                              })
+                            }
+                          >
+                            Activate
+                          </button>
+                          <button
+                            className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
+                            onClick={() =>
+                              setPlanStatus(p.id, 'systemdraft').then(() => {
+                                notify.success('Plan removed from history');
+                                queryClient.invalidateQueries({ queryKey: ['plans', 'all'] });
+                              })
+                            }
+                            title="Remove plan"
+                          >
+                            🗑
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 ))
               : 'No past plans yet.'}

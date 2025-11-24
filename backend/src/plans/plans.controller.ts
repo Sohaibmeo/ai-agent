@@ -5,6 +5,7 @@ import { SetMealRecipeDto } from './dto/set-meal-recipe.dto';
 import { ActivatePlanDto } from './dto/set-plan-status.dto';
 import { UserIdParamDto } from './dto/user-id-param.dto';
 import { PlanActionDto } from './dto/plan-action.dto';
+import { SetPlanStatusDto } from './dto/set-plan-status.dto';
 
 @Controller('plans')
 export class PlansController {
@@ -34,6 +35,11 @@ export class PlansController {
   @Post('activate')
   activate(@Body() body: ActivatePlanDto) {
     return this.plansService.setStatus(body.planId, 'active');
+  }
+
+  @Post('status')
+  setStatus(@Body() body: SetPlanStatusDto) {
+    return this.plansService.setStatus(body.planId, body.status);
   }
 
   @Get(':id')

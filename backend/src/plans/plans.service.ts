@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Not } from 'typeorm';
 import { PlanDay, PlanMeal, WeeklyPlan } from '../database/entities';
 import { RecipesService } from '../recipes/recipes.service';
 import { UsersService } from '../users/users.service';
@@ -33,7 +33,11 @@ export class PlansService {
   ) {}
 
   findAll() {
-    return this.weeklyPlanRepo.find({ relations: ['days', 'days.meals'] });
+    return this.weeklyPlanRepo.find({
+      where: { status: Not('systemdraft') },
+      order: { week_start_date: 'DESC' },
+      relations: ['days', 'days.meals'],
+    });
   }
 
   findById(id: string) {
@@ -135,7 +139,7 @@ export class PlansService {
     const plan = this.weeklyPlanRepo.create({
       user: { id: userId } as any,
       week_start_date: weekStartDate,
-      status: 'draft',
+      status: 'systemdraft',
     });
     const savedPlan = await this.weeklyPlanRepo.save(plan);
     this.logger.log(`plan persisted id=${savedPlan.id} user=${userId}`);
@@ -297,7 +301,7 @@ export class PlansService {
   }
 
   generateDraft() {
-    return { id: 'draft_plan_id', status: 'draft' };
+    return { id: 'draft_plan_id', status: 'systemdraft' };
   }
 
   private async buildCandidatesPayload(userId: string, mealSlots: string[], maxDifficulty: string) {
