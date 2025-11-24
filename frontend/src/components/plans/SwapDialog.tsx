@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRecipeCandidates } from '../../hooks/useRecipeCandidates';
 import { DEMO_USER_ID } from '../../lib/config';
 
@@ -11,43 +11,157 @@ interface SwapDialogProps {
 
 export function SwapDialog({ open, mealSlot, onClose, onSelect }: SwapDialogProps) {
   const { data: candidates, isLoading, refetch } = useRecipeCandidates(mealSlot, DEMO_USER_ID);
+  const [search, setSearch] = useState('');
+  const [autoMode, setAutoMode] = useState<'prompt' | 'question' | null>(null);
+  const [autoNote, setAutoNote] = useState('');
+
+  const filtered = useMemo(() => {
+    const list = candidates || [];
+    const q = search.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((c) => c.name.toLowerCase().includes(q));
+  }, [candidates, search]);
 
   useEffect(() => {
     if (open && mealSlot) {
       refetch();
+      setSearch('');
+      setAutoMode(null);
+      setAutoNote('');
     }
   }, [open, mealSlot, refetch]);
 
   if (!open) return null;
 
+  const autoPick = () => {
+    const choice = filtered[0] || candidates?.[0];
+    if (choice) {
+      onSelect(choice.id);
+      onClose();
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 px-4">
-      <div className="w-full max-w-xl rounded-2xl bg-white p-4 shadow-card">
-        <div className="mb-3 flex items-center justify-between">
+      <div className="w-full max-w-3xl rounded-2xl bg-white p-5 shadow-2xl">
+        <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <div className="text-sm font-semibold text-slate-900">Swap meal</div>
-            <div className="text-xs text-slate-500">Slot: {mealSlot || '—'}</div>
+            <div className="text-lg font-semibold text-slate-900">Swap Meal</div>
+            <div className="text-sm text-slate-500">{mealSlot ? `${mealSlot} on this day` : 'Choose a replacement'}</div>
           </div>
-          <button onClick={onClose} className="text-xs text-slate-500 hover:text-slate-700">
-            Close
+          <button onClick={onClose} className="text-sm text-slate-500 hover:text-slate-700">
+            ✕
           </button>
         </div>
-        <div className="space-y-2">
-          {isLoading && <div className="text-sm text-slate-500">Loading candidates...</div>}
-          {!isLoading &&
-            (candidates || []).map((c) => (
+
+        <div className="mb-3">
+          <button
+            className="flex w-full items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+            onClick={() => {
+              setAutoMode(autoMode ? null : 'question');
+              setAutoNote('');
+            }}
+          >
+            🤖 Auto decide for me
+          </button>
+        </div>
+
+        {autoMode === 'question' && (
+          <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-sm font-semibold text-slate-800">Would you like to describe the change?</div>
+            <div className="mt-3 flex flex-wrap gap-3">
               <button
-                key={c.id}
-                onClick={() => onSelect(c.id)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                onClick={autoPick}
               >
-                <div className="font-semibold text-slate-900">{c.name}</div>
-                <div className="text-xs text-slate-500">{c.meal_slot}</div>
+                No, just pick for me
               </button>
-            ))}
-          {!isLoading && candidates?.length === 0 && (
-            <div className="text-sm text-slate-500">No candidates found.</div>
-          )}
+              <button
+                className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm hover:shadow"
+                onClick={() => setAutoMode('prompt')}
+              >
+                Yes, I’ll describe it
+              </button>
+            </div>
+          </div>
+        )}
+
+        {autoMode === 'prompt' && (
+          <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
+            <div className="text-sm font-semibold text-slate-800">What would you like changed?</div>
+            <textarea
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-200"
+              rows={3}
+              placeholder="e.g., higher protein, avoid dairy, lower cost..."
+              value={autoNote}
+              onChange={(e) => setAutoNote(e.target.value)}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                onClick={() => {
+                  setAutoMode('question');
+                  setAutoNote('');
+                }}
+              >
+                Back
+              </button>
+              <button
+                className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"
+                onClick={autoPick}
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        )}
+
+        {autoMode === null && (
+          <div className="mb-3">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search recipes..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-200"
+              />
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
+            </div>
+          </div>
+        )}
+
+        {autoMode === null && (
+          <div className="max-h-[420px] space-y-2 overflow-y-auto">
+            {isLoading && <div className="text-sm text-slate-500 px-1">Loading candidates...</div>}
+            {!isLoading &&
+              filtered.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => onSelect(c.id)}
+                  className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+                >
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">{c.name}</div>
+                    <div className="mt-1 text-xs text-slate-500">Slot: {c.meal_slot}</div>
+                    <div className="mt-1 text-[11px] text-slate-500">P: — · C: — · F: —</div>
+                  </div>
+                  <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">£—</span>
+                </button>
+              ))}
+            {!isLoading && filtered.length === 0 && (
+              <div className="px-1 text-sm text-slate-500">No candidates found.</div>
+            )}
+          </div>
+        )}
+
+        <div className="mt-4 flex justify-end">
+          <button
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
+            onClick={onClose}
+          >
+            Cancel
+          </button>
         </div>
       </div>
     </div>
