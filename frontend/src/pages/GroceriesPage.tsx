@@ -45,6 +45,21 @@ export function GroceriesPage() {
       .catch(() => notify.error('Could not update pantry'));
   };
 
+  const copyList = async () => {
+    const header = 'Ingredient,Quantity,Unit,Estimated Cost (GBP),Have\n';
+    const lines = items.map((i) => {
+      const cost = i.estimated_cost_gbp ? Number(i.estimated_cost_gbp).toFixed(2) : '';
+      return `"${i.ingredient?.name || ''}",${i.total_quantity},${i.unit},${cost},${i.has_item ? 'yes' : 'no'}`;
+    });
+    const csv = header + lines.join('\n');
+    try {
+      await navigator.clipboard.writeText(csv);
+      notify.success('Shopping list copied');
+    } catch {
+      notify.error('Could not copy list');
+    }
+  };
+
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
@@ -65,6 +80,15 @@ export function GroceriesPage() {
           <span className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
             Estimated total £{estimatedTotal.toFixed(2)}
           </span>
+          {items.length > 0 && (
+            <button
+              className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+              onClick={copyList}
+              title="Copy shopping list (CSV)"
+            >
+              📋 Copy list
+            </button>
+          )}
         </div>
       </div>
 
