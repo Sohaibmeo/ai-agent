@@ -1,4 +1,5 @@
 import { Routes, Route } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
 import { AppShell } from './components/layout/AppShell';
 import { Sidebar } from './components/layout/Sidebar';
 import { ProfilePage } from './pages/ProfilePage';
@@ -17,6 +18,7 @@ function App() {
           <Route path="/groceries" element={<GroceriesPage />} />
         </Routes>
       </AppShell>
+      <Toaster position="top-right" toastOptions={{ className: 'text-sm' }} />
     </div>
   );
 }

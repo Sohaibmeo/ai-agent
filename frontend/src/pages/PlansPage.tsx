@@ -7,6 +7,7 @@ import { useActivePlan } from '../hooks/usePlan';
 import { DEMO_USER_ID } from '../lib/config';
 import { SwapDialog } from '../components/plans/SwapDialog';
 import { activatePlan, fetchActivePlan, setMealRecipe } from '../api/plans';
+import { notify } from '../lib/toast';
 
 const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const pillClass = 'rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 border border-slate-200';
@@ -55,13 +56,18 @@ export function PlansPage() {
 
   const handleSwapSelect = async (recipeId: string) => {
     if (!swapMealId) return;
-    await setMealRecipe({ planMealId: swapMealId, newRecipeId: recipeId });
-    closeSwap();
-    queryClient.invalidateQueries({ queryKey: ['plan', 'active', DEMO_USER_ID] });
-    await queryClient.fetchQuery({
-      queryKey: ['plan', 'active', DEMO_USER_ID],
-      queryFn: () => fetchActivePlan(DEMO_USER_ID),
-    });
+    try {
+      await setMealRecipe({ planMealId: swapMealId, newRecipeId: recipeId });
+      notify.success('Meal swapped');
+      closeSwap();
+      queryClient.invalidateQueries({ queryKey: ['plan', 'active', DEMO_USER_ID] });
+      await queryClient.fetchQuery({
+        queryKey: ['plan', 'active', DEMO_USER_ID],
+        queryFn: () => fetchActivePlan(DEMO_USER_ID),
+      });
+    } catch (e) {
+      notify.error('Could not swap meal');
+    }
   };
 
   const toggleDay = (id: string) => {
@@ -73,6 +79,7 @@ export function PlansPage() {
     try {
       setIsActivating(true);
       await activatePlan(plan.id);
+      notify.success('Plan marked as active');
       await queryClient.invalidateQueries({ queryKey: ['plan', 'active', DEMO_USER_ID] });
       await queryClient.fetchQuery({
         queryKey: ['plan', 'active', DEMO_USER_ID],

@@ -6,6 +6,7 @@ import { Skeleton } from '../components/shared/Skeleton';
 import { useNavigate } from 'react-router-dom';
 import { UpdatePriceModal } from '../components/groceries/UpdatePriceModal';
 import type { ShoppingListItem } from '../api/types';
+import { notify } from '../lib/toast';
 
 export function GroceriesPage() {
   const { data: list, isLoading } = useActiveShoppingList(DEMO_USER_ID);
@@ -21,6 +22,7 @@ export function GroceriesPage() {
     setItems((prev) =>
       prev.map((item) => (item.id === id ? { ...item, has_item: !item.has_item } : item)),
     );
+    notify.info('Pantry status updated');
     // TODO: wire to pantry toggle endpoint for persistence
   };
 
@@ -127,6 +129,7 @@ export function GroceriesPage() {
                 : it,
             ),
           );
+          notify.success('Price saved');
           setPriceTarget(null);
         }}
       />
