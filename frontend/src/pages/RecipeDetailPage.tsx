@@ -55,12 +55,14 @@ export function RecipeDetailPage() {
     setDirty(true);
   };
 
-  const handleSwap = (replacementName: string) => {
+  const handleSwap = (replacementName: string, amountFromModal: number) => {
     if (!swapTarget) return;
     if (addMode) {
-      setIngredients((prev) => [...prev, { id: `ing-${Date.now()}`, name: replacementName, amount: 100, unit: 'g' }]);
+      setIngredients((prev) => [...prev, { id: `ing-${Date.now()}`, name: replacementName, amount: amountFromModal || 100, unit: 'g' }]);
     } else {
-      setIngredients((prev) => prev.map((ing) => (ing.id === swapTarget.id ? { ...ing, name: replacementName } : ing)));
+      setIngredients((prev) =>
+        prev.map((ing) => (ing.id === swapTarget.id ? { ...ing, name: replacementName, amount: amountFromModal || ing.amount } : ing)),
+      );
     }
     setSwapTarget(null);
     setAddMode(false);
@@ -225,6 +227,7 @@ export function RecipeDetailPage() {
           setSwapTarget(null);
           setAddMode(false);
         }}
+        mode={addMode ? 'add' : 'replace'}
       />
     </div>
   );
