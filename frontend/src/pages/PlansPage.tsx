@@ -86,6 +86,9 @@ export function PlansPage() {
         queryFn: () => fetchActivePlan(DEMO_USER_ID),
       });
       await queryClient.invalidateQueries({ queryKey: ['shopping-list', 'active', DEMO_USER_ID] });
+      notify.success('Groceries updated for active plan');
+    } catch (e) {
+      notify.error('Could not mark plan as active');
     } finally {
       setIsActivating(false);
     }
@@ -107,6 +110,7 @@ export function PlansPage() {
             disabled={isGenerating}
             onClick={async () => {
               try {
+                notify.info('Generating plan...');
                 await generatePlan({ useAgent: false });
                 notify.success('New plan generated');
               } catch (e) {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card } from '../components/shared/Card';
 import { useActiveShoppingList } from '../hooks/useShoppingList';
 import { DEMO_USER_ID } from '../lib/config';
@@ -8,9 +8,11 @@ import { UpdatePriceModal } from '../components/groceries/UpdatePriceModal';
 import type { ShoppingListItem } from '../api/types';
 import { notify } from '../lib/toast';
 import { updatePantry, updatePrice } from '../api/shoppingList';
+import { useActivePlan } from '../hooks/usePlan';
 
 export function GroceriesPage() {
   const { data: list, isLoading } = useActiveShoppingList(DEMO_USER_ID);
+  const { data: plan } = useActivePlan(DEMO_USER_ID);
   const navigate = useNavigate();
   const [items, setItems] = useState(list?.items || []);
   const [priceTarget, setPriceTarget] = useState<ShoppingListItem | null>(null);
@@ -18,6 +20,12 @@ export function GroceriesPage() {
   useEffect(() => {
     setItems(list?.items || []);
   }, [list]);
+
+  const estimatedTotal = useMemo(() => {
+    return items
+      .filter((i) => !i.has_item)
+      .reduce((sum, i) => sum + (i.estimated_cost_gbp ? Number(i.estimated_cost_gbp) : 0), 0);
+  }, [items]);
 
   const toggleItem = (id: string) => {
     const target = items.find((i) => i.id === id);
@@ -44,7 +52,20 @@ export function GroceriesPage() {
           <h1 className="text-2xl font-semibold text-slate-900">Groceries</h1>
           <p className="text-sm text-slate-600">Shopping list for the current plan.</p>
         </div>
-        <div className="text-xs text-slate-500">Plan: {list?.weekly_plan_id || '—'}</div>
+        <div className="flex items-center gap-2 text-xs text-slate-700">
+          {plan?.week_start_date && (
+            <button
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+              onClick={() => navigate('/plans')}
+              title="View plans"
+            >
+              Week of {plan.week_start_date}
+            </button>
+          )}
+          <span className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
+            Estimated total £{estimatedTotal.toFixed(2)}
+          </span>
+        </div>
       </div>
 
       <Card className="p-0">
