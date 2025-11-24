@@ -3,12 +3,34 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Card } from '../components/shared/Card';
 import { useActivePlan } from '../hooks/usePlan';
 import { DEMO_USER_ID } from '../lib/config';
+import { IngredientSwapModal } from '../components/recipes/IngredientSwapModal';
+
+type IngredientRow = {
+  id: string;
+  name: string;
+  amount: number;
+  unit: string;
+};
+
+const defaultIngredients: IngredientRow[] = [
+  { id: 'ing-1', name: 'Chicken breast', amount: 200, unit: 'g' },
+  { id: 'ing-2', name: 'Romaine lettuce', amount: 150, unit: 'g' },
+  { id: 'ing-3', name: 'Parmesan cheese', amount: 30, unit: 'g' },
+  { id: 'ing-4', name: 'Caesar dressing', amount: 2, unit: 'tbsp' },
+  { id: 'ing-5', name: 'Croutons', amount: 25, unit: 'g' },
+  { id: 'ing-6', name: 'Olive oil', amount: 1, unit: 'tbsp' },
+  { id: 'ing-7', name: 'Lemon juice', amount: 1, unit: 'tsp' },
+  { id: 'ing-8', name: 'Black pepper', amount: 1, unit: 'pinch' },
+];
 
 export function RecipeDetailPage() {
   const { mealId } = useParams<{ mealId: string }>();
   const navigate = useNavigate();
   const { data: plan, isLoading } = useActivePlan(DEMO_USER_ID);
   const [aiNote, setAiNote] = useState('');
+  const [ingredients, setIngredients] = useState<IngredientRow[]>(defaultIngredients);
+  const [swapTarget, setSwapTarget] = useState<IngredientRow | null>(null);
+  const [dirty, setDirty] = useState(false);
 
   const meal = useMemo(() => {
     if (!plan || !mealId) return undefined;
@@ -26,6 +48,23 @@ export function RecipeDetailPage() {
   const macrosLine = recipe
     ? `P: ${fmt(m?.meal_protein ?? recipe.base_protein, 'g')} · C: ${fmt(m?.meal_carbs ?? recipe.base_carbs, 'g')} · F: ${fmt(m?.meal_fat ?? recipe.base_fat, 'g')}`
     : 'P: — · C: — · F: —';
+
+  const handleAmountChange = (id: string, value: number) => {
+    setIngredients((prev) => prev.map((ing) => (ing.id === id ? { ...ing, amount: value } : ing)));
+    setDirty(true);
+  };
+
+  const handleSwap = (replacementName: string) => {
+    if (!swapTarget) return;
+    setIngredients((prev) => prev.map((ing) => (ing.id === swapTarget.id ? { ...ing, name: replacementName } : ing)));
+    setSwapTarget(null);
+    setDirty(true);
+  };
+
+  const handleSave = () => {
+    // Hook up to backend when recipe update endpoint is ready
+    setDirty(false);
+  };
 
   return (
     <div className="min-h-screen p-6 space-y-4">
@@ -55,13 +94,21 @@ export function RecipeDetailPage() {
           rows={4}
           placeholder="Make it lower calories; swap chicken for a halal alternative; remove dairy..."
           value={aiNote}
-          onChange={(e) => setAiNote(e.target.value)}
+          onChange={(e) => {
+            setAiNote(e.target.value);
+            setDirty(true);
+          }}
         />
         <div className="mt-1 text-[11px] text-slate-500">AI will use this along with your profile defaults.</div>
         <div className="mt-3 flex justify-end gap-2">
           <button
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
-            onClick={() => setAiNote('')}
+            onClick={() => {
+              setAiNote('');
+              const hasIngredientChanges =
+                JSON.stringify(ingredients) !== JSON.stringify(defaultIngredients);
+              setDirty(hasIngredientChanges);
+            }}
           >
             Cancel
           </button>
@@ -74,27 +121,30 @@ export function RecipeDetailPage() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card title="Ingredients" subtitle={macrosLine}>
           <ul className="space-y-2 text-sm text-slate-800">
-            {[
-              'Chicken breast • 200 g',
-              'Romaine lettuce • 150 g',
-              'Parmesan cheese • 30 g',
-              'Caesar dressing • 2 tbsp',
-              'Croutons • 25 g',
-              'Olive oil • 1 tbsp',
-              'Lemon juice • 1 tsp',
-              'Black pepper • 1 pinch',
-            ].map((row, idx) => {
-              const [name, qty] = row.split('•').map((s) => s.trim());
-              return (
-                <li
-                  key={row}
-                  className="flex items-center justify-between rounded-xl px-4 py-3 bg-white hover:bg-slate-50 transition"
-                >
-                  <span>{name}</span>
-                  <span className="text-slate-500">{qty}</span>
-                </li>
-              );
-            })}
+            {ingredients.map((ing) => (
+              <li
+                key={ing.id}
+                className="flex items-center justify-between gap-3 rounded-xl px-4 py-3 bg-white hover:bg-slate-50 transition"
+                onClick={() => setSwapTarget(ing)}
+              >
+                <div className="flex-1">
+                  <div className="font-medium text-slate-900">{ing.name}</div>
+                  <div className="text-[11px] text-slate-500">Click to replace</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.5"
+                    value={ing.amount}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => handleAmountChange(ing.id, Number(e.target.value))}
+                    className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-right text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-200"
+                  />
+                  <span className="text-slate-500 whitespace-nowrap">{ing.unit}</span>
+                </div>
+              </li>
+            ))}
             <li className="text-xs text-slate-500">Ingredient details would be loaded from the recipe API.</li>
           </ul>
         </Card>
@@ -110,6 +160,38 @@ export function RecipeDetailPage() {
 
       {isLoading && <div className="text-sm text-slate-500">Loading meal details...</div>}
       {!isLoading && !meal && <div className="text-sm text-slate-500">Meal not found in the active plan.</div>}
+
+      {dirty && (
+        <div className="sticky bottom-4 left-0 right-0 flex justify-end">
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-lg">
+            <span className="text-sm text-slate-600">You have unsaved changes</span>
+            <button
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+              onClick={() => {
+                setIngredients(defaultIngredients);
+                setDirty(aiNote.trim().length > 0);
+              }}
+            >
+              Reset
+            </button>
+            <button
+              className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"
+              onClick={handleSave}
+            >
+              Save recipe
+            </button>
+          </div>
+        </div>
+      )}
+
+      <IngredientSwapModal
+        open={Boolean(swapTarget)}
+        currentName={swapTarget?.name || ''}
+        currentAmount={`${swapTarget?.amount || ''} ${swapTarget?.unit || ''}`}
+        suggestions={[...new Set([...defaultIngredients.map((i) => i.name), ...ingredients.map((i) => i.name)])]}
+        onSelect={handleSwap}
+        onClose={() => setSwapTarget(null)}
+      />
     </div>
   );
 }
