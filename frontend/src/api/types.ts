@@ -24,6 +24,8 @@ export interface Recipe {
   base_kcal?: number | null;
   base_cost_gbp?: number | null;
   base_protein?: number | null;
+  base_carbs?: number | null;
+  base_fat?: number | null;
 }
 
 export interface PlanMeal {
@@ -32,6 +34,8 @@ export interface PlanMeal {
   meal_kcal?: number | null;
   meal_cost_gbp?: number | null;
   meal_protein?: number | null;
+  meal_carbs?: number | null;
+  meal_fat?: number | null;
   recipe?: Recipe;
 }
 
@@ -40,6 +44,8 @@ export interface PlanDay {
   day_index: number;
   daily_kcal?: number | null;
   daily_protein?: number | null;
+  daily_carbs?: number | null;
+  daily_fat?: number | null;
   daily_cost_gbp?: number | null;
   meals: PlanMeal[];
 }
