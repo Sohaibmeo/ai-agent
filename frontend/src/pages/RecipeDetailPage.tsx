@@ -56,13 +56,20 @@ export function RecipeDetailPage() {
     setDirty(true);
   };
 
-  const handleSwap = (replacementName: string, amountFromModal: number) => {
+  const handleSwap = (replacementName: string, amountFromModal: number, unitFromModal: string) => {
     if (!swapTarget) return;
     if (addMode) {
-      setIngredients((prev) => [...prev, { id: `ing-${Date.now()}`, name: replacementName, amount: amountFromModal || 100, unit: 'g' }]);
+      setIngredients((prev) => [
+        ...prev,
+        { id: `ing-${Date.now()}`, name: replacementName, amount: amountFromModal || 100, unit: unitFromModal || 'g' },
+      ]);
     } else {
       setIngredients((prev) =>
-        prev.map((ing) => (ing.id === swapTarget.id ? { ...ing, name: replacementName, amount: amountFromModal || ing.amount } : ing)),
+        prev.map((ing) =>
+          ing.id === swapTarget.id
+            ? { ...ing, name: replacementName, amount: amountFromModal || ing.amount, unit: unitFromModal || ing.unit }
+            : ing,
+        ),
       );
     }
     setSwapTarget(null);
@@ -225,6 +232,7 @@ export function RecipeDetailPage() {
         open={Boolean(swapTarget)}
         currentName={swapTarget?.name || ''}
         currentAmount={`${swapTarget?.amount || ''} ${swapTarget?.unit || ''}`}
+        currentUnit={swapTarget?.unit || 'g'}
         suggestions={[...new Set([...defaultIngredients.map((i) => i.name), ...ingredients.map((i) => i.name)])]}
         onSelect={handleSwap}
         onClose={() => {

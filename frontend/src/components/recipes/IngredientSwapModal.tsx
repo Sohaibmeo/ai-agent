@@ -4,8 +4,9 @@ type IngredientSwapModalProps = {
   open: boolean;
   currentName: string;
   currentAmount: string;
+  currentUnit?: string;
   suggestions?: string[];
-  onSelect: (name: string, amount: number) => void;
+  onSelect: (name: string, amount: number, unit: string) => void;
   onClose: () => void;
   mode?: 'add' | 'replace';
 };
@@ -23,10 +24,13 @@ const defaultSuggestions = [
   'Paneer',
 ];
 
+const units = ['g', 'kg', 'ml', 'l', 'tbsp', 'tsp', 'cup', 'pinch', 'piece'];
+
 export function IngredientSwapModal({
   open,
   currentName,
   currentAmount,
+  currentUnit = 'g',
   suggestions = defaultSuggestions,
   onSelect,
   onClose,
@@ -37,12 +41,14 @@ export function IngredientSwapModal({
     const numeric = Number((currentAmount || '').split(' ')[0]);
     return Number.isFinite(numeric) ? numeric : 100;
   });
+  const [unit, setUnit] = useState<string>(currentUnit || 'g');
 
   // keep amount in sync if the modal opens with different defaults
   useEffect(() => {
     const numeric = Number((currentAmount || '').split(' ')[0]);
     setAmount(Number.isFinite(numeric) ? numeric : 100);
-  }, [currentAmount]);
+    setUnit(currentUnit || 'g');
+  }, [currentAmount, currentUnit]);
 
   const heading = mode === 'add' ? 'Add Ingredient' : 'Replace Ingredient';
   const [selected, setSelected] = useState<string | null>(null);
@@ -79,7 +85,17 @@ export function IngredientSwapModal({
                   onChange={(e) => setAmount(Number(e.target.value))}
                   className="w-24 rounded border border-slate-200 bg-white px-2 py-1 text-right text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-200"
                 />
-                <span className="text-slate-500 text-xs">unit</span>
+                <select
+                  value={unit}
+                  onChange={(e) => setUnit(e.target.value)}
+                  className="w-20 rounded border border-slate-200 bg-white px-2 py-1 text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-200"
+                >
+                  {units.map((u) => (
+                    <option key={u} value={u}>
+                      {u}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           ) : (
@@ -122,7 +138,7 @@ export function IngredientSwapModal({
             onClick={() => {
               if (!canApply) return;
               const nextName = selected || currentName || 'New ingredient';
-              onSelect(nextName, amount);
+              onSelect(nextName, amount, unit);
               setSelected(null);
               setQuery('');
             }}
