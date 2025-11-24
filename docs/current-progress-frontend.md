@@ -4,17 +4,18 @@
 - Scaffolding: Vite + React + TypeScript with Tailwind 3, React Router, React Query, AppShell/Sidebar layout.
 - Pages:
   - Profile: loads/saves profile via `/users/:id/profile` with controlled fields (body/goals, diet/allergies, plan defaults).
-  - Plans: loads active plan, shows week/day/meal cards, triggers plan generation, basic swap dialog to set a new recipe and refetch plan.
+  - Plans: redesigned per mock (always-visible AI note, primary Generate CTA, day headers with kcal/protein/cost, pill-style meal cards with hover + cost badge + stable kebab menu, swap dialog refetches).
   - Groceries: loads active shopping list and renders items.
+- Recipe detail: polished UI with slot/type/kcal/cost tags, AI note textarea (cancel clears), ingredient list styled like mock, method placeholder.
 - API layer/hooks: profile, plans (generate/action/set-meal), recipe candidates, shopping list; demo user/config set.
 - Builds clean (`npm run build`).
 
 ## Next steps
-- UI polish with shadcn components and Figma-inspired styling; add loading/error states and toasts.
-- Plans page: add advanced settings modal, ingredient edit/avoid/change-meal-type flows, and polish swap dialog UI. Proper swap/ingredient edit flows: candidate list UI polish, edit ingredients modal, integrate avoid/change meal type actions.
+- Wire recipe detail to real meal/recipe data and hook “Apply changes” (toast or backend call).
+- Add ingredient swap modal on recipe detail and tie into resolve/swap flow.
+- Plans page polish: outside-click close for kebab menu, history tab, better empty/error states.
 - Groceries: implement “already have” toggle and “update price” dialog wired to backend endpoints.
-- Optional AI/agent UI entry points (adjust with AI, choose-ingredient) behind toggles.
-- Improve state handling (optimistic updates) and responsiveness.
+- Global polish: toasts for errors/success, loading/error states, responsiveness.
 
 ## New UX guidance
 - Always show the “Tell the AI what to prioritize this week (optional)” textarea (not gated by Advanced).

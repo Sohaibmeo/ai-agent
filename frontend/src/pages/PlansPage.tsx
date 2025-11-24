@@ -21,7 +21,6 @@ export function PlansPage() {
   const [note, setNote] = useState('');
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
   const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
-  const [menuOpen, setMenuOpen] = useState<string | null>(null);
 
   const formatCurrency = (val?: number | null) => (val || val === 0 ? `£${Number(val).toFixed(2)}` : '—');
   const formatKcal = (val?: number | null) => (val || val === 0 ? `${Math.round(Number(val))} kcal` : '—');
@@ -45,7 +44,6 @@ export function PlansPage() {
   const openSwap = (mealId: string, slot?: string) => {
     setSwapMealId(mealId);
     setSwapMealSlot(slot);
-    setMenuOpen(null);
   };
 
   const closeSwap = () => {
@@ -211,30 +209,16 @@ export function PlansPage() {
                             <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
                               {formatCurrency(meal.meal_cost_gbp)}
                             </span>
-                            <div className="relative">
-                              <button
-                                className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
-                                onClick={() => setMenuOpen(menuOpen === meal.id ? null : meal.id)}
-                              >
-                                ⋮
-                              </button>
-                                {menuOpen === meal.id && (
-                                  <div className="absolute right-0 z-20 mt-2 w-40 rounded-lg border border-slate-200 bg-white shadow-lg">
-                                    <button
-                                      className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
-                                      onClick={() => openSwap(meal.id, meal.meal_slot)}
-                                    >
-                                      Swap meal
-                                    </button>
-                                    <button
-                                      className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
-                                      onClick={() => goToRecipe(meal.id)}
-                                    >
-                                      Modify
-                                    </button>
-                                  </div>
-                                )}
-                            </div>
+                            <button
+                              className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-100"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openSwap(meal.id, meal.meal_slot);
+                              }}
+                              title="Swap this meal"
+                            >
+                              ⇄ Swap
+                            </button>
                           </div>
                         </article>
                       ))}
