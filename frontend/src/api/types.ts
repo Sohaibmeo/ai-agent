@@ -23,6 +23,7 @@ export interface Recipe {
   meal_type?: string;
   base_kcal?: number | null;
   base_cost_gbp?: number | null;
+  base_protein?: number | null;
 }
 
 export interface PlanMeal {
@@ -30,6 +31,7 @@ export interface PlanMeal {
   meal_slot: string;
   meal_kcal?: number | null;
   meal_cost_gbp?: number | null;
+  meal_protein?: number | null;
   recipe?: Recipe;
 }
 
@@ -37,6 +39,7 @@ export interface PlanDay {
   id: string;
   day_index: number;
   daily_kcal?: number | null;
+  daily_protein?: number | null;
   daily_cost_gbp?: number | null;
   meals: PlanMeal[];
 }
@@ -47,6 +50,7 @@ export interface WeeklyPlan {
   status: string;
   total_estimated_cost_gbp?: number | null;
   total_kcal?: number | null;
+  total_protein?: number | null;
   days: PlanDay[];
 }
 
