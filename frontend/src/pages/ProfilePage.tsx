@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card } from '../components/shared/Card';
 import { useProfile } from '../hooks/useProfile';
+import { notify } from '../lib/toast';
 
 const inputClass =
   'w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-slate-300';
@@ -60,22 +61,27 @@ export function ProfilePage() {
   );
 
   const handleSave = async () => {
-    await saveProfile({
-      age: form.age ? Number(form.age) : null,
-      height_cm: form.height_cm ? Number(form.height_cm) : null,
-      weight_kg: form.weight_kg ? Number(form.weight_kg) : null,
-      activity_level: form.activity_level || null,
-      goal: form.goal || null,
-      diet_type: form.diet_type || null,
-      allergy_keys: parsedAllergies,
-      breakfast_enabled: form.breakfast_enabled,
-      snack_enabled: form.snack_enabled,
-      lunch_enabled: form.lunch_enabled,
-      dinner_enabled: form.dinner_enabled,
-      weekly_budget_gbp: form.weekly_budget_gbp ? Number(form.weekly_budget_gbp) : null,
-      goal_intensity: form.goal_intensity || null,
-      max_difficulty: form.max_difficulty || null,
-    });
+    try {
+      await saveProfile({
+        age: form.age ? Number(form.age) : null,
+        height_cm: form.height_cm ? Number(form.height_cm) : null,
+        weight_kg: form.weight_kg ? Number(form.weight_kg) : null,
+        activity_level: form.activity_level || null,
+        goal: form.goal || null,
+        diet_type: form.diet_type || null,
+        allergy_keys: parsedAllergies,
+        breakfast_enabled: form.breakfast_enabled,
+        snack_enabled: form.snack_enabled,
+        lunch_enabled: form.lunch_enabled,
+        dinner_enabled: form.dinner_enabled,
+        weekly_budget_gbp: form.weekly_budget_gbp ? Number(form.weekly_budget_gbp) : null,
+        goal_intensity: form.goal_intensity || null,
+        max_difficulty: form.max_difficulty || null,
+      });
+      notify.success('Profile saved');
+    } catch (e) {
+      notify.error('Could not save profile');
+    }
   };
 
   return (

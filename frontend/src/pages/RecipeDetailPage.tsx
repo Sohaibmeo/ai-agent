@@ -4,6 +4,7 @@ import { Card } from '../components/shared/Card';
 import { useActivePlan } from '../hooks/usePlan';
 import { DEMO_USER_ID } from '../lib/config';
 import { IngredientSwapModal } from '../components/recipes/IngredientSwapModal';
+import { notify } from '../lib/toast';
 
 type IngredientRow = {
   id: string;
@@ -67,11 +68,13 @@ export function RecipeDetailPage() {
     setSwapTarget(null);
     setAddMode(false);
     setDirty(true);
+    notify.success(addMode ? 'Ingredient added' : 'Ingredient swapped');
   };
 
   const handleSave = () => {
     // Hook up to backend when recipe update endpoint is ready
     setDirty(false);
+    notify.success('Recipe saved');
   };
 
   return (
@@ -170,6 +173,7 @@ export function RecipeDetailPage() {
                       e.stopPropagation();
                       setIngredients((prev) => prev.filter((row) => row.id !== ing.id));
                       setDirty(true);
+                      notify.success('Ingredient removed');
                     }}
                     title="Remove ingredient"
                   >
@@ -226,6 +230,7 @@ export function RecipeDetailPage() {
         onClose={() => {
           setSwapTarget(null);
           setAddMode(false);
+          notify.info('No ingredient selected');
         }}
         mode={addMode ? 'add' : 'replace'}
       />
