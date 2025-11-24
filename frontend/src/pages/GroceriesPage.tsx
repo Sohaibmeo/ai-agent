@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Card } from '../components/shared/Card';
 import { useActiveShoppingList } from '../hooks/useShoppingList';
 import { DEMO_USER_ID } from '../lib/config';
@@ -7,6 +8,18 @@ import { useNavigate } from 'react-router-dom';
 export function GroceriesPage() {
   const { data: list, isLoading } = useActiveShoppingList(DEMO_USER_ID);
   const navigate = useNavigate();
+  const [items, setItems] = useState(list?.items || []);
+
+  useEffect(() => {
+    setItems(list?.items || []);
+  }, [list]);
+
+  const toggleItem = (id: string) => {
+    setItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, has_item: !item.has_item } : item)),
+    );
+    // TODO: wire to pantry toggle endpoint for persistence
+  };
 
   return (
     <div className="p-6 space-y-4">
@@ -33,7 +46,7 @@ export function GroceriesPage() {
           </div>
         )}
 
-        {!isLoading && (list?.items?.length || 0) === 0 && (
+        {!isLoading && (items?.length || 0) === 0 && (
           <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
             <div className="text-base font-semibold text-slate-900">No shopping list yet</div>
             <div className="text-sm text-slate-500">Generate a plan to see your groceries here.</div>
@@ -46,27 +59,44 @@ export function GroceriesPage() {
           </div>
         )}
 
-        {!isLoading && (list?.items?.length || 0) > 0 && (
+        {!isLoading && (items?.length || 0) > 0 && (
           <div className="space-y-2 p-4">
-            {list?.items.map((item) => (
+            {items.map((item) => (
               <div
                 key={item.id}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm"
+                className={`flex items-center justify-between gap-3 rounded-2xl border border-slate-200 px-4 py-3 text-sm shadow-sm cursor-pointer hover:-translate-y-[1px] hover:shadow-md transition ${
+                  item.has_item ? 'bg-slate-50' : 'bg-white'
+                }`}
+                onClick={() => toggleItem(item.id)}
               >
-                <div>
-                  <div className="font-semibold text-slate-900">{item.ingredient?.name || '—'}</div>
-                  <div className="text-xs text-slate-600">
-                    {Number(item.total_quantity)} {item.unit}
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    className="rounded border-slate-300 text-slate-900"
+                    checked={Boolean(item.has_item)}
+                    onChange={() => toggleItem(item.id)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <div>
+                    <div className={`font-semibold ${item.has_item ? 'text-slate-500 line-through' : 'text-slate-900'}`}>
+                      {item.ingredient?.name || '—'}
+                    </div>
+                    <div className={`text-xs ${item.has_item ? 'text-slate-400 line-through' : 'text-slate-600'}`}>
+                      {Number(item.total_quantity)} {item.unit}
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
                     {item.estimated_cost_gbp ? `£${Number(item.estimated_cost_gbp).toFixed(2)}` : '£—'}
                   </span>
-                  <label className="flex items-center gap-2 text-xs text-slate-700">
-                    <input type="checkbox" className="rounded border-slate-300 text-slate-900" defaultChecked={item.has_item} /> Already have
-                  </label>
-                  <button className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100">
+                  <button
+                    className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // TODO: open price modal
+                    }}
+                  >
                     Update price
                   </button>
                 </div>

@@ -29,10 +29,41 @@ export class ShoppingListService {
     @InjectEntityManager() private readonly entityManager: EntityManager,
   ) {}
 
-  getForPlan(planId: string) {
-    return this.shoppingListRepo.find({
+  async getForPlan(planId: string, userId?: string) {
+    const baseItems = await this.shoppingListRepo.find({
       where: { weeklyPlan: { id: planId } },
+      relations: ['ingredient'],
     });
+    if (!userId) {
+      return {
+        weekly_plan_id: planId,
+        items: baseItems,
+      };
+    }
+
+    // Apply pantry flags and user price overrides on the fly for response
+    const [overrides, pantry] = await Promise.all([
+      this.priceRepo.find({ where: { user: { id: userId } as any }, relations: ['ingredient'] }),
+      this.pantryRepo.find({ where: { user: { id: userId } as any }, relations: ['ingredient'] }),
+    ]);
+    const overrideMap = new Map(overrides.map((o) => [o.ingredient.id, Number(o.price_per_unit_gbp)]));
+    const pantryMap = new Map(pantry.map((p) => [p.ingredient.id, p.has_item]));
+
+    const items = baseItems.map((item) => {
+      const pricePerUnit = overrideMap.get(item.ingredient.id);
+      const hasItem = pantryMap.get(item.ingredient.id) ?? false;
+      const estimated = pricePerUnit ? pricePerUnit * Number(item.total_quantity) : item.estimated_cost_gbp;
+      return {
+        ...item,
+        estimated_cost_gbp: estimated,
+        has_item: hasItem,
+      };
+    });
+
+    return {
+      weekly_plan_id: planId,
+      items,
+    };
   }
 
   async rebuildForPlan(planId: string) {
@@ -114,7 +145,7 @@ export class ShoppingListService {
 
     await this.shoppingListRepo.save(toSave);
     this.logger.log(`shopping list rebuilt plan=${planId} items=${toSave.length}`);
-    return this.getForPlan(planId);
+    return this.getForPlan(planId, userId);
   }
 
   async getActive(userId: string, planId?: string) {
@@ -129,6 +160,6 @@ export class ShoppingListService {
       throw new Error('No active plan for this user');
     }
     this.logger.log(`get active shopping list plan=${targetPlanId} user=${userId}`);
-    return this.getForPlan(targetPlanId);
+    return this.getForPlan(targetPlanId, userId);
   }
 }

@@ -77,6 +77,7 @@ export function PlansPage() {
         queryKey: ['plan', 'active', DEMO_USER_ID],
         queryFn: () => fetchActivePlan(DEMO_USER_ID),
       });
+      await queryClient.invalidateQueries({ queryKey: ['shopping-list', 'active', DEMO_USER_ID] });
     } finally {
       setIsActivating(false);
     }

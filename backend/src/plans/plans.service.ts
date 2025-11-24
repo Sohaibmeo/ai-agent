@@ -66,7 +66,11 @@ export class PlansService {
     }
     plan.status = status;
     this.logger.log(`setStatus plan=${planId} status=${status} user=${plan.user?.id}`);
-    return this.weeklyPlanRepo.save(plan);
+    const saved = await this.weeklyPlanRepo.save(plan);
+    if (status === 'active') {
+      await this.shoppingListService.rebuildForPlan(planId);
+    }
+    return saved;
   }
 
   async setMealRecipe(planMealId: string, newRecipeId: string) {
