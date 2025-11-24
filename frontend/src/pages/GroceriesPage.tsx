@@ -4,11 +4,14 @@ import { useActiveShoppingList } from '../hooks/useShoppingList';
 import { DEMO_USER_ID } from '../lib/config';
 import { Skeleton } from '../components/shared/Skeleton';
 import { useNavigate } from 'react-router-dom';
+import { UpdatePriceModal } from '../components/groceries/UpdatePriceModal';
+import type { ShoppingListItem } from '../api/types';
 
 export function GroceriesPage() {
   const { data: list, isLoading } = useActiveShoppingList(DEMO_USER_ID);
   const navigate = useNavigate();
   const [items, setItems] = useState(list?.items || []);
+  const [priceTarget, setPriceTarget] = useState<ShoppingListItem | null>(null);
 
   useEffect(() => {
     setItems(list?.items || []);
@@ -94,7 +97,7 @@ export function GroceriesPage() {
                     className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
                     onClick={(e) => {
                       e.stopPropagation();
-                      // TODO: open price modal
+                      setPriceTarget(item);
                     }}
                   >
                     Update price
@@ -105,6 +108,28 @@ export function GroceriesPage() {
           </div>
         )}
       </Card>
+
+      <UpdatePriceModal
+        open={Boolean(priceTarget)}
+        item={priceTarget || undefined}
+        onClose={() => setPriceTarget(null)}
+        onSave={(payload) => {
+          // TODO: wire API to persist override; for now just close and adjust local
+          setItems((prev) =>
+            prev.map((it) =>
+              it.id === payload.itemId
+                ? {
+                    ...it,
+                    estimated_cost_gbp: payload.pricePaid,
+                    total_quantity: payload.quantity,
+                    unit: payload.unit,
+                  }
+                : it,
+            ),
+          );
+          setPriceTarget(null);
+        }}
+      />
     </div>
   );
 }
