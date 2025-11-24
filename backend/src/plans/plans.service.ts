@@ -44,10 +44,18 @@ export class PlansService {
   }
 
   async getActivePlan(userId: string) {
-    return this.weeklyPlanRepo.findOne({
+    const active = await this.weeklyPlanRepo.findOne({
       where: { user: { id: userId } as any, status: 'active' },
       relations: ['days', 'days.meals', 'days.meals.recipe'],
     });
+    if (active) return active;
+    // Fallback: latest plan by week_start_date
+    const latest = await this.weeklyPlanRepo.findOne({
+      where: { user: { id: userId } as any },
+      order: { week_start_date: 'DESC' },
+      relations: ['days', 'days.meals', 'days.meals.recipe'],
+    });
+    return latest;
   }
 
   async setStatus(planId: string, status: string) {

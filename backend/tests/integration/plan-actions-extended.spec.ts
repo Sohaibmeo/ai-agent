@@ -12,7 +12,7 @@ jest.setTimeout(30000);
 
 describe('Plan actions extended flows', () => {
   let app: INestApplication;
-  const userId = '11111111-1111-1111-1111-111111111111'; // seeded user
+  const userId = '674fac73-a45a-4bec-8ee3-278d395e6faa'; // demo user
 
   const reviewActionMock = jest.fn(async (payload: any) => {
     const type = payload.actionContext?.type;
