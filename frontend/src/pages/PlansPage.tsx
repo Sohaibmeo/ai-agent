@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card } from '../components/shared/Card';
 import { Skeleton } from '../components/shared/Skeleton';
 import { useActivePlan } from '../hooks/usePlan';
+import { usePlansList } from '../hooks/usePlansList';
 import { DEMO_USER_ID } from '../lib/config';
 import { SwapDialog } from '../components/plans/SwapDialog';
 import { activatePlan, fetchActivePlan, setMealRecipe } from '../api/plans';
@@ -16,6 +17,7 @@ export function PlansPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { data: plan, isLoading, isError, refetchPlan, generatePlan, isGenerating } = useActivePlan(DEMO_USER_ID);
+  const { data: plansList } = usePlansList();
   const days = useMemo(() => plan?.days || [], [plan]);
   const [swapMealId, setSwapMealId] = useState<string | null>(null);
   const [swapMealSlot, setSwapMealSlot] = useState<string | undefined>(undefined);
@@ -315,6 +317,48 @@ export function PlansPage() {
       )}
 
       <SwapDialog open={Boolean(swapMealId)} mealSlot={swapMealSlot} onClose={closeSwap} onSelect={handleSwapSelect} />
+
+      {activeTab === 'history' && (
+        <Card>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-900">Previous plans</h3>
+            <button
+              className="text-xs text-slate-600 hover:underline"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ['plans', 'all'] })}
+            >
+              Refresh
+            </button>
+          </div>
+          <div className="mt-3 space-y-2 text-sm">
+            {plansList?.length
+              ? plansList.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="font-semibold text-slate-900">{p.week_start_date}</span>
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] text-slate-600">{p.status}</span>
+                    </div>
+                    {p.status !== 'active' && (
+                      <button
+                        className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                        onClick={() =>
+                          activatePlan(p.id).then(() => {
+                            notify.success('Plan activated from history');
+                            queryClient.invalidateQueries({ queryKey: ['plan', 'active', DEMO_USER_ID] });
+                          })
+                        }
+                      >
+                        Activate
+                      </button>
+                    )}
+                  </div>
+                ))
+              : 'No past plans yet.'}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

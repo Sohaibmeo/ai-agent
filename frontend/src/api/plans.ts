@@ -5,6 +5,10 @@ export function fetchActivePlan(userId: string) {
   return apiClient.get<WeeklyPlan>(`/plans/active/${userId}`);
 }
 
+export function fetchPlansList() {
+  return apiClient.get<WeeklyPlan[]>('/plans');
+}
+
 export function generatePlan(payload: { userId: string; weekStartDate?: string; useAgent?: boolean }) {
   return apiClient.post<WeeklyPlan>('/plans/generate', payload);
 }
