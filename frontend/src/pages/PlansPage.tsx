@@ -37,6 +37,7 @@ export function PlansPage() {
 
   const totalMeals = useMemo(() => days.reduce((acc, d) => acc + (d.meals?.length || 0), 0), [days]);
   const avgKcal = plan && days.length ? (plan.total_kcal ? Math.round(Number(plan.total_kcal) / days.length) : null) : null;
+  const avgProtein = plan && days.length ? (plan.total_protein ? Math.round(Number(plan.total_protein) / days.length) : null) : null;
 
   const goToRecipe = (mealId: string) => {
     navigate(`/plans/meal/${mealId}`);
@@ -130,11 +131,17 @@ export function PlansPage() {
                 <Skeleton className="h-5 w-16 rounded-full" />
                 <Skeleton className="h-5 w-16 rounded-full" />
                 <Skeleton className="h-5 w-16 rounded-full" />
+                <Skeleton className="h-5 w-16 rounded-full" />
               </>
             ) : (
               <>
                 <span className={pillClass}>{formatCurrency(plan?.total_estimated_cost_gbp)} total</span>
-                <span className={pillClass}>{avgKcal ? `${avgKcal} kcal avg` : '—'}</span>
+                <span className={pillClass}>
+                  {plan?.total_kcal ? `${Math.round(Number(plan.total_kcal))} kcal` : '—'} {avgKcal ? `(${avgKcal} avg)` : ''}
+                </span>
+                <span className={pillClass}>
+                  {plan?.total_protein ? `${Math.round(Number(plan.total_protein))}g protein` : '—'} {avgProtein ? `(${avgProtein} avg)` : ''}
+                </span>
                 <span className={pillClass}>{totalMeals} meals</span>
               </>
             )}
