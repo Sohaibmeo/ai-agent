@@ -23,6 +23,15 @@ export function UpdatePriceModal({ open, item, onClose, onSave }: UpdatePriceMod
     }
   }, [item]);
 
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   if (!open || !item) return null;
 
   const handleSave = () => {
@@ -33,8 +42,13 @@ export function UpdatePriceModal({ open, item, onClose, onSave }: UpdatePriceMod
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
+      <div
+        className="w-full max-w-md rounded-2xl bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
           <div>
             <div className="text-lg font-semibold text-slate-900">Update Price</div>

@@ -32,6 +32,17 @@ export function SwapDialog({ open, mealSlot, onClose, onSelect }: SwapDialogProp
     }
   }, [open, mealSlot, refetch]);
 
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   const autoPick = () => {
@@ -43,8 +54,13 @@ export function SwapDialog({ open, mealSlot, onClose, onSelect }: SwapDialogProp
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 px-4">
-      <div className="w-full max-w-3xl rounded-2xl bg-white p-5 shadow-2xl">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 px-4" onClick={onClose}>
+      <div
+        className="w-full max-w-3xl rounded-2xl bg-white p-5 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <div className="text-lg font-semibold text-slate-900">Swap Meal</div>
