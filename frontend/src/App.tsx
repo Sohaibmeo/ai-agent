@@ -4,6 +4,7 @@ import { Sidebar } from './components/layout/Sidebar';
 import { ProfilePage } from './pages/ProfilePage';
 import { PlansPage } from './pages/PlansPage';
 import { GroceriesPage } from './pages/GroceriesPage';
+import { RecipeDetailPage } from './pages/RecipeDetailPage';
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
         <Routes>
           <Route path="/" element={<ProfilePage />} />
           <Route path="/plans" element={<PlansPage />} />
+          <Route path="/plans/meal/:mealId" element={<RecipeDetailPage />} />
           <Route path="/groceries" element={<GroceriesPage />} />
         </Routes>
       </AppShell>
