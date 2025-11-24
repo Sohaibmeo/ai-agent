@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Not } from 'typeorm';
-import { PlanDay, PlanMeal, WeeklyPlan } from '../database/entities';
+import { PlanDay, PlanMeal, WeeklyPlan, PlanActionLog } from '../database/entities';
 import { RecipesService } from '../recipes/recipes.service';
 import { UsersService } from '../users/users.service';
 import { calculateTargets } from './utils/profile-targets';
@@ -24,6 +24,8 @@ export class PlansService {
     private readonly planDayRepo: Repository<PlanDay>,
     @InjectRepository(PlanMeal)
     private readonly planMealRepo: Repository<PlanMeal>,
+    @InjectRepository(PlanActionLog)
+    private readonly planActionLogRepo: Repository<PlanActionLog>,
     private readonly recipesService: RecipesService,
     private readonly usersService: UsersService,
     private readonly shoppingListService: ShoppingListService,
@@ -341,26 +343,47 @@ export class PlansService {
       throw new Error('userId is required on plan or payload');
     }
     const profile = await this.usersService.getProfile(userId);
-    const reviewInstruction = await this.agentsService.reviewAction({
-      userId,
-      weeklyPlanId,
-      actionContext: payload.actionContext,
-      reasonText: payload.reasonText,
-      profileSnippet: {
-        goal: profile.goal,
-        dietType: profile.diet_type,
-        weeklyBudgetGbp: profile.weekly_budget_gbp,
-      },
-      currentPlanSummary: this.buildPlanSummary(plan),
-    });
-    this.logger.log(
-      `Plan action resolved user=${userId} plan=${weeklyPlanId} action=${reviewInstruction.action} target=${reviewInstruction.targetLevel}`,
-    );
-    await this.handleInstruction(userId, plan, reviewInstruction);
-    return this.weeklyPlanRepo.findOne({
-      where: { id: weeklyPlanId },
-      relations: ['days', 'days.meals', 'days.meals.recipe'],
-    });
+    let reviewInstruction;
+    try {
+      reviewInstruction = await this.agentsService.reviewAction({
+        userId,
+        weeklyPlanId,
+        actionContext: payload.actionContext,
+        reasonText: payload.reasonText,
+        profileSnippet: {
+          goal: profile.goal,
+          dietType: profile.diet_type,
+          weeklyBudgetGbp: profile.weekly_budget_gbp,
+        },
+        currentPlanSummary: this.buildPlanSummary(plan),
+      });
+      this.logger.log(
+        `Plan action resolved user=${userId} plan=${weeklyPlanId} action=${reviewInstruction.action} target=${reviewInstruction.targetLevel}`,
+      );
+      await this.handleInstruction(userId, plan, reviewInstruction);
+      await this.logAction({
+        userId,
+        weeklyPlanId,
+        action: reviewInstruction.action,
+        metadata: { targetLevel: reviewInstruction.targetLevel, targetIds: reviewInstruction.targetIds },
+        success: true,
+      });
+      return this.weeklyPlanRepo.findOne({
+        where: { id: weeklyPlanId },
+        relations: ['days', 'days.meals', 'days.meals.recipe'],
+      });
+    } catch (e: any) {
+      this.logger.error(`Plan action failed user=${userId} plan=${weeklyPlanId}`, e?.stack || String(e));
+      await this.logAction({
+        userId,
+        weeklyPlanId,
+        action: payload?.actionContext?.type || 'unknown',
+        metadata: { reasonText: payload.reasonText },
+        success: false,
+        error_message: e?.message || String(e),
+      });
+      throw e;
+    }
   }
 
   private buildPlanSummary(plan: WeeklyPlan) {
@@ -469,6 +492,24 @@ export class PlansService {
     if (pick && pick.id) {
       await this.setMealRecipe(meal.id, pick.id);
     }
+  }
+
+  private async logAction(entry: {
+    weeklyPlanId: string;
+    userId?: string;
+    action: string;
+    metadata?: Record<string, any>;
+    success: boolean;
+    error_message?: string;
+  }) {
+    await this.planActionLogRepo.save({
+      weeklyPlan: { id: entry.weeklyPlanId } as any,
+      user_id: entry.userId || null,
+      action: entry.action,
+      metadata: entry.metadata,
+      success: entry.success,
+      error_message: entry.error_message,
+    });
   }
 
   private async adjustPortion(planMealId: string, params?: ReviewInstruction['params']) {
