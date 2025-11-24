@@ -215,73 +215,89 @@ export function PlansPage() {
               </Card>
             ))}
 
-          {!isLoading &&
-            plan &&
-            days.map((day) => {
-              const expanded = expandedDays[day.id] ?? false;
-              return (
-                <Card key={day.id} className="p-0">
-                  <button
-                    className="flex w-full items-center justify-between px-4 py-3 text-left"
-                    onClick={() => toggleDay(day.id)}
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-semibold text-slate-900">
-                        {dayNames[day.day_index] || `Day ${day.day_index + 1}`}
-                      </span>
-                      <span className="text-xs text-slate-500">
-                        {formatKcal(day.daily_kcal)} · {formatProtein(day.daily_protein)} · {formatCurrency(day.daily_cost_gbp)}
-                      </span>
-                    </div>
-                    <span className="text-xs text-slate-500">{expanded ? '▴' : '▾'}</span>
-                  </button>
-                  {expanded && (
-                    <div className="space-y-3 px-4 pb-4">
-                      {day.meals.map((meal) => (
-                        <article
-                          key={meal.id}
-                          className="flex items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
-                          onClick={() => goToRecipe(meal.id)}
-                        >
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="rounded bg-slate-100 px-2 py-1 text-[11px] font-semibold uppercase text-slate-500">
-                                {meal.meal_slot}
-                              </span>
-                              <span className="rounded bg-slate-100 px-2 py-1 text-[11px] text-slate-600">
-                                {meal.recipe?.meal_type || 'solid'}
-                              </span>
+          {!isLoading && plan && days.length === 0 && (
+            <Card>
+              <div className="flex flex-col items-center justify-center gap-2 py-6 text-center text-sm text-slate-600">
+                <div>No plan found.</div>
+                <button
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                  onClick={() => generatePlan({ useAgent: false })}
+                >
+                  Generate a plan
+                </button>
+              </div>
+            </Card>
+          )}
+
+          {!isLoading && plan && days.length > 0 && (
+            <div className="grid grid-cols-1 gap-3">
+              {days.map((day) => {
+                const expanded = expandedDays[day.id] ?? false;
+                return (
+                  <Card key={day.id} className="p-0">
+                    <button
+                      className="flex w-full items-center justify-between px-4 py-3 text-left"
+                      onClick={() => toggleDay(day.id)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-semibold text-slate-900">
+                          {dayNames[day.day_index] || `Day ${day.day_index + 1}`}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          {formatKcal(day.daily_kcal)} · {formatProtein(day.daily_protein)} · {formatCurrency(day.daily_cost_gbp)}
+                        </span>
+                      </div>
+                      <span className="text-xs text-slate-500">{expanded ? '▴' : '▾'}</span>
+                    </button>
+                    {expanded && (
+                      <div className="space-y-3 px-4 pb-4">
+                        {day.meals.map((meal) => (
+                          <article
+                            key={meal.id}
+                            className="flex items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+                            onClick={() => goToRecipe(meal.id)}
+                          >
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="rounded bg-slate-100 px-2 py-1 text-[11px] font-semibold uppercase text-slate-500">
+                                  {meal.meal_slot}
+                                </span>
+                                <span className="rounded bg-slate-100 px-2 py-1 text-[11px] text-slate-600">
+                                  {meal.recipe?.meal_type || 'solid'}
+                                </span>
+                              </div>
+                              <div className="mt-2 text-sm font-semibold text-slate-900">{meal.recipe?.name || '—'}</div>
+                              <div className="mt-1 text-[11px] text-slate-500">{formatMacros(meal)}</div>
                             </div>
-                            <div className="mt-2 text-sm font-semibold text-slate-900">{meal.recipe?.name || '—'}</div>
-                            <div className="mt-1 text-[11px] text-slate-500">{formatMacros(meal)}</div>
-                          </div>
-                          <div className="flex flex-col items-end gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
-                                {formatCurrency(meal.meal_cost_gbp)}
-                              </span>
-                              <button
-                                className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-100"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openSwap(meal.id, meal.meal_slot);
-                                }}
-                                title="Swap this meal"
-                              >
-                                ⇄ Swap
-                              </button>
+                            <div className="flex flex-col items-end gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                                  {formatCurrency(meal.meal_cost_gbp)}
+                                </span>
+                                <button
+                                  className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-100"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openSwap(meal.id, meal.meal_slot);
+                                  }}
+                                  title="Swap this meal"
+                                >
+                                  ⇄ Swap
+                                </button>
+                              </div>
+                              <div className="text-xs text-slate-600 text-right">
+                                {meal.meal_kcal ? `${Math.round(Number(meal.meal_kcal))} kcal` : '—'}
+                              </div>
                             </div>
-                            <div className="text-xs text-slate-600 text-right">
-                              {meal.meal_kcal ? `${Math.round(Number(meal.meal_kcal))} kcal` : '—'}
-                            </div>
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  )}
-                </Card>
-              );
-            })}
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
