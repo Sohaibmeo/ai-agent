@@ -15,7 +15,7 @@ const pillClass = 'rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-
 export function PlansPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { data: plan, isLoading, generatePlan, isGenerating } = useActivePlan(DEMO_USER_ID);
+  const { data: plan, isLoading, isError, refetchPlan, generatePlan, isGenerating } = useActivePlan(DEMO_USER_ID);
   const days = useMemo(() => plan?.days || [], [plan]);
   const [swapMealId, setSwapMealId] = useState<string | null>(null);
   const [swapMealSlot, setSwapMealSlot] = useState<string | undefined>(undefined);
@@ -196,6 +196,19 @@ export function PlansPage() {
 
       {activeTab === 'current' && (
         <div className="grid grid-cols-1 gap-3">
+          {isError && (
+            <Card>
+              <div className="flex items-center justify-between text-sm text-red-600">
+                <div>Could not load the plan.</div>
+                <button
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                  onClick={() => refetchPlan()}
+                >
+                  Retry
+                </button>
+              </div>
+            </Card>
+          )}
           {isLoading &&
             [...Array(3)].map((_, idx) => (
               <Card key={idx}>

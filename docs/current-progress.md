@@ -24,5 +24,3 @@ Add simple rate limiting or request shaping for LLM calls to avoid runaway retri
 ## Frontend
 
 Add a small plan history list (date + status) to the Plans page to let users re-open past plans, even if the full history tab isn’t built yet.
-Add empty/error states with inline retry for plan load, candidates, and shopping list (beyond toasts).
-Quick “copy shopping list” or “export to CSV” from Groceries for sharing.

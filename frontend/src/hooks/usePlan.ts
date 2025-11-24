@@ -35,5 +35,6 @@ export function useActivePlan(userId: string = DEMO_USER_ID) {
     isGenerating: generateMutation.isPending,
     applyAction: actionMutation.mutateAsync,
     isApplying: actionMutation.isPending,
+    refetchPlan: planQuery.refetch,
   };
 }

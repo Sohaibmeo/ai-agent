@@ -16,9 +16,11 @@ export function GroceriesPage() {
   const navigate = useNavigate();
   const [items, setItems] = useState(list?.items || []);
   const [priceTarget, setPriceTarget] = useState<ShoppingListItem | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setItems(list?.items || []);
+    setError(null);
   }, [list]);
 
   const estimatedTotal = useMemo(() => {
@@ -42,7 +44,10 @@ export function GroceriesPage() {
         setItems(res.items || []);
         notify.success('Pantry status updated');
       })
-      .catch(() => notify.error('Could not update pantry'));
+      .catch(() => {
+        setError('Could not update pantry');
+        notify.error('Could not update pantry');
+      });
   };
 
   const copyList = async () => {
@@ -107,7 +112,7 @@ export function GroceriesPage() {
           </div>
         )}
 
-        {!isLoading && (items?.length || 0) === 0 && (
+        {!isLoading && !error && (items?.length || 0) === 0 && (
           <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
             <div className="text-base font-semibold text-slate-900">No shopping list yet</div>
             <div className="text-sm text-slate-500">Generate a plan to see your groceries here.</div>
@@ -116,6 +121,23 @@ export function GroceriesPage() {
               onClick={() => navigate('/plans')}
             >
               Go to Plans
+            </button>
+          </div>
+        )}
+
+        {!isLoading && error && (
+          <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
+            <div className="text-base font-semibold text-red-600">Could not load groceries</div>
+            <div className="text-sm text-slate-500">Please try again.</div>
+            <button
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              onClick={() => {
+                setError(null);
+                // Reload by navigating back or refetch hook; easiest is to refresh
+                window.location.reload();
+              }}
+            >
+              Retry
             </button>
           </div>
         )}

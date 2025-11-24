@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRecipeCandidates } from '../../hooks/useRecipeCandidates';
 import { DEMO_USER_ID } from '../../lib/config';
+import { notify } from '../../lib/toast';
 
 interface SwapDialogProps {
   open: boolean;
@@ -10,7 +11,7 @@ interface SwapDialogProps {
 }
 
 export function SwapDialog({ open, mealSlot, onClose, onSelect }: SwapDialogProps) {
-  const { data: candidates, isLoading, refetch } = useRecipeCandidates(mealSlot, DEMO_USER_ID);
+  const { data: candidates, isLoading, isError, refetch } = useRecipeCandidates(mealSlot, DEMO_USER_ID);
   const [search, setSearch] = useState('');
   const [autoMode, setAutoMode] = useState<'prompt' | 'question' | null>(null);
   const [autoNote, setAutoNote] = useState('');
@@ -134,7 +135,21 @@ export function SwapDialog({ open, mealSlot, onClose, onSelect }: SwapDialogProp
         {autoMode === null && (
           <div className="max-h-[420px] space-y-2 overflow-y-auto">
             {isLoading && <div className="text-sm text-slate-500 px-1">Loading candidates...</div>}
-            {!isLoading &&
+            {isError && (
+              <div className="px-1 text-sm text-red-600">
+                Could not load candidates.
+                <button
+                  className="ml-2 underline"
+                  onClick={() => {
+                    refetch();
+                    notify.info('Retrying candidates...');
+                  }}
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+            {!isLoading && !isError &&
               filtered.map((c) => (
                 <button
                   key={c.id}
@@ -149,7 +164,7 @@ export function SwapDialog({ open, mealSlot, onClose, onSelect }: SwapDialogProp
                   <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">£—</span>
                 </button>
               ))}
-            {!isLoading && filtered.length === 0 && (
+            {!isLoading && !isError && filtered.length === 0 && (
               <div className="px-1 text-sm text-slate-500">No candidates found.</div>
             )}
           </div>
