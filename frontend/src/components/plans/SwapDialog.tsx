@@ -50,6 +50,7 @@ export function SwapDialog({ open, mealSlot, onClose, onSelect }: SwapDialogProp
     if (choice) {
       onSelect(choice.id);
       onClose();
+      notify.success('Auto-selected a replacement');
     }
   };
 
@@ -174,10 +175,18 @@ export function SwapDialog({ open, mealSlot, onClose, onSelect }: SwapDialogProp
                 >
                   <div>
                     <div className="text-sm font-semibold text-slate-900">{c.name}</div>
-                    <div className="mt-1 text-xs text-slate-500">Slot: {c.meal_slot}</div>
-                    <div className="mt-1 text-[11px] text-slate-500">P: — · C: — · F: —</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      Slot: {c.meal_slot} · {c.meal_type || 'solid'}
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-500">
+                      {`P: ${c.base_protein ? Math.round(Number(c.base_protein)) : '—'}g · C: ${
+                        c.base_carbs ? Math.round(Number(c.base_carbs)) : '—'
+                      }g · F: ${c.base_fat ? Math.round(Number(c.base_fat)) : '—'}g`}
+                    </div>
                   </div>
-                  <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">£—</span>
+                  <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                    {c.base_cost_gbp ? `£${Number(c.base_cost_gbp).toFixed(2)}` : '£—'}
+                  </span>
                 </button>
               ))}
             {!isLoading && !isError && filtered.length === 0 && (
