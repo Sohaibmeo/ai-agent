@@ -84,7 +84,7 @@ export function GroceriesPage() {
         </div>
         <div className="flex items-center gap-2 text-xs text-slate-700">
           <select
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 pr-8 text-sm text-slate-700 hover:bg-slate-100"
             value={selectedPlanId || ''}
             onChange={(e) => setSelectedPlanId(e.target.value)}
           >
