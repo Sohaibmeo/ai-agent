@@ -8,8 +8,6 @@ We have to make sure plans are better designed; better budgets; better goal requ
 
 Recipe: recipe detail still uses stub data; needs real recipe/ingredient/method data and a save endpoint to persist ingredient edits/add/remove and AI notes;
 Swap dialog: show real macros/prices, hook “auto decide” to backend/LLM when ready.
-Plans page: advanced settings flow is not implemented.
-Groceries: week selector/history not implemented; responsive tweaks still pending.
 
 # Suggestions for next changes : 
 
@@ -17,7 +15,5 @@ Groceries: week selector/history not implemented; responsive tweaks still pendin
 Cache recipe candidates by slot/diet/difficulty to speed swaps, with short TTL and cache-busting on recipe updates.
 Add simple rate limiting or request shaping for LLM calls to avoid runaway retries.
 Unit plan page (so when viewing history a plan can be inspected)
-
-## Future plans
 - Build “My recipes” tab: list user custom recipes (`is_custom`, `createdByUser`), allow creating from scratch, and optionally record `parent_recipe_id` to reference originals.
 - Add recipe-detail “Save as my recipe” flow to call `/plans/save-custom-recipe` and surface saved customs in selection flows.

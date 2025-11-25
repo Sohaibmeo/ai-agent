@@ -9,7 +9,18 @@ export function fetchPlansList() {
   return apiClient.get<WeeklyPlan[]>('/plans');
 }
 
-export function generatePlan(payload: { userId: string; weekStartDate?: string; useAgent?: boolean }) {
+export function generatePlan(payload: {
+  userId: string;
+  weekStartDate?: string;
+  useAgent?: boolean;
+  weeklyBudgetGbp?: number;
+  overrides?: {
+    breakfast_enabled?: boolean;
+    snack_enabled?: boolean;
+    lunch_enabled?: boolean;
+    dinner_enabled?: boolean;
+  };
+}) {
   return apiClient.post<WeeklyPlan>('/plans/generate', payload);
 }
 
