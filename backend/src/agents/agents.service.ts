@@ -225,4 +225,29 @@ export class AgentsService {
     }
     return parsed;
   }
+
+  async adjustRecipe(payload: { note: string; current: any }) {
+    const schema = z.object({
+      new_name: z.string().optional(),
+      instructions: z.string().optional(),
+      ingredients: z.array(
+        z.object({
+          ingredient_id: z.string().optional(),
+          ingredient_name: z.string().optional(),
+          quantity: z.number(),
+          unit: z.string(),
+        }),
+      ),
+    });
+    const prompt: { role: 'system' | 'user'; content: string }[] = [
+      {
+        role: 'system',
+        content:
+          'You are Recipe Adjuster. Given current recipe and user note, respond ONLY with JSON {new_name?, instructions?, ingredients:[{ingredient_id?, ingredient_name?, quantity, unit}]}. Use ingredient_id when provided; do not invent ids.',
+      },
+      { role: 'user', content: JSON.stringify(payload) },
+    ];
+    const raw = await this.callModel(this.reviewModel, prompt, 'review');
+    return schema.parse(raw);
+  }
 }

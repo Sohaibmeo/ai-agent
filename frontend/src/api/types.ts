@@ -30,6 +30,10 @@ export interface Recipe {
   ingredients?: RecipeIngredient[];
 }
 
+export type RecipeWithIngredients = Recipe & {
+  ingredients?: RecipeIngredient[];
+};
+
 export interface RecipeIngredient {
   id: string;
   quantity: number;

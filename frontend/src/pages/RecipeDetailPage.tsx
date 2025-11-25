@@ -6,10 +6,10 @@ import { useActivePlan } from '../hooks/usePlan';
 import { DEMO_USER_ID } from '../lib/config';
 import { IngredientSwapModal } from '../components/recipes/IngredientSwapModal';
 import { notify } from '../lib/toast';
-import { saveCustomRecipe } from '../api/plans';
+import { saveCustomRecipe, aiAdjustMeal } from '../api/plans';
 import { fetchIngredients } from '../api/ingredients';
 import { fetchRecipeById } from '../api/recipes';
-import type { Ingredient, Recipe } from '../api/types';
+import type { Ingredient, Recipe, RecipeWithIngredients } from '../api/types';
 
 type IngredientRow = {
   id: string; // recipe_ingredient id
@@ -39,6 +39,7 @@ export function RecipeDetailPage() {
   const [dirty, setDirty] = useState(false);
   const [addMode, setAddMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
   const { data: allIngredients } = useQuery<Ingredient[]>({
     queryKey: ['ingredients'],
     queryFn: fetchIngredients,
@@ -54,14 +55,15 @@ export function RecipeDetailPage() {
   }, [plan, mealId]);
 
   const recipeId = meal?.meal.recipe?.id;
-  const { data: recipeDetail } = useQuery<Recipe>({
+  const { data: recipeDetail } = useQuery<RecipeWithIngredients>({
     queryKey: ['recipe', recipeId],
     queryFn: () => fetchRecipeById(recipeId as string),
     enabled: Boolean(recipeId),
   });
 
   const m = meal?.meal;
-  const recipe = recipeDetail || m?.recipe;
+  const [localRecipe, setLocalRecipe] = useState<RecipeWithIngredients | null>(null);
+  const recipe = localRecipe || recipeDetail || m?.recipe;
   const recipeIngredients = recipe?.ingredients || [];
 
   useEffect(() => {
@@ -148,6 +150,32 @@ export function RecipeDetailPage() {
     }
   };
 
+  const handleApplyAI = async () => {
+    if (!m?.id) return;
+    if (!aiNote.trim()) {
+      notify.error('Please describe what you want changed.');
+      return;
+    }
+    try {
+      setIsApplying(true);
+      const updated: any = await aiAdjustMeal(m.id, DEMO_USER_ID, aiNote);
+      if (updated?.recipe?.ingredients) {
+        const rows = toIngredientRows(updated.recipe.ingredients);
+        setIngredients(rows);
+        setInitialIngredients(rows);
+      }
+      if (updated?.recipe) {
+        setLocalRecipe(updated.recipe);
+      }
+      setDirty(false);
+      notify.success('AI applied changes');
+    } catch (e) {
+      notify.error('Could not apply AI changes');
+    } finally {
+      setIsApplying(false);
+    }
+  };
+
   return (
     <div className="min-h-screen p-6 space-y-4">
       <button className="text-sm text-emerald-700 hover:underline" onClick={() => navigate(-1)}>
@@ -194,8 +222,12 @@ export function RecipeDetailPage() {
           >
             Cancel
           </button>
-          <button className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800">
-            Apply changes
+          <button
+            className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
+            onClick={handleApplyAI}
+            disabled={isApplying}
+          >
+            {isApplying ? 'Applying...' : 'Apply changes'}
           </button>
         </div>
       </Card>
@@ -280,7 +312,7 @@ export function RecipeDetailPage() {
             <button
               className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
               onClick={() => {
-                setIngredients(defaultIngredients);
+                setIngredients(initialIngredients);
                 setDirty(aiNote.trim().length > 0);
               }}
             >

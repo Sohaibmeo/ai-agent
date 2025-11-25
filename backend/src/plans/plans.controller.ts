@@ -40,6 +40,11 @@ export class PlansController {
     return this.plansService.setMealRecipe(body.planMealId, body.newRecipeId);
   }
 
+  @Post('meal/:planMealId/ai-adjust')
+  aiAdjust(@Param('planMealId') planMealId: string, @Body() body: { userId: string; note: string }) {
+    return this.plansService.aiAdjustMeal(planMealId, body.userId, body.note);
+  }
+
   @Post('auto-swap')
   autoSwap(@Body() body: { planMealId: string; userId: string; note?: string }) {
     return this.plansService.autoSwapMeal(body.planMealId, body.userId, body.note);

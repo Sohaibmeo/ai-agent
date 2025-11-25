@@ -35,6 +35,10 @@ export function autoSwapMeal(body: { planMealId: string; userId: string; note?: 
   return apiClient.post<{ chosenRecipeId: string }>('/plans/auto-swap', body);
 }
 
+export function aiAdjustMeal(planMealId: string, userId: string, note: string) {
+  return apiClient.post(`/plans/meal/${planMealId}/ai-adjust`, { userId, note });
+}
+
 export function activatePlan(planId: string) {
   return apiClient.post<WeeklyPlan>('/plans/activate', { planId });
 }

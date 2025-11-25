@@ -31,7 +31,7 @@ export class PlansService {
     private readonly shoppingListService: ShoppingListService,
     private readonly preferencesService: PreferencesService,
     private readonly agentsService: AgentsService,
-    private readonly ingredientsService: IngredientsService,
+  private readonly ingredientsService: IngredientsService,
   ) {}
 
   findAll() {
@@ -42,6 +42,78 @@ export class PlansService {
     });
   }
 
+  async aiAdjustMeal(planMealId: string, userId: string, note: string) {
+    if (!note || !note.trim()) {
+      throw new Error('A note describing the desired change is required');
+    }
+    const meal = await this.planMealRepo.findOne({
+      where: { id: planMealId },
+      relations: ['planDay', 'planDay.weeklyPlan', 'planDay.weeklyPlan.user', 'recipe', 'recipe.ingredients', 'recipe.ingredients.ingredient'],
+    });
+    if (!meal || !meal.recipe) {
+      throw new NotFoundException('Meal not found');
+    }
+    const current = {
+      name: meal.recipe.name,
+      meal_slot: meal.meal_slot,
+      ingredients: (meal.recipe.ingredients || []).map((ri) => ({
+        id: ri.ingredient.id,
+        name: ri.ingredient.name,
+        quantity: Number(ri.quantity || 0),
+        unit: ri.unit || 'g',
+      })),
+      instructions: meal.recipe.instructions,
+    };
+    const parsed = await this.agentsService.adjustRecipe({ note, current });
+
+    const ingredientItems: { ingredientId: string; quantity: number; unit: string }[] = [];
+    for (const item of parsed.ingredients) {
+      let ingId = item.ingredient_id;
+      if (!ingId && item.ingredient_name) {
+        const resolved = await this.ingredientsService.resolveOrCreateLoose(item.ingredient_name);
+        if (resolved) ingId = resolved.id;
+      }
+      if (!ingId) {
+        throw new Error('Ingredient missing id or resolvable name');
+      }
+      ingredientItems.push({
+        ingredientId: ingId,
+        quantity: item.quantity,
+        unit: item.unit,
+      });
+    }
+
+    const custom = await this.recipesService.createCustomFromExisting({
+      baseRecipeId: meal.recipe.id,
+      newName: parsed.new_name || meal.recipe.name,
+      mealSlot: meal.meal_slot,
+      ingredientItems,
+      createdByUserId: userId,
+      instructions: parsed.instructions || meal.recipe.instructions,
+    });
+
+    meal.recipe = custom as any;
+    meal.meal_kcal = custom.base_kcal;
+    meal.meal_protein = custom.base_protein;
+    meal.meal_carbs = custom.base_carbs;
+    meal.meal_fat = custom.base_fat;
+    meal.meal_cost_gbp = custom.base_cost_gbp;
+    await this.planMealRepo.save(meal);
+    await this.recomputeAggregates(meal.planDay.weeklyPlan.id);
+    await this.shoppingListService.rebuildForPlan(meal.planDay.weeklyPlan.id);
+    await this.logAction({
+      weeklyPlanId: meal.planDay.weeklyPlan.id,
+      userId,
+      action: 'ai_adjust_meal',
+      metadata: { planMealId, note },
+      success: true,
+    });
+
+    return this.planMealRepo.findOne({
+      where: { id: meal.id },
+      relations: ['recipe', 'recipe.ingredients', 'recipe.ingredients.ingredient', 'planDay', 'planDay.weeklyPlan'],
+    });
+  }
   findById(id: string) {
     return this.weeklyPlanRepo.findOne({
       where: { id },

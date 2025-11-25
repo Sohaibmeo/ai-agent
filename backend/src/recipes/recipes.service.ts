@@ -161,6 +161,7 @@ export class RecipesService {
     difficulty?: string;
     ingredientItems: { ingredientId: string; quantity: number; unit: string }[];
     createdByUserId?: string;
+    instructions?: string | null;
   }) {
     const base = await this.recipeRepo.findOne({
       where: { id: input.baseRecipeId },
@@ -176,6 +177,7 @@ export class RecipesService {
       difficulty: input.difficulty || base.difficulty,
       is_custom: true,
       createdByUser: input.createdByUserId ? ({ id: input.createdByUserId } as any) : base.createdByUser,
+      instructions: input.instructions ?? base.instructions,
     });
     const savedRecipe = await this.recipeRepo.save(recipe);
 

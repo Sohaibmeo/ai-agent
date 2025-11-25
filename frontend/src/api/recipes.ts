@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import type { RecipeWithIngredients } from './types';
 
 export interface RecipeCandidate {
   id: string;
@@ -20,5 +21,5 @@ export function fetchRecipeCandidates(params: { userId: string; mealSlot?: strin
 }
 
 export function fetchRecipeById(id: string) {
-  return apiClient.get(`/recipes/${id}`);
+  return apiClient.get<RecipeWithIngredients>(`/recipes/${id}`);
 }
