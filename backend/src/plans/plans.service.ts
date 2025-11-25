@@ -455,7 +455,7 @@ export class PlansService {
       this.logger.log(
         `Plan action resolved user=${userId} plan=${weeklyPlanId} action=${reviewInstruction.action} target=${reviewInstruction.targetLevel}`,
       );
-      await this.handleInstruction(userId, plan, reviewInstruction);
+      await this.handleInstruction(userId, plan, reviewInstruction, payload.reasonText);
       await this.logAction({
         userId,
         weeklyPlanId,
@@ -541,7 +541,7 @@ export class PlansService {
     };
   }
 
-  private async handleInstruction(userId: string, plan: WeeklyPlan, instruction: ReviewInstruction) {
+  private async handleInstruction(userId: string, plan: WeeklyPlan, instruction: ReviewInstruction, reasonText?: string) {
     switch (instruction.action) {
       case 'regenerate_week':
         await this.regenerateWeek(userId, plan);
@@ -554,6 +554,11 @@ export class PlansService {
       case 'regenerate_meal':
         if (instruction.targetIds?.planMealId) {
           await this.regenerateMeal(userId, instruction.targetIds.planMealId);
+        }
+        break;
+      case 'swap_meal':
+        if (instruction.targetIds?.planMealId) {
+          await this.autoSwapMeal(instruction.targetIds.planMealId, userId, instruction.notes);
         }
         break;
       case 'avoid_ingredient_future':
@@ -583,6 +588,11 @@ export class PlansService {
       case 'remove_ingredient':
         if (instruction.targetIds?.planMealId) {
           await this.swapIngredient(instruction.targetIds.planMealId, instruction.params?.ingredientToRemove, null);
+        }
+        break;
+      case 'ai_adjust_recipe':
+        if (instruction.targetIds?.planMealId) {
+          await this.aiAdjustMeal(instruction.targetIds.planMealId, userId, instruction.notes || reasonText || '');
         }
         break;
       default:
