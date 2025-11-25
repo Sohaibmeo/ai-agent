@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Not } from 'typeorm';
 import { PlanDay, PlanMeal, WeeklyPlan, PlanActionLog } from '../database/entities';
@@ -559,6 +559,40 @@ export class PlansService {
     if (pick && pick.id) {
       await this.setMealRecipe(meal.id, pick.id);
     }
+  }
+
+  async autoSwapMeal(planMealId: string, userId: string, note?: string) {
+    const meal = await this.planMealRepo.findOne({
+      where: { id: planMealId },
+      relations: ['planDay', 'planDay.weeklyPlan', 'recipe'],
+    });
+    if (!meal) {
+      throw new NotFoundException('Meal not found');
+    }
+    const profile = await this.usersService.getProfile(userId);
+    const candidates = await this.recipesService.findCandidatesForUser({
+      userId,
+      mealSlot: meal.meal_slot,
+      maxDifficulty: profile.max_difficulty,
+      weeklyBudgetGbp: profile.weekly_budget_gbp ? Number(profile.weekly_budget_gbp) : undefined,
+      mealsPerDay: 4,
+    });
+    const filtered = candidates.filter((r) => r.id !== meal.recipe?.id);
+    const pick = selectRecipe(filtered.length ? filtered : candidates, {
+      costCapPerMeal: profile.weekly_budget_gbp ? Number(profile.weekly_budget_gbp) / Math.max(1, 4 * 7) : undefined,
+    });
+    if (!pick?.id) {
+      throw new Error('No candidate found');
+    }
+    await this.setMealRecipe(meal.id, pick.id);
+    await this.logAction({
+      weeklyPlanId: meal.planDay.weeklyPlan.id,
+      userId,
+      action: 'auto_swap_meal',
+      metadata: { planMealId, chosenRecipeId: pick.id, note },
+      success: true,
+    });
+    return { chosenRecipeId: pick.id };
   }
 
   private async logAction(entry: {

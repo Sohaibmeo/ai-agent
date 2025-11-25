@@ -31,12 +31,18 @@ export class PlansController {
       snack_enabled: body.snack_enabled,
       lunch_enabled: body.lunch_enabled,
       dinner_enabled: body.dinner_enabled,
+      maxDifficulty: body.maxDifficulty,
     });
   }
 
   @Post('set-meal-recipe')
   setMealRecipe(@Body() body: SetMealRecipeDto) {
     return this.plansService.setMealRecipe(body.planMealId, body.newRecipeId);
+  }
+
+  @Post('auto-swap')
+  autoSwap(@Body() body: { planMealId: string; userId: string; note?: string }) {
+    return this.plansService.autoSwapMeal(body.planMealId, body.userId, body.note);
   }
 
   @Post('activate')

@@ -2,19 +2,22 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRecipeCandidates } from '../../hooks/useRecipeCandidates';
 import { DEMO_USER_ID } from '../../lib/config';
 import { notify } from '../../lib/toast';
+import { autoSwapMeal } from '../../api/plans';
 
 interface SwapDialogProps {
   open: boolean;
   mealSlot?: string;
+  planMealId?: string | null;
   onClose: () => void;
   onSelect: (recipeId: string) => void;
 }
 
-export function SwapDialog({ open, mealSlot, onClose, onSelect }: SwapDialogProps) {
+export function SwapDialog({ open, mealSlot, planMealId, onClose, onSelect }: SwapDialogProps) {
   const { data: candidates, isLoading, isError, refetch } = useRecipeCandidates(mealSlot, DEMO_USER_ID);
   const [search, setSearch] = useState('');
   const [autoMode, setAutoMode] = useState<'prompt' | 'question' | null>(null);
   const [autoNote, setAutoNote] = useState('');
+  const [isAutoPicking, setIsAutoPicking] = useState(false);
 
   const filtered = useMemo(() => {
     const list = candidates || [];
@@ -45,12 +48,28 @@ export function SwapDialog({ open, mealSlot, onClose, onSelect }: SwapDialogProp
 
   if (!open) return null;
 
-  const autoPick = () => {
-    const choice = filtered[0] || candidates?.[0];
-    if (choice) {
-      onSelect(choice.id);
-      onClose();
+  const autoPick = async () => {
+    if (!planMealId) {
+      const choice = filtered[0] || candidates?.[0];
+      if (choice) {
+        onSelect(choice.id);
+        onClose();
+        notify.success('Auto-selected a replacement');
+      }
+      return;
+    }
+    try {
+      setIsAutoPicking(true);
+      const res = await autoSwapMeal({ planMealId, userId: DEMO_USER_ID, note: autoNote || undefined });
+      const chosenId = res.chosenRecipeId;
       notify.success('Auto-selected a replacement');
+      onClose();
+      // Trigger parent refresh via onSelect for consistency
+      if (chosenId) onSelect(chosenId);
+    } catch (e) {
+      notify.error('Could not auto-select a meal');
+    } finally {
+      setIsAutoPicking(false);
     }
   };
 
@@ -79,6 +98,7 @@ export function SwapDialog({ open, mealSlot, onClose, onSelect }: SwapDialogProp
               setAutoMode(autoMode ? null : 'question');
               setAutoNote('');
             }}
+            disabled={isAutoPicking}
           >
             🤖 Auto decide for me
           </button>
@@ -91,12 +111,14 @@ export function SwapDialog({ open, mealSlot, onClose, onSelect }: SwapDialogProp
               <button
                 className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
                 onClick={autoPick}
+                disabled={isAutoPicking}
               >
-                No, just pick for me
+                {isAutoPicking ? 'Picking...' : 'No, just pick for me'}
               </button>
               <button
                 className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm hover:shadow"
                 onClick={() => setAutoMode('prompt')}
+                disabled={isAutoPicking}
               >
                 Yes, I’ll describe it
               </button>
@@ -121,14 +143,16 @@ export function SwapDialog({ open, mealSlot, onClose, onSelect }: SwapDialogProp
                   setAutoMode('question');
                   setAutoNote('');
                 }}
+                disabled={isAutoPicking}
               >
                 Back
               </button>
               <button
                 className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"
                 onClick={autoPick}
+                disabled={isAutoPicking}
               >
-                Apply
+                {isAutoPicking ? 'Applying...' : 'Apply'}
               </button>
             </div>
           </div>

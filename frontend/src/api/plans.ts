@@ -14,12 +14,11 @@ export function generatePlan(payload: {
   weekStartDate?: string;
   useAgent?: boolean;
   weeklyBudgetGbp?: number;
-  overrides?: {
-    breakfast_enabled?: boolean;
-    snack_enabled?: boolean;
-    lunch_enabled?: boolean;
-    dinner_enabled?: boolean;
-  };
+  breakfast_enabled?: boolean;
+  snack_enabled?: boolean;
+  lunch_enabled?: boolean;
+  dinner_enabled?: boolean;
+  maxDifficulty?: string;
 }) {
   return apiClient.post<WeeklyPlan>('/plans/generate', payload);
 }
@@ -30,6 +29,10 @@ export function applyPlanAction(weeklyPlanId: string, body: any) {
 
 export function setMealRecipe(body: { planMealId: string; newRecipeId: string }) {
   return apiClient.post<WeeklyPlan>('/plans/set-meal-recipe', body);
+}
+
+export function autoSwapMeal(body: { planMealId: string; userId: string; note?: string }) {
+  return apiClient.post<{ chosenRecipeId: string }>('/plans/auto-swap', body);
 }
 
 export function activatePlan(planId: string) {
