@@ -18,7 +18,10 @@ export function PlansPage() {
   const navigate = useNavigate();
   const { data: plan, isLoading, isError, refetchPlan, generatePlan, isGenerating } = useActivePlan(DEMO_USER_ID);
   const { data: plansList } = usePlansList();
-  const days = useMemo(() => plan?.days || [], [plan]);
+  const days = useMemo(() => {
+    const d = plan?.days || [];
+    return [...d].sort((a, b) => a.day_index - b.day_index);
+  }, [plan]);
   const [swapMealId, setSwapMealId] = useState<string | null>(null);
   const [swapMealSlot, setSwapMealSlot] = useState<string | undefined>(undefined);
   const [note, setNote] = useState('');
