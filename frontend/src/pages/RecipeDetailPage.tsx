@@ -236,16 +236,16 @@ export function RecipeDetailPage() {
         <Card
           title="Ingredients"
           subtitle={macrosLine}
-          action={
-            <button
-              className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-              onClick={() => {
-                setSwapTarget({ id: 'new', name: '', amount: 100, unit: 'g' });
-                setAddMode(true);
-              }}
-            >
-              <span className="text-lg leading-none">＋</span> Add
-            </button>
+              action={
+                <button
+                  className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                  onClick={() => {
+                    setSwapTarget({ id: 'new', ingredientId: '', name: '', amount: 100, unit: 'g' });
+                    setAddMode(true);
+                  }}
+                >
+                  <span className="text-lg leading-none">＋</span> Add
+                </button>
           }
         >
           <ul className="space-y-2 text-sm text-slate-800">
