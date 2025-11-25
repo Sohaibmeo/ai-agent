@@ -1,38 +1,48 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Card } from '../components/shared/Card';
 import { useActivePlan } from '../hooks/usePlan';
 import { DEMO_USER_ID } from '../lib/config';
 import { IngredientSwapModal } from '../components/recipes/IngredientSwapModal';
 import { notify } from '../lib/toast';
+import { saveCustomRecipe } from '../api/plans';
+import { fetchIngredients } from '../api/ingredients';
+import { fetchRecipeById } from '../api/recipes';
+import type { Ingredient, Recipe } from '../api/types';
 
 type IngredientRow = {
-  id: string;
+  id: string; // recipe_ingredient id
+  ingredientId: string;
   name: string;
   amount: number;
   unit: string;
 };
 
-const defaultIngredients: IngredientRow[] = [
-  { id: 'ing-1', name: 'Chicken breast', amount: 200, unit: 'g' },
-  { id: 'ing-2', name: 'Romaine lettuce', amount: 150, unit: 'g' },
-  { id: 'ing-3', name: 'Parmesan cheese', amount: 30, unit: 'g' },
-  { id: 'ing-4', name: 'Caesar dressing', amount: 2, unit: 'tbsp' },
-  { id: 'ing-5', name: 'Croutons', amount: 25, unit: 'g' },
-  { id: 'ing-6', name: 'Olive oil', amount: 1, unit: 'tbsp' },
-  { id: 'ing-7', name: 'Lemon juice', amount: 1, unit: 'tsp' },
-  { id: 'ing-8', name: 'Black pepper', amount: 1, unit: 'pinch' },
-];
+const toIngredientRows = (ris: any[] | undefined): IngredientRow[] =>
+  (ris || []).map((ri) => ({
+    id: ri.id || ri.ingredient?.id,
+    ingredientId: ri.ingredient?.id,
+    name: ri.ingredient?.name || 'Ingredient',
+    amount: Number(ri.quantity || 0),
+    unit: ri.unit || 'g',
+  }));
 
 export function RecipeDetailPage() {
   const { mealId } = useParams<{ mealId: string }>();
   const navigate = useNavigate();
   const { data: plan, isLoading } = useActivePlan(DEMO_USER_ID);
   const [aiNote, setAiNote] = useState('');
-  const [ingredients, setIngredients] = useState<IngredientRow[]>(defaultIngredients);
+  const [ingredients, setIngredients] = useState<IngredientRow[]>([]);
+  const [initialIngredients, setInitialIngredients] = useState<IngredientRow[]>([]);
   const [swapTarget, setSwapTarget] = useState<IngredientRow | null>(null);
   const [dirty, setDirty] = useState(false);
   const [addMode, setAddMode] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const { data: allIngredients } = useQuery<Ingredient[]>({
+    queryKey: ['ingredients'],
+    queryFn: fetchIngredients,
+  });
 
   const meal = useMemo(() => {
     if (!plan || !mealId) return undefined;
@@ -43,34 +53,66 @@ export function RecipeDetailPage() {
     return undefined;
   }, [plan, mealId]);
 
+  const recipeId = meal?.meal.recipe?.id;
+  const { data: recipeDetail } = useQuery<Recipe>({
+    queryKey: ['recipe', recipeId],
+    queryFn: () => fetchRecipeById(recipeId as string),
+    enabled: Boolean(recipeId),
+  });
+
   const m = meal?.meal;
-  const recipe = m?.recipe;
+  const recipe = recipeDetail || m?.recipe;
+  const recipeIngredients = recipe?.ingredients || [];
+
+  useEffect(() => {
+    if (recipeIngredients.length) {
+      const rows = toIngredientRows(recipeIngredients);
+      setIngredients(rows);
+      setInitialIngredients(rows);
+    }
+  }, [recipeIngredients]);
 
   const fmt = (val?: number | null, suffix = '') => (val || val === 0 ? `${Math.round(Number(val))}${suffix}` : '—');
   const macrosLine = recipe
     ? `P: ${fmt(m?.meal_protein ?? recipe.base_protein, 'g')} · C: ${fmt(m?.meal_carbs ?? recipe.base_carbs, 'g')} · F: ${fmt(m?.meal_fat ?? recipe.base_fat, 'g')}`
     : 'P: — · C: — · F: —';
 
-  const handleAmountChange = (id: string, value: number) => {
-    setIngredients((prev) => prev.map((ing) => (ing.id === id ? { ...ing, amount: value } : ing)));
-    setDirty(true);
+  const markDirty = (nextIngredients: IngredientRow[], nextNote: string) => {
+    setDirty(
+      JSON.stringify(nextIngredients) !== JSON.stringify(initialIngredients) ||
+        nextNote.trim().length > 0,
+    );
   };
 
-  const handleSwap = (replacementName: string, amountFromModal: number, unitFromModal: string) => {
+  const handleAmountChange = (id: string, value: number) => {
+    setIngredients((prev) => {
+      const next = prev.map((ing) => (ing.id === id ? { ...ing, amount: value } : ing));
+      markDirty(next, aiNote);
+      return next;
+    });
+  };
+
+  const handleSwap = (replacement: Ingredient, amountFromModal: number, unitFromModal: string) => {
     if (!swapTarget) return;
+    const payload = {
+      id: addMode ? `${replacement.id}-${Date.now()}` : swapTarget.id,
+      ingredientId: replacement.id,
+      name: replacement.name,
+      amount: amountFromModal || swapTarget.amount,
+      unit: unitFromModal || swapTarget.unit,
+    };
     if (addMode) {
-      setIngredients((prev) => [
-        ...prev,
-        { id: `ing-${Date.now()}`, name: replacementName, amount: amountFromModal || 100, unit: unitFromModal || 'g' },
-      ]);
+      setIngredients((prev) => {
+        const next = [...prev, payload];
+        markDirty(next, aiNote);
+        return next;
+      });
     } else {
-      setIngredients((prev) =>
-        prev.map((ing) =>
-          ing.id === swapTarget.id
-            ? { ...ing, name: replacementName, amount: amountFromModal || ing.amount, unit: unitFromModal || ing.unit }
-            : ing,
-        ),
-      );
+      setIngredients((prev) => {
+        const next = prev.map((ing) => (ing.id === swapTarget.id ? payload : ing));
+        markDirty(next, aiNote);
+        return next;
+      });
     }
     setSwapTarget(null);
     setAddMode(false);
@@ -78,10 +120,32 @@ export function RecipeDetailPage() {
     notify.success(addMode ? 'Ingredient added' : 'Ingredient swapped');
   };
 
-  const handleSave = () => {
-    // Hook up to backend when recipe update endpoint is ready
-    setDirty(false);
-    notify.success('Recipe saved');
+  const handleSave = async () => {
+    if (!m?.id || !recipe?.id) return;
+    const missingId = ingredients.find((ing) => !ing.ingredientId);
+    if (missingId) {
+      notify.error('One or more ingredients are missing an ID; please pick from the list.');
+      return;
+    }
+    try {
+      setIsSaving(true);
+      await saveCustomRecipe({
+        planMealId: m.id,
+        newName: recipe.name,
+        ingredientItems: ingredients.map((ing) => ({
+          ingredientId: ing.ingredientId,
+          quantity: ing.amount,
+          unit: ing.unit,
+        })),
+      });
+      setInitialIngredients(ingredients);
+      setDirty(false);
+      notify.success('Recipe saved');
+    } catch (e) {
+      notify.error('Could not save recipe');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -113,8 +177,9 @@ export function RecipeDetailPage() {
           placeholder="Make it lower calories; swap chicken for a halal alternative; remove dairy..."
           value={aiNote}
           onChange={(e) => {
-            setAiNote(e.target.value);
-            setDirty(true);
+            const next = e.target.value;
+            setAiNote(next);
+            markDirty(ingredients, next);
           }}
         />
         <div className="mt-1 text-[11px] text-slate-500">AI will use this along with your profile defaults.</div>
@@ -123,9 +188,8 @@ export function RecipeDetailPage() {
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
             onClick={() => {
               setAiNote('');
-              const hasIngredientChanges =
-                JSON.stringify(ingredients) !== JSON.stringify(defaultIngredients);
-              setDirty(hasIngredientChanges);
+              setIngredients(initialIngredients);
+              setDirty(false);
             }}
           >
             Cancel
@@ -176,28 +240,32 @@ export function RecipeDetailPage() {
                   <span className="text-slate-500 whitespace-nowrap">{ing.unit}</span>
                   <button
                     className="text-red-500 text-lg px-2"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIngredients((prev) => prev.filter((row) => row.id !== ing.id));
-                      setDirty(true);
-                      notify.success('Ingredient removed');
-                    }}
-                    title="Remove ingredient"
-                  >
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIngredients((prev) => {
+                      const next = prev.filter((row) => row.id !== ing.id);
+                      markDirty(next, aiNote);
+                      return next;
+                    });
+                    notify.success('Ingredient removed');
+                  }}
+                  title="Remove ingredient"
+                >
                     🗑
                   </button>
                 </div>
               </li>
             ))}
-            <li className="text-xs text-slate-500">Ingredient details would be loaded from the recipe API.</li>
           </ul>
         </Card>
         <Card title="Method">
           <ol className="list-decimal space-y-2 pl-4 text-sm text-slate-800">
-            <li>Season and cook the protein as desired.</li>
-            <li>Prepare and chop vegetables, combine in a bowl.</li>
-            <li>Serve with dressing or sides; adjust seasoning to taste.</li>
-            <li className="text-xs text-slate-500">Method steps would be loaded from the recipe instructions.</li>
+            {recipe?.instructions
+              ? recipe.instructions
+                  .split('\n')
+                  .filter((line) => line.trim().length)
+                  .map((line, idx) => <li key={idx}>{line}</li>)
+              : [<li key="placeholder" className="text-xs text-slate-500">No instructions provided.</li>]}
           </ol>
         </Card>
       </div>
@@ -221,8 +289,9 @@ export function RecipeDetailPage() {
             <button
               className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"
               onClick={handleSave}
+              disabled={isSaving}
             >
-              Save recipe
+              {isSaving ? 'Saving...' : 'Save recipe'}
             </button>
           </div>
         </div>
@@ -231,9 +300,10 @@ export function RecipeDetailPage() {
       <IngredientSwapModal
         open={Boolean(swapTarget)}
         currentName={swapTarget?.name || ''}
+        currentIngredientId={swapTarget?.ingredientId}
         currentAmount={`${swapTarget?.amount || ''} ${swapTarget?.unit || ''}`}
         currentUnit={swapTarget?.unit || 'g'}
-        suggestions={[...new Set([...defaultIngredients.map((i) => i.name), ...ingredients.map((i) => i.name)])]}
+        suggestions={[...(allIngredients || [])].map((i) => i.name)}
         onSelect={handleSwap}
         onClose={() => {
           setSwapTarget(null);

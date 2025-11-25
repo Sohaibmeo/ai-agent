@@ -38,7 +38,7 @@ export class PlansService {
     return this.weeklyPlanRepo.find({
       where: { status: Not('systemdraft') },
       order: { week_start_date: 'DESC' },
-      relations: ['days', 'days.meals'],
+      relations: ['days', 'days.meals', 'days.meals.recipe'],
     });
   }
 
@@ -120,7 +120,7 @@ export class PlansService {
     await this.shoppingListService.rebuildForPlan(meal.planDay.weeklyPlan.id);
     return this.weeklyPlanRepo.findOne({
       where: { id: meal.planDay.weeklyPlan.id },
-      relations: ['days', 'days.meals', 'days.meals.recipe'],
+      relations: ['days', 'days.meals', 'days.meals.recipe', 'days.meals.recipe.ingredients', 'days.meals.recipe.ingredients.ingredient'],
     });
   }
 

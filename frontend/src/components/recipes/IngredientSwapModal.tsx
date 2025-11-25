@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { resolveIngredient } from '../../api/ingredients';
+import type { Ingredient } from '../../api/types';
+import { notify } from '../../lib/toast';
 
 type IngredientSwapModalProps = {
   open: boolean;
   currentName: string;
   currentAmount: string;
+  currentIngredientId?: string;
   currentUnit?: string;
   suggestions?: string[];
-  onSelect: (name: string, amount: number, unit: string) => void;
+  onSelect: (ingredient: Ingredient, amount: number, unit: string) => void;
   onClose: () => void;
   mode?: 'add' | 'replace';
 };
@@ -30,6 +35,7 @@ export function IngredientSwapModal({
   open,
   currentName,
   currentAmount,
+  currentIngredientId,
   currentUnit = 'g',
   suggestions = defaultSuggestions,
   onSelect,
@@ -42,26 +48,42 @@ export function IngredientSwapModal({
     return Number.isFinite(numeric) ? numeric : 100;
   });
   const [unit, setUnit] = useState<string>(currentUnit || 'g');
+  const [selected, setSelected] = useState<Ingredient | null>(null);
 
   // keep amount in sync if the modal opens with different defaults
   useEffect(() => {
     const numeric = Number((currentAmount || '').split(' ')[0]);
     setAmount(Number.isFinite(numeric) ? numeric : 100);
     setUnit(currentUnit || 'g');
+    setSelected(null);
+    setQuery('');
   }, [currentAmount, currentUnit]);
 
   const heading = mode === 'add' ? 'Add Ingredient' : 'Replace Ingredient';
-  const [selected, setSelected] = useState<string | null>(null);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return suggestions.slice(0, 6);
-    return suggestions.filter((s) => s.toLowerCase().includes(q)).slice(0, 8);
-  }, [query, suggestions]);
+  const searchQuery = query.trim();
+  const ingredientSearch = useQuery({
+    queryKey: ['ingredient-search', searchQuery],
+    queryFn: () => resolveIngredient({ query: searchQuery, limit: 8, createIfMissing: false }),
+    enabled: open && searchQuery.length > 0,
+  });
 
-  const canApply = Boolean(
-    selected || amount.toString() !== (currentAmount || '').split(' ')[0],
-  );
+  const filtered: Ingredient[] = useMemo(() => {
+    if (searchQuery.length === 0) {
+      return suggestions.slice(0, 8).map((name, idx) => ({ id: `suggest-${idx}`, name }));
+    }
+    const data = ingredientSearch.data;
+    if (!data) return [];
+    const fromMatches = data.matches.map((m) => m.ingredient);
+    const base = data.resolved ? [data.resolved, ...fromMatches] : fromMatches;
+    const dedup = new Map<string, Ingredient>();
+    for (const ing of base) {
+      if (ing.id) dedup.set(ing.id, ing);
+    }
+    return Array.from(dedup.values());
+  }, [ingredientSearch.data, searchQuery, suggestions]);
+
+  const canApply = Boolean(selected || currentIngredientId);
 
   useEffect(() => {
     if (!open) return;
@@ -72,11 +94,11 @@ export function IngredientSwapModal({
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
-  if (!open) return null;
+    if (!open) return null;
 
-  return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div
+    return (
+      <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+        <div
         className="w-full max-w-md rounded-2xl bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
@@ -130,16 +152,18 @@ export function IngredientSwapModal({
             />
             <div className="mt-3 max-h-48 space-y-1 overflow-y-auto">
               {filtered.length === 0 && <div className="text-xs text-slate-500">No matches yet.</div>}
-              {filtered.map((name) => (
+              {filtered.map((ing) => (
                 <button
-                  key={name}
+                  key={ing.id}
                   className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-slate-800 hover:bg-slate-50 ${
-                    selected === name ? 'border border-emerald-200 bg-emerald-50' : ''
+                    selected?.id === ing.id ? 'border border-emerald-200 bg-emerald-50' : ''
                   }`}
-                  onClick={() => setSelected(name)}
+                  onClick={() => setSelected(ing)}
                 >
-                  <span>{name}</span>
-                  <span className="text-[11px] text-emerald-600">{selected === name ? 'Selected' : 'Select'}</span>
+                  <span>{ing.name}</span>
+                  <span className="text-[11px] text-emerald-600">
+                    {selected?.id === ing.id ? 'Selected' : 'Select'}
+                  </span>
                 </button>
               ))}
             </div>
@@ -149,13 +173,16 @@ export function IngredientSwapModal({
           <button
             className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
             disabled={!canApply}
-            onClick={() => {
-              if (!canApply) return;
-              const nextName = selected || currentName || 'New ingredient';
-              onSelect(nextName, amount, unit);
-              setSelected(null);
-              setQuery('');
-            }}
+              onClick={() => {
+                const baseIngredient = selected || (currentIngredientId ? { id: currentIngredientId, name: currentName } : null);
+                if (!baseIngredient) {
+                  notify.error('Please select an ingredient');
+                  return;
+                }
+                onSelect(baseIngredient as Ingredient, amount, unit);
+                setSelected(null);
+                setQuery('');
+              }}
           >
             Apply
           </button>

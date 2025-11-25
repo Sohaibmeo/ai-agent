@@ -18,3 +18,7 @@ export function fetchRecipeCandidates(params: { userId: string; mealSlot?: strin
   if (params.mealSlot) search.set('mealSlot', params.mealSlot);
   return apiClient.get<RecipeCandidate[]>(`/recipes/candidates?${search.toString()}`);
 }
+
+export function fetchRecipeById(id: string) {
+  return apiClient.get(`/recipes/${id}`);
+}

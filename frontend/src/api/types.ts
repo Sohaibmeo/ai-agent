@@ -21,11 +21,29 @@ export interface Recipe {
   name: string;
   meal_slot: string;
   meal_type?: string;
+  instructions?: string | null;
   base_kcal?: number | null;
   base_cost_gbp?: number | null;
   base_protein?: number | null;
   base_carbs?: number | null;
   base_fat?: number | null;
+  ingredients?: RecipeIngredient[];
+}
+
+export interface RecipeIngredient {
+  id: string;
+  quantity: number;
+  unit: string;
+  ingredient: {
+    id: string;
+    name: string;
+  };
+}
+
+export interface Ingredient {
+  id: string;
+  name: string;
+  category?: string | null;
 }
 
 export interface PlanMeal {

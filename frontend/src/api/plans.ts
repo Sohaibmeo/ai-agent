@@ -42,3 +42,11 @@ export function activatePlan(planId: string) {
 export function setPlanStatus(planId: string, status: 'systemdraft' | 'draft' | 'active' | 'archived') {
   return apiClient.post<WeeklyPlan>('/plans/status', { planId, status });
 }
+
+export function saveCustomRecipe(payload: {
+  planMealId: string;
+  newName: string;
+  ingredientItems: { ingredientId: string; quantity: number; unit: string }[];
+}) {
+  return apiClient.post('/plans/save-custom-recipe', payload);
+}

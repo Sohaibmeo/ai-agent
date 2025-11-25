@@ -39,6 +39,13 @@ export class RecipesService {
     return this.recipeRepo.findOne({ where: { id } });
   }
 
+  findOneDetailed(id: string) {
+    return this.recipeRepo.findOne({
+      where: { id },
+      relations: ['ingredients', 'ingredients.ingredient'],
+    });
+  }
+
   async findCandidatesForUser(query: RecipeCandidatesQueryDto) {
     this.logger.log(
       `findCandidates user=${query.userId} slot=${query.mealSlot ?? 'any'} type=${query.mealType ?? 'any'}`,
