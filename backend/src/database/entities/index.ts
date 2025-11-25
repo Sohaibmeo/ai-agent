@@ -12,3 +12,4 @@ export * from './user-ingredient-price.entity';
 export * from './user-preferences.entity';
 export * from './user-recipe-score.entity';
 export * from './user-ingredient-score.entity';
+export * from './plan-action-log.entity';

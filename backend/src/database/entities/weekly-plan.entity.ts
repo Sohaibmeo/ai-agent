@@ -14,7 +14,7 @@ export class WeeklyPlan {
   @Column({ type: 'date' })
   week_start_date!: string;
 
-  @Column({ type: 'varchar', length: 20, default: 'draft' })
+  @Column({ type: 'varchar', length: 20, default: 'systemdraft' })
   status!: string;
 
   @Column({ type: 'numeric', nullable: true })
@@ -22,6 +22,15 @@ export class WeeklyPlan {
 
   @Column({ type: 'numeric', nullable: true })
   total_kcal?: number;
+
+  @Column({ type: 'numeric', nullable: true })
+  total_protein?: number;
+
+  @Column({ type: 'numeric', nullable: true })
+  total_carbs?: number;
+
+  @Column({ type: 'numeric', nullable: true })
+  total_fat?: number;
 
   @OneToMany(() => PlanDay, (day) => day.weeklyPlan)
   days!: PlanDay[];

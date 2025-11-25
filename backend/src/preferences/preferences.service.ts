@@ -83,4 +83,19 @@ export class PreferencesService {
       await this.incrementIngredientPreference(userId, type, id);
     }
   }
+
+  async setAvoidIngredient(userId: string, ingredientId: string, score: number = -10) {
+    await this.ingScoreRepo.upsert(
+      {
+        user: { id: userId } as any,
+        ingredient: { id: ingredientId } as any,
+        score,
+      },
+      {
+        conflictPaths: ['user', 'ingredient'],
+        upsertType: 'on-conflict-do-update',
+        upsertColumns: ['score', 'updated_at'],
+      } as any,
+    );
+  }
 }

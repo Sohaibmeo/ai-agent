@@ -1,4 +1,5 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString, IsNumber } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class RecipeCandidatesQueryDto {
   @IsString()
@@ -11,4 +12,23 @@ export class RecipeCandidatesQueryDto {
   @IsOptional()
   @IsString()
   maxDifficulty?: string;
+
+  @IsOptional()
+  @IsString()
+  mealType?: 'solid' | 'drinkable';
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  weeklyBudgetGbp?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  mealsPerDay?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  estimatedDayCost?: number;
 }

@@ -4,6 +4,9 @@ import { GeneratePlanDto } from './dto/generate-plan.dto';
 import { SetMealRecipeDto } from './dto/set-meal-recipe.dto';
 import { ActivatePlanDto } from './dto/set-plan-status.dto';
 import { UserIdParamDto } from './dto/user-id-param.dto';
+import { PlanActionDto } from './dto/plan-action.dto';
+import { SetPlanStatusDto } from './dto/set-plan-status.dto';
+import { SaveCustomRecipeDto } from './dto/save-custom-recipe.dto';
 
 @Controller('plans')
 export class PlansController {
@@ -22,7 +25,14 @@ export class PlansController {
   @Post('generate')
   generate(@Body() body: GeneratePlanDto) {
     const weekStartDate = body.weekStartDate || new Date().toISOString().slice(0, 10);
-    return this.plansService.generateWeek(body.userId, weekStartDate, body.useAgent);
+    return this.plansService.generateWeek(body.userId, weekStartDate, body.useAgent, {
+      weeklyBudgetGbp: body.weeklyBudgetGbp,
+      breakfast_enabled: body.breakfast_enabled,
+      snack_enabled: body.snack_enabled,
+      lunch_enabled: body.lunch_enabled,
+      dinner_enabled: body.dinner_enabled,
+      maxDifficulty: body.maxDifficulty,
+    });
   }
 
   @Post('set-meal-recipe')
@@ -30,13 +40,42 @@ export class PlansController {
     return this.plansService.setMealRecipe(body.planMealId, body.newRecipeId);
   }
 
+  @Post('meal/:planMealId/ai-adjust')
+  aiAdjust(@Param('planMealId') planMealId: string, @Body() body: { userId: string; note: string }) {
+    return this.plansService.aiAdjustMeal(planMealId, body.userId, body.note);
+  }
+
+  @Post('auto-swap')
+  autoSwap(@Body() body: { planMealId: string; userId: string; note?: string }) {
+    return this.plansService.autoSwapMeal(body.planMealId, body.userId, body.note);
+  }
+
   @Post('activate')
   activate(@Body() body: ActivatePlanDto) {
     return this.plansService.setStatus(body.planId, 'active');
   }
 
+  @Post('status')
+  setStatus(@Body() body: SetPlanStatusDto) {
+    return this.plansService.setStatus(body.planId, body.status);
+  }
+
+  @Post('save-custom-recipe')
+  saveCustomRecipe(@Body() body: SaveCustomRecipeDto) {
+    return this.plansService.saveCustomRecipe(body.planMealId, body.newName, body.ingredientItems);
+  }
+
   @Get(':id')
   getById(@Param('id') id: string) {
     return this.plansService.findById(id);
+  }
+
+  @Post(':weeklyPlanId/actions')
+  applyAction(@Param('weeklyPlanId') weeklyPlanId: string, @Body() body: PlanActionDto) {
+    return this.plansService.applyAction(weeklyPlanId, {
+      actionContext: body.actionContext,
+      reasonText: body.reasonText,
+      userId: body.userId,
+    });
   }
 }

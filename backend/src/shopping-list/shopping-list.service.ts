@@ -29,10 +29,41 @@ export class ShoppingListService {
     @InjectEntityManager() private readonly entityManager: EntityManager,
   ) {}
 
-  getForPlan(planId: string) {
-    return this.shoppingListRepo.find({
+  async getForPlan(planId: string, userId?: string) {
+    const baseItems = await this.shoppingListRepo.find({
       where: { weeklyPlan: { id: planId } },
+      relations: ['ingredient'],
     });
+    if (!userId) {
+      return {
+        weekly_plan_id: planId,
+        items: baseItems,
+      };
+    }
+
+    // Apply pantry flags and user price overrides on the fly for response
+    const [overrides, pantry] = await Promise.all([
+      this.priceRepo.find({ where: { user: { id: userId } as any }, relations: ['ingredient'] }),
+      this.pantryRepo.find({ where: { user: { id: userId } as any }, relations: ['ingredient'] }),
+    ]);
+    const overrideMap = new Map(overrides.map((o) => [o.ingredient.id, Number(o.price_per_unit_gbp)]));
+    const pantryMap = new Map(pantry.map((p) => [p.ingredient.id, p.has_item]));
+
+    const items = baseItems.map((item) => {
+      const pricePerUnit = overrideMap.get(item.ingredient.id);
+      const hasItem = pantryMap.get(item.ingredient.id) ?? false;
+      const estimated = pricePerUnit ? pricePerUnit * Number(item.total_quantity) : item.estimated_cost_gbp;
+      return {
+        ...item,
+        estimated_cost_gbp: estimated,
+        has_item: hasItem,
+      };
+    });
+
+    return {
+      weekly_plan_id: planId,
+      items,
+    };
   }
 
   async rebuildForPlan(planId: string) {
@@ -114,7 +145,7 @@ export class ShoppingListService {
 
     await this.shoppingListRepo.save(toSave);
     this.logger.log(`shopping list rebuilt plan=${planId} items=${toSave.length}`);
-    return this.getForPlan(planId);
+    return this.getForPlan(planId, userId);
   }
 
   async getActive(userId: string, planId?: string) {
@@ -129,6 +160,64 @@ export class ShoppingListService {
       throw new Error('No active plan for this user');
     }
     this.logger.log(`get active shopping list plan=${targetPlanId} user=${userId}`);
-    return this.getForPlan(targetPlanId);
+    return this.getForPlan(targetPlanId, userId);
+  }
+
+  async updatePantry(userId: string, ingredientId: string, hasItem: boolean, planId?: string) {
+    const existing = await this.pantryRepo.findOne({
+      where: { user: { id: userId } as any, ingredient: { id: ingredientId } as any },
+    });
+    if (existing) {
+      existing.has_item = hasItem;
+      await this.pantryRepo.save(existing);
+    } else {
+      await this.pantryRepo.save({
+        user: { id: userId } as any,
+        ingredient: { id: ingredientId } as any,
+        has_item: hasItem,
+      });
+    }
+    const targetPlanId = planId || (await this.weeklyPlanRepo.findOne({ where: { user: { id: userId } as any, status: 'active' } }))?.id;
+    if (targetPlanId) {
+      return this.getForPlan(targetPlanId, userId);
+    }
+    return this.getActive(userId);
+  }
+
+  async updatePrice(
+    userId: string,
+    ingredientId: string,
+    pricePaid: number,
+    quantity: number,
+    unit: string,
+    planId?: string,
+  ) {
+    const perUnit = quantity > 0 ? pricePaid / quantity : null;
+    if (!perUnit) {
+      throw new Error('quantity must be greater than zero');
+    }
+    const existing = await this.priceRepo.findOne({
+      where: { user: { id: userId } as any, ingredient: { id: ingredientId } as any },
+    });
+    if (existing) {
+      existing.price_per_unit_gbp = perUnit;
+      await this.priceRepo.save(existing);
+    } else {
+      await this.priceRepo.save({
+        user: { id: userId } as any,
+        ingredient: { id: ingredientId } as any,
+        price_per_unit_gbp: perUnit,
+      });
+    }
+    let targetPlanId = planId;
+    if (!targetPlanId) {
+      const plan = await this.weeklyPlanRepo.findOne({ where: { user: { id: userId } as any, status: 'active' } });
+      targetPlanId = plan?.id;
+    }
+    if (targetPlanId) {
+      await this.rebuildForPlan(targetPlanId);
+      return this.getForPlan(targetPlanId, userId);
+    }
+    return this.getActive(userId);
   }
 }
