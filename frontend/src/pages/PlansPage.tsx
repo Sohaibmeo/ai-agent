@@ -41,7 +41,27 @@ export function PlansPage() {
     max_difficulty: 'easy',
     save_settings: false,
   });
+  const [appliedSlots, setAppliedSlots] = useState({
+    breakfast_enabled: true,
+    snack_enabled: true,
+    lunch_enabled: true,
+    dinner_enabled: true,
+    max_difficulty: 'easy',
+  });
+  const [appliedBudget, setAppliedBudget] = useState<string>('');
   const [initialized, setInitialized] = useState(false);
+  const resetAdvanced = () => {
+    setSlots((prev) => ({
+      ...prev,
+      breakfast_enabled: appliedSlots.breakfast_enabled,
+      snack_enabled: appliedSlots.snack_enabled,
+      lunch_enabled: appliedSlots.lunch_enabled,
+      dinner_enabled: appliedSlots.dinner_enabled,
+      max_difficulty: appliedSlots.max_difficulty,
+      save_settings: false,
+    }));
+    setWeeklyBudget(appliedBudget);
+  };
 
   const formatCurrency = (val?: number | null) => (val || val === 0 ? `£${Number(val).toFixed(2)}` : '—');
   const formatKcal = (val?: number | null) => (val || val === 0 ? `${Math.round(Number(val))} kcal` : '—');
@@ -67,17 +87,25 @@ export function PlansPage() {
   // Initialize advanced defaults from profile once
   useEffect(() => {
     if (initialized || !profile) return;
-    setSlots((prev) => ({
-      ...prev,
+    const initialSlots = {
       breakfast_enabled: profile.breakfast_enabled ?? true,
       snack_enabled: profile.snack_enabled ?? true,
       lunch_enabled: profile.lunch_enabled ?? true,
       dinner_enabled: profile.dinner_enabled ?? true,
       max_difficulty: profile.max_difficulty || 'easy',
-    }));
-    if (profile.weekly_budget_gbp) {
-      setWeeklyBudget(String(profile.weekly_budget_gbp));
-    }
+      save_settings: false,
+    };
+    setSlots(initialSlots);
+    setAppliedSlots({
+      breakfast_enabled: initialSlots.breakfast_enabled,
+      snack_enabled: initialSlots.snack_enabled,
+      lunch_enabled: initialSlots.lunch_enabled,
+      dinner_enabled: initialSlots.dinner_enabled,
+      max_difficulty: initialSlots.max_difficulty,
+    });
+    const budgetString = profile.weekly_budget_gbp ? String(profile.weekly_budget_gbp) : '';
+    setWeeklyBudget(budgetString);
+    setAppliedBudget(budgetString);
     setInitialized(true);
   }, [initialized, profile]);
 
@@ -172,23 +200,26 @@ export function PlansPage() {
           </button>
           <button
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-            onClick={() => setIsAdvancedOpen(true)}
+            onClick={() => {
+              resetAdvanced();
+              setIsAdvancedOpen(true);
+            }}
           >
             Advanced settings
           </button>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700">
-            {weeklyBudget && (
-              <span className="rounded-full border border-slate-200 bg-white px-2 py-1 font-semibold">£{weeklyBudget}</span>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700" aria-label="applied-plan-settings">
+            {appliedBudget && (
+              <span className="rounded-full border border-slate-200 bg-white px-2 py-1 font-semibold">£{appliedBudget}</span>
             )}
             {(['breakfast_enabled', 'snack_enabled', 'lunch_enabled', 'dinner_enabled'] as const)
-              .filter((k) => slots[k])
+              .filter((k) => appliedSlots[k])
               .map((k) => (
                 <span key={k} className="rounded-full border border-slate-200 bg-white px-2 py-1">
                   {k.split('_')[0]}
                 </span>
               ))}
             <span className="rounded-full border border-slate-200 bg-white px-2 py-1">
-              Max {slots.max_difficulty || 'easy'}
+              Max {appliedSlots.max_difficulty || 'easy'}
             </span>
           </div>
         </div>
@@ -401,7 +432,7 @@ export function PlansPage() {
       <SwapDialog open={Boolean(swapMealId)} mealSlot={swapMealSlot} onClose={closeSwap} onSelect={handleSwapSelect} />
 
       {isAdvancedOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setIsAdvancedOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => { resetAdvanced(); setIsAdvancedOpen(false); }}>
           <div
             className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
@@ -479,7 +510,10 @@ export function PlansPage() {
               <div className="flex gap-2">
                 <button
                   className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
-                  onClick={() => setIsAdvancedOpen(false)}
+                  onClick={() => {
+                    resetAdvanced();
+                    setIsAdvancedOpen(false);
+                  }}
                 >
                   Cancel
                 </button>
@@ -487,6 +521,14 @@ export function PlansPage() {
                   className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"
                   onClick={() => {
                     setIsAdvancedOpen(false);
+                    setAppliedSlots({
+                      breakfast_enabled: slots.breakfast_enabled,
+                      snack_enabled: slots.snack_enabled,
+                      lunch_enabled: slots.lunch_enabled,
+                      dinner_enabled: slots.dinner_enabled,
+                      max_difficulty: slots.max_difficulty,
+                    });
+                    setAppliedBudget(weeklyBudget);
                     if (slots.save_settings) {
                       saveProfile({
                         weekly_budget_gbp: weeklyBudget ? Number(weeklyBudget) : null,
@@ -499,6 +541,8 @@ export function PlansPage() {
                         .then(() => notify.success('Settings saved'))
                         .catch(() => notify.error('Could not save settings'));
                     }
+                    // Clear the save-settings toggle after applying
+                    setSlots((prev) => ({ ...prev, save_settings: false }));
                   }}
                 >
                   Apply
