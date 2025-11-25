@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card } from '../components/shared/Card';
-import { useActiveShoppingList } from '../hooks/useShoppingList';
+import { useShoppingList } from '../hooks/useShoppingList';
 import { DEMO_USER_ID } from '../lib/config';
 import { Skeleton } from '../components/shared/Skeleton';
 import { useNavigate } from 'react-router-dom';
@@ -9,10 +9,13 @@ import type { ShoppingListItem } from '../api/types';
 import { notify } from '../lib/toast';
 import { updatePantry, updatePrice } from '../api/shoppingList';
 import { useActivePlan } from '../hooks/usePlan';
+import { usePlansList } from '../hooks/usePlansList';
 
 export function GroceriesPage() {
-  const { data: list, isLoading } = useActiveShoppingList(DEMO_USER_ID);
   const { data: plan } = useActivePlan(DEMO_USER_ID);
+  const { data: plansList } = usePlansList();
+  const [selectedPlanId, setSelectedPlanId] = useState<string | undefined>(undefined);
+  const { data: list, isLoading } = useShoppingList(selectedPlanId, DEMO_USER_ID);
   const navigate = useNavigate();
   const [items, setItems] = useState(list?.items || []);
   const [priceTarget, setPriceTarget] = useState<ShoppingListItem | null>(null);
@@ -22,6 +25,13 @@ export function GroceriesPage() {
     setItems(list?.items || []);
     setError(null);
   }, [list]);
+
+  useEffect(() => {
+    if (!selectedPlanId) {
+      const activeId = list?.weekly_plan_id || plan?.id;
+      if (activeId) setSelectedPlanId(activeId);
+    }
+  }, [selectedPlanId, list?.weekly_plan_id, plan?.id]);
 
   const estimatedTotal = useMemo(() => {
     return items
@@ -73,15 +83,20 @@ export function GroceriesPage() {
           <p className="text-sm text-slate-600">Shopping list for the current plan.</p>
         </div>
         <div className="flex items-center gap-2 text-xs text-slate-700">
-          {plan?.week_start_date && (
-            <button
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
-              onClick={() => navigate('/plans')}
-              title="View plans"
-            >
-              Week of {plan.week_start_date}
-            </button>
-          )}
+          <select
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+            value={selectedPlanId || ''}
+            onChange={(e) => setSelectedPlanId(e.target.value)}
+          >
+            <option value="" disabled>
+              Select week
+            </option>
+            {(plansList || []).map((p) => (
+              <option key={p.id} value={p.id}>
+                Week of {p.week_start_date} ({p.status})
+              </option>
+            ))}
+          </select>
           <span className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
             Estimated total £{estimatedTotal.toFixed(2)}
           </span>
