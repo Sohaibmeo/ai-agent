@@ -7,7 +7,6 @@ Budget/variety heuristics: richer day-level budget handling and variety constrai
 ## Frontend
 
 Recipe: recipe detail still uses stub data; needs real recipe/ingredient/method data and a save endpoint to persist ingredient edits/add/remove and AI notes;
-user recipes (when user edits an ingredient we give an option to store this recipes for future use or something)
 Swap dialog: show real macros/prices, hook “auto decide” to backend/LLM when ready.
 Plans page: advanced settings flow is not implemented.
 Groceries: week selector/history not implemented; responsive tweaks still pending.

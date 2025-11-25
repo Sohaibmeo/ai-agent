@@ -386,6 +386,50 @@ export class PlansService {
     }
   }
 
+  async saveCustomRecipe(
+    planMealId: string,
+    newName: string,
+    ingredientItems: { ingredientId: string; quantity: number; unit: string }[],
+  ) {
+    const meal = await this.planMealRepo.findOne({
+      where: { id: planMealId },
+      relations: ['planDay', 'planDay.weeklyPlan', 'planDay.weeklyPlan.user', 'recipe'],
+    });
+    if (!meal?.planDay?.weeklyPlan?.id) {
+      throw new Error('Plan meal not found');
+    }
+    const userId = (meal.planDay.weeklyPlan as any).user?.id;
+    const customRecipe = await this.recipesService.createCustomFromExisting({
+      baseRecipeId: meal.recipe?.id || '',
+      newName,
+      mealSlot: meal.meal_slot,
+      difficulty: meal.recipe?.difficulty,
+      ingredientItems,
+      createdByUserId: userId,
+    });
+
+    meal.recipe = customRecipe as any;
+    meal.meal_kcal = customRecipe.base_kcal;
+    meal.meal_protein = customRecipe.base_protein;
+    meal.meal_carbs = customRecipe.base_carbs;
+    meal.meal_fat = customRecipe.base_fat;
+    meal.meal_cost_gbp = customRecipe.base_cost_gbp;
+    await this.planMealRepo.save(meal);
+    await this.recomputeAggregates(meal.planDay.weeklyPlan.id);
+    await this.shoppingListService.rebuildForPlan(meal.planDay.weeklyPlan.id);
+    await this.logAction({
+      weeklyPlanId: meal.planDay.weeklyPlan.id,
+      userId,
+      action: 'save_custom_recipe',
+      metadata: { planMealId, recipeId: customRecipe.id },
+      success: true,
+    });
+    return this.weeklyPlanRepo.findOne({
+      where: { id: meal.planDay.weeklyPlan.id },
+      relations: ['days', 'days.meals', 'days.meals.recipe'],
+    });
+  }
+
   private buildPlanSummary(plan: WeeklyPlan) {
     return {
       week_start_date: plan.week_start_date,

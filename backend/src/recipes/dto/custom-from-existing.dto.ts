@@ -29,6 +29,10 @@ export class CustomFromExistingDto {
   @MaxLength(50)
   difficulty?: string;
 
+  @IsOptional()
+  @IsUUID()
+  createdByUserId?: string;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => IngredientItemDto)

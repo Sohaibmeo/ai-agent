@@ -6,6 +6,7 @@ import { ActivatePlanDto } from './dto/set-plan-status.dto';
 import { UserIdParamDto } from './dto/user-id-param.dto';
 import { PlanActionDto } from './dto/plan-action.dto';
 import { SetPlanStatusDto } from './dto/set-plan-status.dto';
+import { SaveCustomRecipeDto } from './dto/save-custom-recipe.dto';
 
 @Controller('plans')
 export class PlansController {
@@ -40,6 +41,11 @@ export class PlansController {
   @Post('status')
   setStatus(@Body() body: SetPlanStatusDto) {
     return this.plansService.setStatus(body.planId, body.status);
+  }
+
+  @Post('save-custom-recipe')
+  saveCustomRecipe(@Body() body: SaveCustomRecipeDto) {
+    return this.plansService.saveCustomRecipe(body.planMealId, body.newName, body.ingredientItems);
   }
 
   @Get(':id')
