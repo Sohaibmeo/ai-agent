@@ -124,9 +124,32 @@ export class PlansService {
     });
   }
 
-  async generateWeek(userId: string, weekStartDate: string, useAgent = false) {
+  async generateWeek(
+    userId: string,
+    weekStartDate: string,
+    useAgent = false,
+    overrides?: {
+      weeklyBudgetGbp?: number;
+      breakfast_enabled?: boolean;
+      snack_enabled?: boolean;
+      lunch_enabled?: boolean;
+      dinner_enabled?: boolean;
+      maxDifficulty?: string;
+    },
+  ) {
     this.logger.log(`generateWeek start user=${userId} date=${weekStartDate} useAgent=${useAgent}`);
     const profile = await this.usersService.getProfile(userId);
+    if (overrides?.weeklyBudgetGbp !== undefined) {
+      profile.weekly_budget_gbp = overrides.weeklyBudgetGbp;
+    }
+    profile.breakfast_enabled =
+      overrides?.breakfast_enabled !== undefined ? overrides.breakfast_enabled : profile.breakfast_enabled;
+    profile.snack_enabled = overrides?.snack_enabled !== undefined ? overrides.snack_enabled : profile.snack_enabled;
+    profile.lunch_enabled = overrides?.lunch_enabled !== undefined ? overrides.lunch_enabled : profile.lunch_enabled;
+    profile.dinner_enabled = overrides?.dinner_enabled !== undefined ? overrides.dinner_enabled : profile.dinner_enabled;
+    if (overrides?.maxDifficulty) {
+      (profile as any).max_difficulty = overrides.maxDifficulty;
+    }
     const targets = calculateTargets(profile);
 
     const mealSlots = ['breakfast', 'snack', 'lunch', 'dinner'].filter((slot) => {

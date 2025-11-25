@@ -25,7 +25,13 @@ export class PlansController {
   @Post('generate')
   generate(@Body() body: GeneratePlanDto) {
     const weekStartDate = body.weekStartDate || new Date().toISOString().slice(0, 10);
-    return this.plansService.generateWeek(body.userId, weekStartDate, body.useAgent);
+    return this.plansService.generateWeek(body.userId, weekStartDate, body.useAgent, {
+      weeklyBudgetGbp: body.weeklyBudgetGbp,
+      breakfast_enabled: body.breakfast_enabled,
+      snack_enabled: body.snack_enabled,
+      lunch_enabled: body.lunch_enabled,
+      dinner_enabled: body.dinner_enabled,
+    });
   }
 
   @Post('set-meal-recipe')

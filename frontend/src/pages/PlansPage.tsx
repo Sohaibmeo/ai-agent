@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../components/shared/Card';
 import { Skeleton } from '../components/shared/Skeleton';
 import { useActivePlan } from '../hooks/usePlan';
 import { usePlansList } from '../hooks/usePlansList';
+import { useProfile } from '../hooks/useProfile';
 import { DEMO_USER_ID } from '../lib/config';
 import { SwapDialog } from '../components/plans/SwapDialog';
 import { activatePlan, fetchActivePlan, setMealRecipe, setPlanStatus } from '../api/plans';
@@ -18,6 +19,7 @@ export function PlansPage() {
   const navigate = useNavigate();
   const { data: plan, isLoading, isError, refetchPlan, generatePlan, isGenerating } = useActivePlan(DEMO_USER_ID);
   const { data: plansList } = usePlansList();
+  const { data: profile, saveProfile } = useProfile();
   const days = useMemo(() => {
     const d = plan?.days || [];
     return [...d].sort((a, b) => a.day_index - b.day_index);
@@ -28,6 +30,18 @@ export function PlansPage() {
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
   const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
   const [isActivating, setIsActivating] = useState(false);
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+  const [weekStart, setWeekStart] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [weeklyBudget, setWeeklyBudget] = useState<string>('');
+  const [slots, setSlots] = useState({
+    breakfast_enabled: true,
+    snack_enabled: true,
+    lunch_enabled: true,
+    dinner_enabled: true,
+    max_difficulty: 'easy',
+    save_settings: false,
+  });
+  const [initialized, setInitialized] = useState(false);
 
   const formatCurrency = (val?: number | null) => (val || val === 0 ? `£${Number(val).toFixed(2)}` : '—');
   const formatKcal = (val?: number | null) => (val || val === 0 ? `${Math.round(Number(val))} kcal` : '—');
@@ -49,6 +63,23 @@ export function PlansPage() {
 
   const avgKcal = plan && days.length ? (plan.total_kcal ? Math.round(Number(plan.total_kcal) / days.length) : null) : null;
   const avgProtein = plan && days.length ? (plan.total_protein ? Math.round(Number(plan.total_protein) / days.length) : null) : null;
+
+  // Initialize advanced defaults from profile once
+  useEffect(() => {
+    if (initialized || !profile) return;
+    setSlots((prev) => ({
+      ...prev,
+      breakfast_enabled: profile.breakfast_enabled ?? true,
+      snack_enabled: profile.snack_enabled ?? true,
+      lunch_enabled: profile.lunch_enabled ?? true,
+      dinner_enabled: profile.dinner_enabled ?? true,
+      max_difficulty: profile.max_difficulty || 'easy',
+    }));
+    if (profile.weekly_budget_gbp) {
+      setWeeklyBudget(String(profile.weekly_budget_gbp));
+    }
+    setInitialized(true);
+  }, [initialized, profile]);
 
   const goToRecipe = (mealId: string) => {
     navigate(`/plans/meal/${mealId}`);
@@ -121,7 +152,16 @@ export function PlansPage() {
             onClick={async () => {
               try {
                 notify.info('Generating plan...');
-                await generatePlan({ useAgent: false });
+                await generatePlan({
+                  useAgent: false,
+                  weekStartDate: weekStart,
+                  weeklyBudgetGbp: weeklyBudget ? Number(weeklyBudget) : undefined,
+                  breakfast_enabled: slots.breakfast_enabled,
+                  snack_enabled: slots.snack_enabled,
+                  lunch_enabled: slots.lunch_enabled,
+                  dinner_enabled: slots.dinner_enabled,
+                  maxDifficulty: slots.max_difficulty,
+                });
                 notify.success('New plan generated');
               } catch (e) {
                 notify.error('Could not generate plan');
@@ -130,9 +170,27 @@ export function PlansPage() {
           >
             {isGenerating ? 'Generating...' : 'Generate New Week'}
           </button>
-          <button className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
+          <button
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+            onClick={() => setIsAdvancedOpen(true)}
+          >
             Advanced settings
           </button>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700">
+            {weeklyBudget && (
+              <span className="rounded-full border border-slate-200 bg-white px-2 py-1 font-semibold">£{weeklyBudget}</span>
+            )}
+            {(['breakfast_enabled', 'snack_enabled', 'lunch_enabled', 'dinner_enabled'] as const)
+              .filter((k) => slots[k])
+              .map((k) => (
+                <span key={k} className="rounded-full border border-slate-200 bg-white px-2 py-1">
+                  {k.split('_')[0]}
+                </span>
+              ))}
+            <span className="rounded-full border border-slate-200 bg-white px-2 py-1">
+              Max {slots.max_difficulty || 'easy'}
+            </span>
+          </div>
         </div>
         <div className="mt-3">
           <label className="text-xs text-slate-600">Tell the AI what to prioritize this week (optional)</label>
@@ -341,6 +399,115 @@ export function PlansPage() {
       )}
 
       <SwapDialog open={Boolean(swapMealId)} mealSlot={swapMealSlot} onClose={closeSwap} onSelect={handleSwapSelect} />
+
+      {isAdvancedOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setIsAdvancedOpen(false)}>
+          <div
+            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="text-lg font-semibold text-slate-900">Advanced settings</div>
+            <div className="mt-4 space-y-4 text-sm text-slate-700">
+              <label className="block space-y-1">
+                <span className="text-xs uppercase text-slate-500">Week start date</span>
+                <input
+                  type="date"
+                  value={weekStart}
+                  onChange={(e) => setWeekStart(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-200"
+                />
+              </label>
+
+              <label className="block space-y-1">
+                <span className="text-xs uppercase text-slate-500">Weekly budget (£)</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={weeklyBudget}
+                  onChange={(e) => setWeeklyBudget(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-200"
+                  placeholder="Optional"
+                />
+              </label>
+
+              <div>
+                <span className="text-xs uppercase text-slate-500">Meals enabled</span>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {(['breakfast_enabled', 'snack_enabled', 'lunch_enabled', 'dinner_enabled'] as const).map((key) => (
+                    <label
+                      key={key}
+                      className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
+                    >
+                      <span className="capitalize">{key.split('_')[0]}</span>
+                      <input
+                        type="checkbox"
+                        checked={slots[key]}
+                        onChange={() => setSlots((prev) => ({ ...prev, [key]: !prev[key] }))}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <label className="block space-y-1">
+                <span className="text-xs uppercase text-slate-500">Max difficulty</span>
+                <select
+                  value={slots.max_difficulty}
+                  onChange={(e) => setSlots((prev) => ({ ...prev, max_difficulty: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-200"
+                >
+                  <option value="super_easy">Super easy</option>
+                  <option value="easy">Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="hard">Hard</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-6 flex justify-between items-center">
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={slots.save_settings || false}
+                  onChange={(e) => setSlots((prev) => ({ ...prev, save_settings: e.target.checked }))}
+                />
+                Save these settings as defaults
+              </label>
+              <div className="flex gap-2">
+                <button
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                  onClick={() => setIsAdvancedOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"
+                  onClick={() => {
+                    setIsAdvancedOpen(false);
+                    if (slots.save_settings) {
+                      saveProfile({
+                        weekly_budget_gbp: weeklyBudget ? Number(weeklyBudget) : null,
+                        breakfast_enabled: slots.breakfast_enabled,
+                        snack_enabled: slots.snack_enabled,
+                        lunch_enabled: slots.lunch_enabled,
+                        dinner_enabled: slots.dinner_enabled,
+                        max_difficulty: slots.max_difficulty,
+                      })
+                        .then(() => notify.success('Settings saved'))
+                        .catch(() => notify.error('Could not save settings'));
+                    }
+                  }}
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {activeTab === 'history' && (
         <Card>

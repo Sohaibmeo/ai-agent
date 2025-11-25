@@ -12,8 +12,16 @@ export function useActivePlan(userId: string = DEMO_USER_ID) {
   });
 
   const generateMutation = useMutation({
-    mutationFn: (opts: { useAgent?: boolean }) =>
-      generatePlan({ userId, weekStartDate: new Date().toISOString().slice(0, 10), ...opts }),
+    mutationFn: (opts: {
+      useAgent?: boolean;
+      weekStartDate?: string;
+      weeklyBudgetGbp?: number;
+      breakfast_enabled?: boolean;
+      snack_enabled?: boolean;
+      lunch_enabled?: boolean;
+      dinner_enabled?: boolean;
+      maxDifficulty?: string;
+    }) => generatePlan({ userId, weekStartDate: new Date().toISOString().slice(0, 10), ...opts }),
     onSuccess: (data) => {
       queryClient.setQueryData(['plan', 'active', userId], data);
     },
