@@ -173,20 +173,21 @@ export function SwapDialog({ open, mealSlot, onClose, onSelect }: SwapDialogProp
                   onClick={() => onSelect(c.id)}
                   className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
                 >
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">{c.name}</div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      Slot: {c.meal_slot} · {c.meal_type || 'solid'}
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900">{c.name}</div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        Slot: {c.meal_slot} · {c.meal_type || 'solid'}
+                      </div>
+                      <div className="mt-1 text-[11px] text-slate-500 space-x-2">
+                        <span>{c.base_kcal ? `${Math.round(Number(c.base_kcal))} kcal` : '— kcal'}</span>
+                        <span>{`Protein: ${c.base_protein ? Math.round(Number(c.base_protein)) : '—'}g`}</span>
+                        <span>{`Carbs: ${c.base_carbs ? Math.round(Number(c.base_carbs)) : '—'}g`}</span>
+                        <span>{`Fats: ${c.base_fat ? Math.round(Number(c.base_fat)) : '—'}g`}</span>
+                      </div>
                     </div>
-                    <div className="mt-1 text-[11px] text-slate-500">
-                      {`P: ${c.base_protein ? Math.round(Number(c.base_protein)) : '—'}g · C: ${
-                        c.base_carbs ? Math.round(Number(c.base_carbs)) : '—'
-                      }g · F: ${c.base_fat ? Math.round(Number(c.base_fat)) : '—'}g`}
-                    </div>
-                  </div>
-                  <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
-                    {c.base_cost_gbp ? `£${Number(c.base_cost_gbp).toFixed(2)}` : '£—'}
-                  </span>
+                    <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                      {c.base_cost_gbp ? `£${Number(c.base_cost_gbp).toFixed(2)}` : '£—'}
+                    </span>
                 </button>
               ))}
             {!isLoading && !isError && filtered.length === 0 && (

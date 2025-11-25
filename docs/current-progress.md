@@ -17,3 +17,4 @@ Add simple rate limiting or request shaping for LLM calls to avoid runaway retri
 Unit plan page (so when viewing history a plan can be inspected)
 - Build “My recipes” tab: list user custom recipes (`is_custom`, `createdByUser`), allow creating from scratch, and optionally record `parent_recipe_id` to reference originals.
 - Add recipe-detail “Save as my recipe” flow to call `/plans/save-custom-recipe` and surface saved customs in selection flows.
+- Optional “LLM-first plan builder” mode: GPT drafts a full week with inline recipes; formatter normalizes ingredients/prices; persist as `systemdraft` with provenance while keeping the current candidate-based flow as fallback.
