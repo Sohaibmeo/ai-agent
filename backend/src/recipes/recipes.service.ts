@@ -166,6 +166,9 @@ export class RecipesService {
     ingredientItems: { ingredientId: string; quantity: number; unit: string }[];
     createdByUserId?: string;
     instructions?: string | null;
+    isSearchable?: boolean;
+    source?: 'catalog' | 'user' | 'llm';
+    priceEstimated?: boolean;
   }) {
     const base = await this.recipeRepo.findOne({
       where: { id: input.baseRecipeId },
@@ -182,6 +185,9 @@ export class RecipesService {
       is_custom: true,
       createdByUser: input.createdByUserId ? ({ id: input.createdByUserId } as any) : base.createdByUser,
       instructions: input.instructions ?? base.instructions,
+      source: input.source || (input.createdByUserId ? 'user' : 'catalog'),
+      is_searchable: input.isSearchable ?? true,
+      price_estimated: input.priceEstimated ?? false,
     });
     const savedRecipe = await this.recipeRepo.save(recipe);
 

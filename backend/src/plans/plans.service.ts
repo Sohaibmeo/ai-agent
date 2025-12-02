@@ -90,6 +90,9 @@ export class PlansService {
       ingredientItems,
       createdByUserId: userId,
       instructions: parsed.instructions || meal.recipe.instructions,
+      source: 'llm',
+      isSearchable: false,
+      priceEstimated: true,
     });
 
     meal.recipe = custom as any;
@@ -502,6 +505,8 @@ export class PlansService {
       difficulty: meal.recipe?.difficulty,
       ingredientItems,
       createdByUserId: userId,
+      source: 'user',
+      isSearchable: true,
     });
 
     meal.recipe = customRecipe as any;
