@@ -301,6 +301,7 @@ export class PlansService {
             weeklyBudgetGbp: profile.weekly_budget_gbp ? Number(profile.weekly_budget_gbp) : undefined,
             mealsPerDay: mealSlots.length,
             estimatedDayCost: currentDayCost,
+            includeNonSearchable: true,
           });
           const selected = selectRecipe(candidates, {
             avoidNames: new Set(), // could track weekly variety
@@ -631,6 +632,7 @@ export class PlansService {
       mealType: params?.preferMealType,
       weeklyBudgetGbp: profile.weekly_budget_gbp ? Number(profile.weekly_budget_gbp) : undefined,
       mealsPerDay: 4,
+      includeNonSearchable: true,
     });
     const filtered = candidates.filter((r) => r.id !== meal.recipe?.id);
     const pick = selectRecipe(filtered.length ? filtered : candidates, {
@@ -658,6 +660,7 @@ export class PlansService {
       maxDifficulty: profile.max_difficulty,
       weeklyBudgetGbp: profile.weekly_budget_gbp ? Number(profile.weekly_budget_gbp) : undefined,
       mealsPerDay: 4,
+      includeNonSearchable: true,
     });
     const filtered = candidates.filter((r) => r.id !== meal.recipe?.id);
     const pick = selectRecipe(filtered.length ? filtered : candidates, {

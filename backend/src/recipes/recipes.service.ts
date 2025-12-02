@@ -94,6 +94,10 @@ export class RecipesService {
       );
     }
 
+    if (!query.includeNonSearchable) {
+      qb.andWhere('recipe.is_searchable = true');
+    }
+
     qb.limit(10);
 
     // Join recipe scores for ranking
