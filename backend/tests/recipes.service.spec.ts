@@ -33,6 +33,7 @@ describe('RecipesService', () => {
     { getProfile: mockGetProfile } as any,
     { findAll: jest.fn() } as any,
     prefsService as PreferencesService,
+    {} as any,
   );
 
   beforeEach(() => {

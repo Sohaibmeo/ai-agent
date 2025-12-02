@@ -250,4 +250,38 @@ export class AgentsService {
     const raw = await this.callModel(this.reviewModel, prompt, 'review');
     return schema.parse(raw);
   }
+
+  async generateRecipe(payload: {
+    note?: string;
+    meal_slot?: string;
+    meal_type?: string;
+    difficulty?: string;
+    budget_per_meal?: number;
+  }) {
+    const schema = z.object({
+      name: z.string(),
+      meal_slot: z.string(),
+      meal_type: z.string().optional(),
+      difficulty: z.string().optional(),
+      base_cost_gbp: z.number().optional(),
+      instructions: z.string().optional(),
+      ingredients: z.array(
+        z.object({
+          ingredient_name: z.string(),
+          quantity: z.number(),
+          unit: z.string(),
+        }),
+      ),
+    });
+    const prompt: { role: 'system' | 'user'; content: string }[] = [
+      {
+        role: 'system',
+        content:
+          'You are Recipe Generator. Return ONLY JSON with {name, meal_slot, meal_type?, difficulty?, base_cost_gbp?, instructions, ingredients:[{ingredient_name, quantity, unit}]}. Use concise instructions. Do not invent IDs.',
+      },
+      { role: 'user', content: JSON.stringify(payload) },
+    ];
+    const raw = await this.callModel(this.reviewModel, prompt, 'review');
+    return schema.parse(raw);
+  }
 }

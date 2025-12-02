@@ -34,6 +34,7 @@ describe('RecipesService filters', () => {
       } as any,
       {} as any,
       { getForUser: jest.fn().mockResolvedValue(null) } as any,
+      {} as any,
     );
     const result = await service.findCandidatesForUser({ userId: 'u1', mealSlot: 'lunch' });
     expect(result[0].id).toBe('r1');
