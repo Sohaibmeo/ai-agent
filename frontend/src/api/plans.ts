@@ -14,6 +14,7 @@ export function generatePlan(payload: {
   weekStartDate?: string;
   useAgent?: boolean;
   useLlmRecipes?: boolean;
+  sameMealsAllWeek?: boolean;
   weeklyBudgetGbp?: number;
   breakfast_enabled?: boolean;
   snack_enabled?: boolean;

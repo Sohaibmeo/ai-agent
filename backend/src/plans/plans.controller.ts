@@ -27,6 +27,7 @@ export class PlansController {
     const weekStartDate = body.weekStartDate || new Date().toISOString().slice(0, 10);
     return this.plansService.generateWeek(body.userId, weekStartDate, body.useAgent, {
       useLlmRecipes: body.useLlmRecipes,
+      sameMealsAllWeek: body.sameMealsAllWeek,
       weeklyBudgetGbp: body.weeklyBudgetGbp,
       breakfast_enabled: body.breakfast_enabled,
       snack_enabled: body.snack_enabled,

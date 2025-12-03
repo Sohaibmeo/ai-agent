@@ -23,6 +23,18 @@ const WeeklyPlanSchema = z.object({
   days: z.array(PlanDaySchema),
 });
 
+type PlanMeal = z.infer<typeof PlanMealSchema>;
+type PlanDay = z.infer<typeof PlanDaySchema>;
+type WeeklyPlan = z.infer<typeof WeeklyPlanSchema>;
+
+type WeekState = {
+  week_start_date: string;
+  weekly_budget_gbp?: number;
+  used_budget_gbp: number;
+  remaining_days: number;
+  notes?: string; // can hold diversity / constraint hints for the LLM
+};
+
 @Injectable()
 export class AgentsService {
   private readonly logger = new Logger(AgentsService.name);
@@ -72,29 +84,95 @@ export class AgentsService {
     return reviewInstructionSchema.parse(raw);
   }
 
-  async coachPlan(payload: {
+  private async generateDayPlanWithCoachLLM(payload: {
     profile: any;
-    candidates: any;
-    week_start_date?: string;
-  }) {
+    day_index: number;
+    week_state: WeekState;
+  }): Promise<PlanDay> {
     const prompt: { role: 'system' | 'user'; content: string }[] = [
       {
         role: 'system',
         content:
-          'You are Coach Agent. Choose recipes from provided candidates for each day/meal. Output JSON {week_start_date, days:[{day_index, meals:[{meal_slot, recipe_id, portion_multiplier}]}]}. Use only provided recipe_id values.',
+          'You are Day Coach. Plan meals for ONE DAY only. ' +
+          'Use the profile and week_state to respect budget, constraints and variety across the week. ' +
+          'Return ONLY JSON with shape: {day_index, meals:[{meal_slot, recipe_id, portion_multiplier?}]}. ' +
+          'Do NOT invent new keys or return prose.',
       },
       {
         role: 'user',
         content: JSON.stringify({
           profile: payload.profile,
-          candidates: payload.candidates,
-          week_start_date: payload.week_start_date || new Date().toISOString().slice(0, 10),
+          day_index: payload.day_index,
+          week_state: payload.week_state,
         }),
       },
     ];
+
     const raw = await this.callModel(this.coachModel, prompt, 'coach');
-    this.logAgent('coach', `model=${this.coachModel}`);
-    return WeeklyPlanSchema.parse(raw);
+    this.logAgent('coach', `day_index=${payload.day_index} model=${this.coachModel}`);
+
+    return PlanDaySchema.parse(raw);
+  }
+
+  async coachPlan(payload: {
+    profile: any;
+    week_start_date?: string;
+    weekly_budget_gbp?: number;
+    sameMealsAllWeek?: boolean;
+  }): Promise<WeeklyPlan> {
+    const week_start_date =
+      payload.week_start_date || new Date().toISOString().slice(0, 10);
+
+    // Initialise week state for the orchestrator
+    const weekState: WeekState = {
+      week_start_date,
+      weekly_budget_gbp: payload.weekly_budget_gbp,
+      used_budget_gbp: 0,
+      remaining_days: 7,
+      notes: 'Start of week. Aim to stay within budget and provide variety across days.',
+    };
+
+    const days: PlanDay[] = [];
+
+    if (payload.sameMealsAllWeek) {
+      const baseDay = await this.generateDayPlanWithCoachLLM({
+        profile: payload.profile,
+        day_index: 0,
+        week_state: weekState,
+      });
+      for (let i = 0; i < 7; i++) {
+        days.push({ ...baseDay, day_index: i });
+      }
+    } else {
+      for (let i = 0; i < 7; i++) {
+        const day_index = i; // keep as 0-based; adjust if the rest of the app expects 1-based
+
+        const dayPlan = await this.generateDayPlanWithCoachLLM({
+          profile: payload.profile,
+          day_index,
+          week_state: weekState,
+        });
+
+        // TODO: once you have per-recipe costs available here,
+        // estimate the cost of this day and update weekState.used_budget_gbp.
+        // Example:
+        // const dayCost = await this.estimateDayCost(dayPlan);
+        // weekState.used_budget_gbp += dayCost;
+
+        weekState.remaining_days = 7 - (i + 1);
+        weekState.notes = `Planned days: ${i + 1}. Approx used_budget_gbp: ${weekState.used_budget_gbp}. Continue to respect constraints and maintain variety.`;
+
+        days.push(dayPlan);
+      }
+    }
+
+    const weeklyPlan: WeeklyPlan = {
+      week_start_date,
+      days,
+    };
+
+    // Final validation to ensure the result still conforms to WeeklyPlanSchema
+    return WeeklyPlanSchema.parse(weeklyPlan);
   }
 
   private async callModel(

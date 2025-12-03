@@ -15,6 +15,7 @@ export function useActivePlan(userId: string = DEMO_USER_ID) {
     mutationFn: (opts: {
       useAgent?: boolean;
       useLlmRecipes?: boolean;
+      sameMealsAllWeek?: boolean;
       weekStartDate?: string;
       weeklyBudgetGbp?: number;
       breakfast_enabled?: boolean;

@@ -49,6 +49,8 @@ export function PlansPage() {
     max_difficulty: 'easy',
   });
   const [appliedBudget, setAppliedBudget] = useState<string>('');
+  const [sameMealsAllWeek, setSameMealsAllWeek] = useState(false);
+  const [appliedSameMealsAllWeek, setAppliedSameMealsAllWeek] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const resetAdvanced = () => {
     setSlots((prev) => ({
@@ -61,6 +63,7 @@ export function PlansPage() {
       save_settings: false,
     }));
     setWeeklyBudget(appliedBudget);
+    setSameMealsAllWeek(appliedSameMealsAllWeek);
   };
 
   const formatCurrency = (val?: number | null) => (val || val === 0 ? `£${Number(val).toFixed(2)}` : '—');
@@ -183,6 +186,7 @@ export function PlansPage() {
                 await generatePlan({
                   useAgent: false,
                   useLlmRecipes: true,
+                  sameMealsAllWeek,
                   weekStartDate: weekStart,
                   weeklyBudgetGbp: weeklyBudget ? Number(weeklyBudget) : undefined,
                   breakfast_enabled: slots.breakfast_enabled,
@@ -350,7 +354,7 @@ export function PlansPage() {
                 <div>No plan found.</div>
                 <button
                   className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-                  onClick={() => generatePlan({ useAgent: false, useLlmRecipes: true })}
+                  onClick={() => generatePlan({ useAgent: false, useLlmRecipes: true, sameMealsAllWeek })}
                 >
                   Generate a plan
                 </button>
@@ -509,6 +513,14 @@ export function PlansPage() {
                 Save these settings as defaults
               </label>
               <div className="flex gap-2">
+                <label className="flex items-center gap-2 text-sm text-slate-700 mr-4">
+                  <input
+                    type="checkbox"
+                    checked={sameMealsAllWeek}
+                    onChange={(e) => setSameMealsAllWeek(e.target.checked)}
+                  />
+                  Same meals all week
+                </label>
                 <button
                   className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
                   onClick={() => {
@@ -530,6 +542,7 @@ export function PlansPage() {
                       max_difficulty: slots.max_difficulty,
                     });
                     setAppliedBudget(weeklyBudget);
+                    setAppliedSameMealsAllWeek(sameMealsAllWeek);
                     if (slots.save_settings) {
                       saveProfile({
                         weekly_budget_gbp: weeklyBudget ? Number(weeklyBudget) : null,

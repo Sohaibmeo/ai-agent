@@ -23,8 +23,9 @@ export class AgentsController {
   coach(@Body() body: CoachRequestDto) {
     return this.agentsService.coachPlan({
       profile: body.profile,
-      candidates: body.candidates,
       week_start_date: body.week_start_date,
+      weekly_budget_gbp: body.weekly_budget_gbp,
+      sameMealsAllWeek: (body as any).sameMealsAllWeek,
     });
   }
 

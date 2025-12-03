@@ -205,6 +205,7 @@ export class PlansService {
     useAgent = false,
     overrides?: {
       useLlmRecipes?: boolean;
+      sameMealsAllWeek?: boolean;
       weeklyBudgetGbp?: number;
       breakfast_enabled?: boolean;
       snack_enabled?: boolean;
@@ -251,11 +252,11 @@ export class PlansService {
       | undefined;
     if (useAgent) {
       try {
-        const candidatesPayload = await this.buildCandidatesPayload(userId, mealSlots, profile.max_difficulty);
         agentPlan = await this.agentsService.coachPlan({
           profile,
-          candidates: candidatesPayload,
           week_start_date: weekStartDate,
+          weekly_budget_gbp: overrides?.weeklyBudgetGbp,
+          sameMealsAllWeek: overrides?.sameMealsAllWeek,
         });
         this.logger.log(`coachPlan succeeded user=${userId}`);
       } catch (e) {
