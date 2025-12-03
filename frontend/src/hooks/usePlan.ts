@@ -14,6 +14,7 @@ export function useActivePlan(userId: string = DEMO_USER_ID) {
   const generateMutation = useMutation({
     mutationFn: (opts: {
       useAgent?: boolean;
+      useLlmRecipes?: boolean;
       weekStartDate?: string;
       weeklyBudgetGbp?: number;
       breakfast_enabled?: boolean;

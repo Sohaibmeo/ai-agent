@@ -258,17 +258,23 @@ export class AgentsService {
     difficulty?: string;
     budget_per_meal?: number;
   }) {
+    const toNum = (v: any) => {
+      if (v === null || v === undefined || v === '') return 0;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+
     const schema = z.object({
       name: z.string(),
-      meal_slot: z.string(),
+      meal_slot: z.string().optional(),
       meal_type: z.string().optional(),
       difficulty: z.string().optional(),
-      base_cost_gbp: z.number().optional(),
-      instructions: z.string().optional(),
+      base_cost_gbp: z.preprocess(toNum, z.number().optional()),
+      instructions: z.union([z.string(), z.array(z.string())]).optional(),
       ingredients: z.array(
         z.object({
           ingredient_name: z.string(),
-          quantity: z.number(),
+          quantity: z.preprocess(toNum, z.number()),
           unit: z.string(),
         }),
       ),

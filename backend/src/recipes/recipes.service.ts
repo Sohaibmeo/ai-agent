@@ -235,12 +235,17 @@ export class RecipesService {
       budget_per_meal: input.budgetPerMeal,
     });
 
+    const instructions =
+      Array.isArray(draft.instructions) ? draft.instructions.join('\n') : draft.instructions || null;
+
     // Resolve ingredients
     const resolvedIngredients: Ingredient[] = [];
     for (const ing of draft.ingredients || []) {
       const resolved = await this.ingredientsService.resolveOrCreateLoose(ing.ingredient_name);
       if (resolved) {
         resolvedIngredients.push(resolved);
+      } else {
+        this.logger.warn(`generateRecipe: could not resolve ingredient name="${ing.ingredient_name}"`);
       }
     }
 
@@ -260,7 +265,7 @@ export class RecipesService {
 
     const recipe = this.recipeRepo.create({
       name: draft.name,
-      meal_slot: draft.meal_slot,
+      meal_slot: draft.meal_slot || input.mealSlot || 'meal',
       meal_type: (draft.meal_type as any) || 'solid',
       difficulty: draft.difficulty || 'easy',
       is_custom: true,
@@ -268,7 +273,7 @@ export class RecipesService {
       is_searchable: false,
       price_estimated: true,
       createdByUser: input.userId ? ({ id: input.userId } as any) : undefined,
-      instructions: draft.instructions || undefined,
+      instructions: instructions || undefined,
     });
     const saved = await this.recipeRepo.save(recipe);
     ris.forEach((ri) => (ri.recipe = saved));
