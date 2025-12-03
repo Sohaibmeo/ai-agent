@@ -685,9 +685,32 @@ export class PlansService {
       includeNonSearchable: true,
     });
     const filtered = candidates.filter((r) => r.id !== meal.recipe?.id);
-    const pick = selectRecipe(filtered.length ? filtered : candidates, {
+    let pick = selectRecipe(filtered.length ? filtered : candidates, {
       costCapPerMeal: profile.weekly_budget_gbp ? Number(profile.weekly_budget_gbp) / Math.max(1, 4 * 7) : undefined,
     });
+
+    if (note && candidates.length) {
+      try {
+        const llmChoice = await this.agentsService.chooseRecipe({
+          reasonText: note,
+          candidates: (filtered.length ? filtered : candidates).map((c) => ({
+            id: c.id,
+            name: c.name,
+            meal_slot: c.meal_slot,
+            meal_type: c.meal_type,
+            base_cost_gbp: c.base_cost_gbp,
+            base_kcal: c.base_kcal,
+            base_protein: c.base_protein,
+            base_carbs: c.base_carbs,
+            base_fat: c.base_fat,
+          })),
+        });
+        const found = candidates.find((c) => c.id === llmChoice.recipe_id);
+        if (found) pick = found;
+      } catch (err) {
+        this.logger.warn(`autoSwapMeal LLM choose failed: ${(err as Error).message}`);
+      }
+    }
     if (!pick?.id) {
       throw new Error('No candidate found');
     }

@@ -226,6 +226,44 @@ export class AgentsService {
     return parsed;
   }
 
+  async chooseRecipe(payload: {
+    reasonText?: string;
+    candidates: {
+      id: string;
+      name: string;
+      meal_slot?: string;
+      meal_type?: string;
+      base_cost_gbp?: number | null;
+      base_kcal?: number | null;
+      base_protein?: number | null;
+      base_carbs?: number | null;
+      base_fat?: number | null;
+    }[];
+  }): Promise<{ recipe_id: string }> {
+    const candidateIds = new Set(payload.candidates.map((c) => c.id));
+    const prompt: { role: 'system' | 'user'; content: string }[] = [
+      {
+        role: 'system',
+        content:
+          'You are Recipe Selector. Choose ONE recipe_id from provided candidates. Return ONLY JSON {recipe_id}. Use note/reason if provided. Do not invent ids.',
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          reasonText: payload.reasonText,
+          candidates: payload.candidates,
+        }),
+      },
+    ];
+    const schema = z.object({ recipe_id: z.string() });
+    const raw = await this.callModel(this.reviewModel, prompt, 'review');
+    const parsed = schema.parse(raw);
+    if (!candidateIds.has(parsed.recipe_id)) {
+      throw new Error('LLM returned recipe_id not in provided candidates');
+    }
+    return parsed;
+  }
+
   async adjustRecipe(payload: { note: string; current: any }) {
     const schema = z.object({
       new_name: z.string().optional(),
