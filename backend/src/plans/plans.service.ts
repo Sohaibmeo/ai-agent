@@ -90,6 +90,9 @@ export class PlansService {
       ingredientItems,
       createdByUserId: userId,
       instructions: parsed.instructions || meal.recipe.instructions,
+      source: 'llm',
+      isSearchable: false,
+      priceEstimated: true,
     });
 
     meal.recipe = custom as any;
@@ -201,6 +204,7 @@ export class PlansService {
     weekStartDate: string,
     useAgent = false,
     overrides?: {
+      useLlmRecipes?: boolean;
       weeklyBudgetGbp?: number;
       breakfast_enabled?: boolean;
       snack_enabled?: boolean;
@@ -294,23 +298,40 @@ export class PlansService {
         }
       } else {
         for (const slot of mealSlots) {
-          const candidates = await this.recipesService.findCandidatesForUser({
-            userId,
-            mealSlot: slot,
-            maxDifficulty: profile.max_difficulty,
-            weeklyBudgetGbp: profile.weekly_budget_gbp ? Number(profile.weekly_budget_gbp) : undefined,
-            mealsPerDay: mealSlots.length,
-            estimatedDayCost: currentDayCost,
-          });
-          const selected = selectRecipe(candidates, {
-            avoidNames: new Set(), // could track weekly variety
-            costCapPerMeal: profile.weekly_budget_gbp
-              ? Number(profile.weekly_budget_gbp) / (mealSlots.length * 7)
-              : undefined,
-          });
-          if (!selected) continue;
+          let chosenRecipe;
+          if (overrides?.useLlmRecipes) {
+            const perMealBudget =
+              profile.weekly_budget_gbp && mealSlots.length
+                ? Number(profile.weekly_budget_gbp) / (mealSlots.length * 7)
+                : undefined;
+            chosenRecipe = await this.recipesService.generateRecipeFromLLM({
+              userId,
+              note: undefined,
+              mealSlot: slot,
+              mealType: undefined,
+              difficulty: profile.max_difficulty,
+              budgetPerMeal: perMealBudget,
+            });
+          } else {
+            const candidates = await this.recipesService.findCandidatesForUser({
+              userId,
+              mealSlot: slot,
+              maxDifficulty: profile.max_difficulty,
+              weeklyBudgetGbp: profile.weekly_budget_gbp ? Number(profile.weekly_budget_gbp) : undefined,
+              mealsPerDay: mealSlots.length,
+              estimatedDayCost: currentDayCost,
+              includeNonSearchable: true,
+            });
+            chosenRecipe = selectRecipe(candidates, {
+              avoidNames: new Set(), // could track weekly variety
+              costCapPerMeal: profile.weekly_budget_gbp
+                ? Number(profile.weekly_budget_gbp) / (mealSlots.length * 7)
+                : undefined,
+            });
+          }
+          if (!chosenRecipe) continue;
           const portion = portionTowardsTarget(
-            selected,
+            chosenRecipe,
             currentDayKcal,
             targets.dailyCalories,
             currentDayProtein,
@@ -319,13 +340,13 @@ export class PlansService {
           const meal = this.planMealRepo.create({
             planDay: savedDay,
             meal_slot: slot,
-            recipe: selected,
+            recipe: chosenRecipe,
             portion_multiplier: portion,
-            meal_kcal: selected.base_kcal ? Number(selected.base_kcal) * portion : undefined,
-            meal_protein: selected.base_protein ? Number(selected.base_protein) * portion : undefined,
-            meal_carbs: selected.base_carbs ? Number(selected.base_carbs) * portion : undefined,
-            meal_fat: selected.base_fat ? Number(selected.base_fat) * portion : undefined,
-            meal_cost_gbp: selected.base_cost_gbp ? Number(selected.base_cost_gbp) * portion : undefined,
+            meal_kcal: chosenRecipe.base_kcal ? Number(chosenRecipe.base_kcal) * portion : undefined,
+            meal_protein: chosenRecipe.base_protein ? Number(chosenRecipe.base_protein) * portion : undefined,
+            meal_carbs: chosenRecipe.base_carbs ? Number(chosenRecipe.base_carbs) * portion : undefined,
+            meal_fat: chosenRecipe.base_fat ? Number(chosenRecipe.base_fat) * portion : undefined,
+            meal_cost_gbp: chosenRecipe.base_cost_gbp ? Number(chosenRecipe.base_cost_gbp) * portion : undefined,
           });
           await this.planMealRepo.save(meal);
           currentDayKcal += Number(meal.meal_kcal || 0);
@@ -455,7 +476,7 @@ export class PlansService {
       this.logger.log(
         `Plan action resolved user=${userId} plan=${weeklyPlanId} action=${reviewInstruction.action} target=${reviewInstruction.targetLevel}`,
       );
-      await this.handleInstruction(userId, plan, reviewInstruction);
+      await this.handleInstruction(userId, plan, reviewInstruction, payload.reasonText);
       await this.logAction({
         userId,
         weeklyPlanId,
@@ -501,6 +522,8 @@ export class PlansService {
       difficulty: meal.recipe?.difficulty,
       ingredientItems,
       createdByUserId: userId,
+      source: 'user',
+      isSearchable: true,
     });
 
     meal.recipe = customRecipe as any;
@@ -541,7 +564,7 @@ export class PlansService {
     };
   }
 
-  private async handleInstruction(userId: string, plan: WeeklyPlan, instruction: ReviewInstruction) {
+  private async handleInstruction(userId: string, plan: WeeklyPlan, instruction: ReviewInstruction, reasonText?: string) {
     switch (instruction.action) {
       case 'regenerate_week':
         await this.regenerateWeek(userId, plan);
@@ -554,6 +577,11 @@ export class PlansService {
       case 'regenerate_meal':
         if (instruction.targetIds?.planMealId) {
           await this.regenerateMeal(userId, instruction.targetIds.planMealId);
+        }
+        break;
+      case 'swap_meal':
+        if (instruction.targetIds?.planMealId) {
+          await this.autoSwapMeal(instruction.targetIds.planMealId, userId, instruction.notes);
         }
         break;
       case 'avoid_ingredient_future':
@@ -583,6 +611,11 @@ export class PlansService {
       case 'remove_ingredient':
         if (instruction.targetIds?.planMealId) {
           await this.swapIngredient(instruction.targetIds.planMealId, instruction.params?.ingredientToRemove, null);
+        }
+        break;
+      case 'ai_adjust_recipe':
+        if (instruction.targetIds?.planMealId) {
+          await this.aiAdjustMeal(instruction.targetIds.planMealId, userId, instruction.notes || reasonText || '');
         }
         break;
       default:
@@ -621,6 +654,7 @@ export class PlansService {
       mealType: params?.preferMealType,
       weeklyBudgetGbp: profile.weekly_budget_gbp ? Number(profile.weekly_budget_gbp) : undefined,
       mealsPerDay: 4,
+      includeNonSearchable: true,
     });
     const filtered = candidates.filter((r) => r.id !== meal.recipe?.id);
     const pick = selectRecipe(filtered.length ? filtered : candidates, {
@@ -648,11 +682,35 @@ export class PlansService {
       maxDifficulty: profile.max_difficulty,
       weeklyBudgetGbp: profile.weekly_budget_gbp ? Number(profile.weekly_budget_gbp) : undefined,
       mealsPerDay: 4,
+      includeNonSearchable: true,
     });
     const filtered = candidates.filter((r) => r.id !== meal.recipe?.id);
-    const pick = selectRecipe(filtered.length ? filtered : candidates, {
+    let pick = selectRecipe(filtered.length ? filtered : candidates, {
       costCapPerMeal: profile.weekly_budget_gbp ? Number(profile.weekly_budget_gbp) / Math.max(1, 4 * 7) : undefined,
     });
+
+    if (note && candidates.length) {
+      try {
+        const llmChoice = await this.agentsService.chooseRecipe({
+          reasonText: note,
+          candidates: (filtered.length ? filtered : candidates).map((c) => ({
+            id: c.id,
+            name: c.name,
+            meal_slot: c.meal_slot,
+            meal_type: c.meal_type,
+            base_cost_gbp: c.base_cost_gbp,
+            base_kcal: c.base_kcal,
+            base_protein: c.base_protein,
+            base_carbs: c.base_carbs,
+            base_fat: c.base_fat,
+          })),
+        });
+        const found = candidates.find((c) => c.id === llmChoice.recipe_id);
+        if (found) pick = found;
+      } catch (err) {
+        this.logger.warn(`autoSwapMeal LLM choose failed: ${(err as Error).message}`);
+      }
+    }
     if (!pick?.id) {
       throw new Error('No candidate found');
     }

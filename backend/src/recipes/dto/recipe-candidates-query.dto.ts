@@ -31,4 +31,8 @@ export class RecipeCandidatesQueryDto {
   @Type(() => Number)
   @IsNumber()
   estimatedDayCost?: number;
+
+  @IsOptional()
+  @Type(() => Boolean)
+  includeNonSearchable?: boolean;
 }

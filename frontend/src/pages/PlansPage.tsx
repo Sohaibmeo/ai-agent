@@ -182,6 +182,7 @@ export function PlansPage() {
                 notify.info('Generating plan...');
                 await generatePlan({
                   useAgent: false,
+                  useLlmRecipes: true,
                   weekStartDate: weekStart,
                   weeklyBudgetGbp: weeklyBudget ? Number(weeklyBudget) : undefined,
                   breakfast_enabled: slots.breakfast_enabled,
@@ -349,7 +350,7 @@ export function PlansPage() {
                 <div>No plan found.</div>
                 <button
                   className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-                  onClick={() => generatePlan({ useAgent: false })}
+                  onClick={() => generatePlan({ useAgent: false, useLlmRecipes: true })}
                 >
                   Generate a plan
                 </button>

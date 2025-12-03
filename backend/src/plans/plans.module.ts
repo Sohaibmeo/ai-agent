@@ -13,11 +13,11 @@ import { IngredientsModule } from '../ingredients/ingredients.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([WeeklyPlan, PlanDay, PlanMeal, PlanActionLog]),
-    RecipesModule,
+    forwardRef(() => RecipesModule),
     UsersModule,
     ShoppingListModule,
     forwardRef(() => PreferencesModule),
-    AgentsModule,
+    forwardRef(() => AgentsModule),
     IngredientsModule,
   ],
   providers: [PlansService],

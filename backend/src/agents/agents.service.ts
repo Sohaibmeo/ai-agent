@@ -226,6 +226,44 @@ export class AgentsService {
     return parsed;
   }
 
+  async chooseRecipe(payload: {
+    reasonText?: string;
+    candidates: {
+      id: string;
+      name: string;
+      meal_slot?: string;
+      meal_type?: string;
+      base_cost_gbp?: number | null;
+      base_kcal?: number | null;
+      base_protein?: number | null;
+      base_carbs?: number | null;
+      base_fat?: number | null;
+    }[];
+  }): Promise<{ recipe_id: string }> {
+    const candidateIds = new Set(payload.candidates.map((c) => c.id));
+    const prompt: { role: 'system' | 'user'; content: string }[] = [
+      {
+        role: 'system',
+        content:
+          'You are Recipe Selector. Choose ONE recipe_id from provided candidates. Return ONLY JSON {recipe_id}. Use note/reason if provided. Do not invent ids.',
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          reasonText: payload.reasonText,
+          candidates: payload.candidates,
+        }),
+      },
+    ];
+    const schema = z.object({ recipe_id: z.string() });
+    const raw = await this.callModel(this.reviewModel, prompt, 'review');
+    const parsed = schema.parse(raw);
+    if (!candidateIds.has(parsed.recipe_id)) {
+      throw new Error('LLM returned recipe_id not in provided candidates');
+    }
+    return parsed;
+  }
+
   async adjustRecipe(payload: { note: string; current: any }) {
     const schema = z.object({
       new_name: z.string().optional(),
@@ -244,6 +282,46 @@ export class AgentsService {
         role: 'system',
         content:
           'You are Recipe Adjuster. Given current recipe and user note, respond ONLY with JSON {new_name?, instructions?, ingredients:[{ingredient_id?, ingredient_name?, quantity, unit}]}. Use ingredient_id when provided; do not invent ids.',
+      },
+      { role: 'user', content: JSON.stringify(payload) },
+    ];
+    const raw = await this.callModel(this.reviewModel, prompt, 'review');
+    return schema.parse(raw);
+  }
+
+  async generateRecipe(payload: {
+    note?: string;
+    meal_slot?: string;
+    meal_type?: string;
+    difficulty?: string;
+    budget_per_meal?: number;
+  }) {
+    const toNum = (v: any) => {
+      if (v === null || v === undefined || v === '') return 0;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    const schema = z.object({
+      name: z.string(),
+      meal_slot: z.string().optional(),
+      meal_type: z.string().optional(),
+      difficulty: z.string().optional(),
+      base_cost_gbp: z.preprocess(toNum, z.number().optional()),
+      instructions: z.union([z.string(), z.array(z.string())]).optional(),
+      ingredients: z.array(
+        z.object({
+          ingredient_name: z.string(),
+          quantity: z.preprocess(toNum, z.number()),
+          unit: z.string(),
+        }),
+      ),
+    });
+    const prompt: { role: 'system' | 'user'; content: string }[] = [
+      {
+        role: 'system',
+        content:
+          'You are Recipe Generator. Return ONLY JSON with {name, meal_slot, meal_type?, difficulty?, base_cost_gbp?, instructions, ingredients:[{ingredient_name, quantity, unit}]}. Use concise instructions. Do not invent IDs.',
       },
       { role: 'user', content: JSON.stringify(payload) },
     ];

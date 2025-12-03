@@ -47,6 +47,15 @@ export class Recipe {
   @Column({ default: false })
   is_custom!: boolean;
 
+  @Column({ type: 'varchar', length: 20, default: 'catalog' })
+  source!: 'catalog' | 'user' | 'llm';
+
+  @Column({ default: false })
+  is_searchable!: boolean;
+
+  @Column({ default: false })
+  price_estimated!: boolean;
+
   @ManyToOne(() => User, (user) => user.customRecipes, { nullable: true })
   @JoinColumn({ name: 'created_by_user_id' })
   createdByUser?: User;

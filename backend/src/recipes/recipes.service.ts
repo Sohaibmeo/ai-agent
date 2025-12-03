@@ -1,11 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
-import { Recipe, RecipeIngredient, UserIngredientScore, UserRecipeScore } from '../database/entities';
+import { Recipe, RecipeIngredient, UserIngredientScore, UserRecipeScore, Ingredient } from '../database/entities';
 import { RecipeCandidatesQueryDto } from './dto/recipe-candidates-query.dto';
 import { UsersService } from '../users/users.service';
 import { IngredientsService } from '../ingredients/ingredients.service';
 import { PreferencesService } from '../preferences/preferences.service';
+import { AgentsService } from '../agents/agents.service';
+import { GenerateRecipeDto } from './dto/generate-recipe.dto';
 
 @Injectable()
 export class RecipesService {
@@ -15,11 +17,12 @@ export class RecipesService {
     private readonly recipeRepo: Repository<Recipe>,
     @InjectRepository(RecipeIngredient)
   private readonly recipeIngredientRepo: Repository<RecipeIngredient>,
-  @InjectRepository(UserRecipeScore)
+    @InjectRepository(UserRecipeScore)
   private readonly recipeScoreRepo: Repository<UserRecipeScore>,
   private readonly usersService: UsersService,
   private readonly ingredientsService: IngredientsService,
   private readonly preferencesService: PreferencesService,
+  private readonly agentsService: AgentsService,
 ) {}
 
   findAll() {
@@ -94,6 +97,10 @@ export class RecipesService {
       );
     }
 
+    if (!query.includeNonSearchable) {
+      qb.andWhere('recipe.is_searchable = true');
+    }
+
     qb.limit(10);
 
     // Join recipe scores for ranking
@@ -162,6 +169,9 @@ export class RecipesService {
     ingredientItems: { ingredientId: string; quantity: number; unit: string }[];
     createdByUserId?: string;
     instructions?: string | null;
+    isSearchable?: boolean;
+    source?: 'catalog' | 'user' | 'llm';
+    priceEstimated?: boolean;
   }) {
     const base = await this.recipeRepo.findOne({
       where: { id: input.baseRecipeId },
@@ -178,6 +188,9 @@ export class RecipesService {
       is_custom: true,
       createdByUser: input.createdByUserId ? ({ id: input.createdByUserId } as any) : base.createdByUser,
       instructions: input.instructions ?? base.instructions,
+      source: input.source || (input.createdByUserId ? 'user' : 'catalog'),
+      is_searchable: input.isSearchable ?? true,
+      price_estimated: input.priceEstimated ?? false,
     });
     const savedRecipe = await this.recipeRepo.save(recipe);
 
@@ -210,6 +223,76 @@ export class RecipesService {
     await this.recipeRepo.save(savedRecipe);
 
     return savedRecipe;
+  }
+
+  async generateRecipeFromLLM(input: GenerateRecipeDto) {
+    this.logger.log(`generateRecipe user=${input.userId} slot=${input.mealSlot ?? 'any'}`);
+    const draft = await this.agentsService.generateRecipe({
+      note: input.note,
+      meal_slot: input.mealSlot,
+      meal_type: input.mealType,
+      difficulty: input.difficulty,
+      budget_per_meal: input.budgetPerMeal,
+    });
+
+    const instructions =
+      Array.isArray(draft.instructions) ? draft.instructions.join('\n') : draft.instructions || null;
+
+    // Resolve ingredients
+    const resolvedIngredients: Ingredient[] = [];
+    for (const ing of draft.ingredients || []) {
+      const resolved = await this.ingredientsService.resolveOrCreateLoose(ing.ingredient_name);
+      if (resolved) {
+        resolvedIngredients.push(resolved);
+      } else {
+        this.logger.warn(`generateRecipe: could not resolve ingredient name="${ing.ingredient_name}"`);
+      }
+    }
+
+    // Build ris
+    const ris: RecipeIngredient[] = [];
+    for (let i = 0; i < (draft.ingredients || []).length; i++) {
+      const item = draft.ingredients[i];
+      const ingredient = resolvedIngredients[i];
+      if (!ingredient) continue;
+      const ri = this.recipeIngredientRepo.create({
+        ingredient,
+        quantity: item.quantity,
+        unit: item.unit,
+      });
+      ris.push(ri);
+    }
+
+    const recipe = this.recipeRepo.create({
+      name: draft.name,
+      meal_slot: draft.meal_slot || input.mealSlot || 'meal',
+      meal_type: (draft.meal_type as any) || 'solid',
+      difficulty: draft.difficulty || 'easy',
+      is_custom: true,
+      source: 'llm',
+      is_searchable: false,
+      price_estimated: true,
+      createdByUser: input.userId ? ({ id: input.userId } as any) : undefined,
+      instructions: instructions || undefined,
+    });
+    const saved = await this.recipeRepo.save(recipe);
+    ris.forEach((ri) => (ri.recipe = saved));
+    await this.recipeIngredientRepo.save(ris);
+
+    const { kcal, protein, carbs, fat, cost } = this.computeMacrosAndCost(ris);
+    saved.base_kcal = kcal;
+    saved.base_protein = protein;
+    saved.base_carbs = carbs;
+    saved.base_fat = fat;
+    const costClamp = draft.base_cost_gbp ? Math.min(Number(draft.base_cost_gbp), 50) : undefined;
+    saved.base_cost_gbp = costClamp || cost || undefined;
+    saved.price_estimated = true;
+    await this.recipeRepo.save(saved);
+
+    return this.recipeRepo.findOne({
+      where: { id: saved.id },
+      relations: ['ingredients', 'ingredients.ingredient'],
+    });
   }
 
   private computeMacrosAndCost(ris: RecipeIngredient[]) {

@@ -7,11 +7,13 @@ export type ActionType =
   | 'regenerate_week'
   | 'regenerate_day'
   | 'regenerate_meal'
+  | 'swap_meal'
   | 'swap_ingredient'
   | 'remove_ingredient'
   | 'avoid_ingredient_future'
   | 'adjust_portion'
-  | 'change_meal_type';
+  | 'change_meal_type'
+  | 'ai_adjust_recipe';
 
 export type ReviewInstructionParams = {
   ingredientToRemove?: string;
@@ -55,11 +57,13 @@ export const reviewInstructionSchema = z.object({
     'regenerate_week',
     'regenerate_day',
     'regenerate_meal',
+    'swap_meal',
     'swap_ingredient',
     'remove_ingredient',
     'avoid_ingredient_future',
     'adjust_portion',
     'change_meal_type',
+    'ai_adjust_recipe',
   ]),
   params: z
     .object({
