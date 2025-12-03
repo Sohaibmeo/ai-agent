@@ -15,6 +15,11 @@ export class GeneratePlanDto {
   useAgent?: boolean;
 
   @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  useLlmRecipes?: boolean;
+
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   weeklyBudgetGbp?: number;

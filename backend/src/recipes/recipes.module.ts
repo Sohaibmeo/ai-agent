@@ -6,6 +6,7 @@ import { Recipe, RecipeIngredient, Ingredient, UserRecipeScore } from '../databa
 import { UsersModule } from '../users/users.module';
 import { IngredientsModule } from '../ingredients/ingredients.module';
 import { PreferencesModule } from '../preferences/preferences.module';
+import { AgentsModule } from '../agents/agents.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { PreferencesModule } from '../preferences/preferences.module';
     UsersModule,
     IngredientsModule,
     forwardRef(() => PreferencesModule),
+    forwardRef(() => AgentsModule),
   ],
   providers: [RecipesService],
   controllers: [RecipesController],

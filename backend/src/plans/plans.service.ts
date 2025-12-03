@@ -204,6 +204,7 @@ export class PlansService {
     weekStartDate: string,
     useAgent = false,
     overrides?: {
+      useLlmRecipes?: boolean;
       weeklyBudgetGbp?: number;
       breakfast_enabled?: boolean;
       snack_enabled?: boolean;
@@ -297,24 +298,40 @@ export class PlansService {
         }
       } else {
         for (const slot of mealSlots) {
-          const candidates = await this.recipesService.findCandidatesForUser({
-            userId,
-            mealSlot: slot,
-            maxDifficulty: profile.max_difficulty,
-            weeklyBudgetGbp: profile.weekly_budget_gbp ? Number(profile.weekly_budget_gbp) : undefined,
-            mealsPerDay: mealSlots.length,
-            estimatedDayCost: currentDayCost,
-            includeNonSearchable: true,
-          });
-          const selected = selectRecipe(candidates, {
-            avoidNames: new Set(), // could track weekly variety
-            costCapPerMeal: profile.weekly_budget_gbp
-              ? Number(profile.weekly_budget_gbp) / (mealSlots.length * 7)
-              : undefined,
-          });
-          if (!selected) continue;
+          let chosenRecipe;
+          if (overrides?.useLlmRecipes) {
+            const perMealBudget =
+              profile.weekly_budget_gbp && mealSlots.length
+                ? Number(profile.weekly_budget_gbp) / (mealSlots.length * 7)
+                : undefined;
+            chosenRecipe = await this.recipesService.generateRecipeFromLLM({
+              userId,
+              note: undefined,
+              mealSlot: slot,
+              mealType: undefined,
+              difficulty: profile.max_difficulty,
+              budgetPerMeal: perMealBudget,
+            });
+          } else {
+            const candidates = await this.recipesService.findCandidatesForUser({
+              userId,
+              mealSlot: slot,
+              maxDifficulty: profile.max_difficulty,
+              weeklyBudgetGbp: profile.weekly_budget_gbp ? Number(profile.weekly_budget_gbp) : undefined,
+              mealsPerDay: mealSlots.length,
+              estimatedDayCost: currentDayCost,
+              includeNonSearchable: true,
+            });
+            chosenRecipe = selectRecipe(candidates, {
+              avoidNames: new Set(), // could track weekly variety
+              costCapPerMeal: profile.weekly_budget_gbp
+                ? Number(profile.weekly_budget_gbp) / (mealSlots.length * 7)
+                : undefined,
+            });
+          }
+          if (!chosenRecipe) continue;
           const portion = portionTowardsTarget(
-            selected,
+            chosenRecipe,
             currentDayKcal,
             targets.dailyCalories,
             currentDayProtein,
@@ -323,13 +340,13 @@ export class PlansService {
           const meal = this.planMealRepo.create({
             planDay: savedDay,
             meal_slot: slot,
-            recipe: selected,
+            recipe: chosenRecipe,
             portion_multiplier: portion,
-            meal_kcal: selected.base_kcal ? Number(selected.base_kcal) * portion : undefined,
-            meal_protein: selected.base_protein ? Number(selected.base_protein) * portion : undefined,
-            meal_carbs: selected.base_carbs ? Number(selected.base_carbs) * portion : undefined,
-            meal_fat: selected.base_fat ? Number(selected.base_fat) * portion : undefined,
-            meal_cost_gbp: selected.base_cost_gbp ? Number(selected.base_cost_gbp) * portion : undefined,
+            meal_kcal: chosenRecipe.base_kcal ? Number(chosenRecipe.base_kcal) * portion : undefined,
+            meal_protein: chosenRecipe.base_protein ? Number(chosenRecipe.base_protein) * portion : undefined,
+            meal_carbs: chosenRecipe.base_carbs ? Number(chosenRecipe.base_carbs) * portion : undefined,
+            meal_fat: chosenRecipe.base_fat ? Number(chosenRecipe.base_fat) * portion : undefined,
+            meal_cost_gbp: chosenRecipe.base_cost_gbp ? Number(chosenRecipe.base_cost_gbp) * portion : undefined,
           });
           await this.planMealRepo.save(meal);
           currentDayKcal += Number(meal.meal_kcal || 0);
