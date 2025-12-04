@@ -26,6 +26,7 @@ const DayMealSchema = z.object({
   ingredients: z.array(DayMealIngredientSchema),
   target_kcal: z.number().optional(),
   target_protein: z.number().optional(),
+  compliance_notes: z.string().optional(),
 });
 
 const PlanDaySchema = z.object({
@@ -137,6 +138,24 @@ export class AgentsService {
     meal_slots: string[];
     maxRetries?: number;
   }): Promise<LlmPlanDay> {
+    const perMealBudget =
+      payload.week_state.weekly_budget_gbp && payload.meal_slots.length
+        ? Number(payload.week_state.weekly_budget_gbp) /
+          Math.max(1, payload.meal_slots.length * Math.max(1, payload.week_state.remaining_days || 1))
+        : undefined;
+
+    if (process.env.DEBUG_LLM === '1') {
+      this.logger.log(
+        `[coach-debug] day_index=${payload.day_index} goal=${payload.profile?.goal || 'unknown'} diet=${
+          payload.profile?.diet_type || 'any'
+        } allergies=${Array.isArray(payload.profile?.allergy_keys) ? payload.profile.allergy_keys.length : 0} budget=${
+          payload.week_state.weekly_budget_gbp ?? 'n/a'
+        } perMealBudget=${perMealBudget ?? 'n/a'} slots=${payload.meal_slots.join(',')} targets_kcal=${
+          payload.targets.daily_kcal
+        } targets_protein=${payload.targets.daily_protein}`,
+      );
+    }
+
     const prompt: { role: 'system' | 'user'; content: string }[] = [
       {
         role: 'system',
@@ -147,6 +166,11 @@ export class AgentsService {
           '- For each meal_slot, you must propose ONE complete recipe: name, difficulty, ingredient list, and instructions.\n' +
           '- Ingredients must have ingredient_name, quantity (number), and unit.\n' +
           '- All ingredient quantities MUST be in grams ("g") when possible. Avoid "piece", "cup", etc. If unavoidable, convert to grams yourself and still return unit="g".\n' +
+          '- Respect profile.diet_type and allergy_keys; avoid disallowed ingredients and anything the user should not consume.\n' +
+          '- Favor ingredients the user is likely to like; avoid disliked items if provided.\n' +
+          '- Honor weekly_budget_gbp and per-meal budget hints; small overruns are OK but stay close.\n' +
+          '- Align with user goal (lose/maintain/gain weight) by keeping total day kcal near the daily target and providing good protein coverage.\n' +
+          '- If you must deviate from diet/allergy/budget/goal, explain briefly in compliance_notes per meal.\n' +
           '- You may roughly allocate daily_kcal and daily_protein across meals and record that in target_kcal and target_protein per meal.\n' +
           '- Use simple, realistic ingredients available in a typical UK supermarket.\n' +
           '- Avoid very niche or branded ingredients.\n' +
@@ -158,7 +182,8 @@ export class AgentsService {
           '     instructions: string | string[],\n' +
           '     ingredients:[{ingredient_name, quantity, unit}],\n' +
           '     target_kcal?,\n' +
-          '     target_protein?\n' +
+          '     target_protein?,\n' +
+          '     compliance_notes?\n' +
           '  }] }\n' +
           '- Do NOT include any IDs or database keys. Do NOT mention recipe_id or candidate recipes. Do NOT return prose.',
       },
@@ -170,6 +195,10 @@ export class AgentsService {
           week_state: payload.week_state,
           targets: payload.targets,
           meal_slots: payload.meal_slots,
+          per_meal_budget_hint_gbp: perMealBudget,
+          diet_type: payload.profile?.diet_type,
+          allergy_keys: payload.profile?.allergy_keys,
+          goal: payload.profile?.goal,
         }),
       },
     ];
@@ -215,6 +244,7 @@ export class AgentsService {
               : [],
             target_kcal: m.target_kcal,
             target_protein: m.target_protein,
+            compliance_notes: m.compliance_notes,
           }));
 
         const candidate = {
@@ -222,15 +252,20 @@ export class AgentsService {
           meals: normalizedMeals,
         };
 
-        console.log('Candidate Day Plan:', JSON.stringify(candidate, null, 2));
-
         const parsed = PlanDaySchema.safeParse(candidate);
-        if (parsed.success && parsed.data.meals.length > 0) {
+        const unitsOk = normalizedMeals.every(
+          (meal: any) => (meal.ingredients || []).every((ing: any) => (ing.unit || '').toLowerCase() === 'g'),
+        );
+        const slotsOk =
+          Array.isArray(payload.meal_slots) &&
+          payload.meal_slots.every((slot) => normalizedMeals.some((m: any) => m.meal_slot === slot));
+        const parsedOk = parsed.success && parsed.data.meals.length > 0;
+        if (parsedOk && unitsOk && slotsOk) {
           return parsed.data;
         }
 
         this.logger.warn(
-          `[coach] day_index=${payload.day_index} attempt=${attempt + 1} invalid or empty meals`,
+          `[coach] day_index=${payload.day_index} attempt=${attempt + 1} invalid or empty meals (parsedOk=${parsedOk} unitsOk=${unitsOk} slotsOk=${slotsOk})`,
         );
         if (!parsed.success) {
           lastError = new Error(JSON.stringify(parsed.error.issues));
