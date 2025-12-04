@@ -308,7 +308,11 @@ export class PlansService {
             `generateWeek day=${dayIdx} dayGenerator meals=${dayPlan.meals?.length || 0}`,
           );
           for (const m of dayPlan.meals || []) {
-            if (!requiredSlots.includes(m.meal_slot)) continue;
+            const slot =
+              typeof m.meal_slot === 'string'
+                ? m.meal_slot.trim().toLowerCase()
+                : requiredSlots[0] || 'meal';
+            if (!requiredSlots.includes(slot)) continue;
 
             const instructions =
               Array.isArray(m.instructions) && m.instructions.length
@@ -319,7 +323,7 @@ export class PlansService {
 
             const recipe = this.recipeRepo.create({
               name: m.name,
-              meal_slot: m.meal_slot,
+              meal_slot: slot,
               meal_type: 'solid',
               difficulty: m.difficulty || 'easy',
               is_custom: true,
@@ -383,7 +387,7 @@ export class PlansService {
             const portion = 1;
             const meal = this.planMealRepo.create({
               planDay: savedDay,
-              meal_slot: m.meal_slot,
+              meal_slot: slot,
               recipe: savedRecipe,
               portion_multiplier: portion,
               meal_kcal: totalKcal ? Number(totalKcal) * portion : undefined,

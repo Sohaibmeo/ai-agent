@@ -135,6 +135,7 @@ export class AgentsService {
       daily_protein: number;
     };
     meal_slots: string[];
+    maxRetries?: number;
   }): Promise<LlmPlanDay> {
     const prompt: { role: 'system' | 'user'; content: string }[] = [
       {
@@ -172,49 +173,83 @@ export class AgentsService {
       },
     ];
 
-    let raw: any;
-    try {
-      raw = await this.callModel(this.coachModel, prompt, 'coach');
-    } catch (err) {
-      this.logger.error(
-        `[coach] day_index=${payload.day_index} parse_failed err=${(err as Error)?.message}`,
-      );
-      return { day_index: payload.day_index, meals: [] };
+    const retries = payload.maxRetries ?? 2;
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+      try {
+        const raw = await this.callModel(this.coachModel, prompt, 'coach');
+        this.logAgent(
+          'coach',
+          `day_index=${payload.day_index} model=${this.coachModel} attempt=${attempt + 1}`,
+        );
+
+        const rawMeals = Array.isArray((raw as any)?.meals) ? (raw as any).meals : [];
+        const normalizedMeals = rawMeals
+          .filter((m: any) => m && typeof m === 'object' && !Array.isArray(m))
+          .map((m: any) => ({
+            meal_slot:
+              typeof m.meal_slot === 'string'
+                ? m.meal_slot.trim().toLowerCase() || 'meal'
+                : 'meal',
+            name: m.name,
+            difficulty:
+              typeof m.difficulty === 'string'
+                ? m.difficulty
+                : m.difficulty !== undefined && m.difficulty !== null
+                  ? String(m.difficulty)
+                  : 'easy',
+            instructions:
+              Array.isArray(m.instructions) || typeof m.instructions === 'string'
+                ? m.instructions
+                : undefined,
+            ingredients: Array.isArray(m.ingredients)
+              ? m.ingredients
+                  .filter((ing: any) => ing && typeof ing === 'object')
+                  .map((ing: any) => ({
+                    ingredient_name: ing.ingredient_name,
+                    quantity: ing.quantity,
+                    unit: ing.unit || 'g',
+                  }))
+              : [],
+            target_kcal: m.target_kcal,
+            target_protein: m.target_protein,
+          }));
+
+        const candidate = {
+          day_index: (raw as any)?.day_index ?? payload.day_index,
+          meals: normalizedMeals,
+        };
+
+        console.log('Candidate Day Plan:', JSON.stringify(candidate, null, 2));
+
+        const parsed = PlanDaySchema.safeParse(candidate);
+        if (parsed.success && parsed.data.meals.length > 0) {
+          return parsed.data;
+        }
+
+        this.logger.warn(
+          `[coach] day_index=${payload.day_index} attempt=${attempt + 1} invalid or empty meals`,
+        );
+        if (!parsed.success) {
+          lastError = new Error(JSON.stringify(parsed.error.issues));
+        }
+      } catch (err) {
+        lastError = err as Error;
+        this.logger.warn(
+          `[coach] day_index=${payload.day_index} attempt=${attempt + 1} failed: ${
+            (err as Error)?.message
+          }`,
+        );
+      }
     }
-    this.logAgent('coach', `day_index=${payload.day_index} model=${this.coachModel}`);
 
-    const rawMeals = Array.isArray((raw as any)?.meals) ? (raw as any).meals : [];
-    const normalizedMeals = rawMeals
-      .filter((m: any) => m && typeof m === 'object' && !Array.isArray(m))
-      .map((m: any) => ({
-        meal_slot: m.meal_slot,
-        name: m.name,
-        difficulty: m.difficulty,
-        instructions:
-          Array.isArray(m.instructions) || typeof m.instructions === 'string'
-            ? m.instructions
-            : undefined,
-        ingredients: Array.isArray(m.ingredients)
-          ? m.ingredients
-              .filter((ing: any) => ing && typeof ing === 'object')
-              .map((ing: any) => ({
-                ingredient_name: ing.ingredient_name,
-                quantity: ing.quantity,
-                unit: ing.unit || 'g',
-              }))
-          : [],
-        target_kcal: m.target_kcal,
-        target_protein: m.target_protein,
-      }));
-
-    const candidate = {
-      day_index: (raw as any)?.day_index ?? payload.day_index,
-      meals: normalizedMeals,
-    };
-
-    console.log('Candidate Day Plan:', candidate);
-
-    return PlanDaySchema.parse(candidate);
+    if (lastError) {
+      this.logger.error(
+        `[coach] day_index=${payload.day_index} exhausted retries err=${lastError.message}`,
+      );
+    }
+    return { day_index: payload.day_index, meals: [] };
   }
 
   async generateDayWithRecipes(payload: {
