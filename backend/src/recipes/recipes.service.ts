@@ -304,6 +304,80 @@ export class RecipesService {
     });
   }
 
+  async generateRecipeFromStub(input: {
+    stub: {
+      name: string;
+      meal_slot: string;
+      meal_type?: string;
+      difficulty?: string;
+      base_cost_gbp?: number;
+      instructions?: any;
+      ingredients: { ingredient_name: string; quantity: number; unit?: string }[];
+    };
+    userId?: string;
+  }) {
+    const draft = input.stub;
+    const ingList = draft.ingredients || [];
+    const resolvedIngredients: Ingredient[] = [];
+    for (const ing of ingList) {
+      const resolved = await this.ingredientsService.resolveOrCreateLoose(ing.ingredient_name);
+      if (resolved) {
+        resolvedIngredients.push(resolved);
+      } else {
+        this.logger.warn(`generateRecipeFromStub: could not resolve ingredient name="${ing.ingredient_name}"`);
+      }
+    }
+    const ris: RecipeIngredient[] = [];
+    for (let i = 0; i < ingList.length; i++) {
+      const item = ingList[i];
+      const ingredient = resolvedIngredients[i];
+      if (!ingredient) continue;
+      const ri = this.recipeIngredientRepo.create({
+        ingredient,
+        quantity: item.quantity,
+        unit: item.unit || 'g',
+      });
+      ris.push(ri);
+    }
+    const mealSlot = (draft.meal_slot || 'meal').toString().slice(0, 50);
+    const mealTypeRaw = (draft.meal_type as any) || 'solid';
+    const mealType: 'solid' | 'drinkable' = mealTypeRaw === 'drinkable' ? 'drinkable' : 'solid';
+    const recipe = this.recipeRepo.create({
+      name: draft.name || `Generated meal ${Date.now()}`,
+      meal_slot: mealSlot,
+      meal_type: mealType,
+      difficulty: draft.difficulty || 'easy',
+      is_custom: true,
+      source: 'llm',
+      is_searchable: false,
+      price_estimated: true,
+      createdByUser: input.userId ? ({ id: input.userId } as any) : undefined,
+      instructions:
+        Array.isArray(draft.instructions)
+          ? draft.instructions.join('\n')
+          : typeof draft.instructions === 'object' && draft.instructions !== null
+            ? JSON.stringify(draft.instructions)
+            : draft.instructions || undefined,
+      base_cost_gbp: draft.base_cost_gbp,
+    });
+    const saved = await this.recipeRepo.save(recipe);
+    ris.forEach((ri) => (ri.recipe = saved));
+    await this.recipeIngredientRepo.save(ris);
+
+    const { kcal, protein, carbs, fat, cost } = this.computeMacrosAndCost(ris);
+    saved.base_kcal = kcal;
+    saved.base_protein = protein;
+    saved.base_carbs = carbs;
+    saved.base_fat = fat;
+    saved.base_cost_gbp = saved.base_cost_gbp ?? cost ?? undefined;
+    await this.recipeRepo.save(saved);
+
+    return this.recipeRepo.findOne({
+      where: { id: saved.id },
+      relations: ['ingredients', 'ingredients.ingredient'],
+    });
+  }
+
   private computeMacrosAndCost(ris: RecipeIngredient[]) {
     let kcal = 0;
     let protein = 0;
