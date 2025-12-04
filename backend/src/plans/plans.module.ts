@@ -2,7 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PlansService } from './plans.service';
 import { PlansController } from './plans.controller';
-import { WeeklyPlan, PlanDay, PlanMeal, PlanActionLog } from '../database/entities';
+import { WeeklyPlan, PlanDay, PlanMeal, PlanActionLog, Recipe, RecipeIngredient } from '../database/entities';
 import { RecipesModule } from '../recipes/recipes.module';
 import { UsersModule } from '../users/users.module';
 import { ShoppingListModule } from '../shopping-list/shopping-list.module';
@@ -12,7 +12,7 @@ import { IngredientsModule } from '../ingredients/ingredients.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([WeeklyPlan, PlanDay, PlanMeal, PlanActionLog]),
+    TypeOrmModule.forFeature([WeeklyPlan, PlanDay, PlanMeal, PlanActionLog, Recipe, RecipeIngredient]),
     forwardRef(() => RecipesModule),
     UsersModule,
     ShoppingListModule,

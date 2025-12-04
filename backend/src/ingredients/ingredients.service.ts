@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Ingredient } from '../database/entities';
+import { NormalizeForMatch, ComputeNameSimilarity } from '../ingredients/helper/normalize';
 
 @Injectable()
 export class IngredientsService implements OnModuleInit {
@@ -10,7 +11,7 @@ export class IngredientsService implements OnModuleInit {
   constructor(
     @InjectRepository(Ingredient)
     private readonly ingredientRepo: Repository<Ingredient>,
-  ) {}
+  ) { }
 
   async onModuleInit() {
     try {
@@ -49,6 +50,79 @@ export class IngredientsService implements OnModuleInit {
     if (!id) return Promise.resolve(null);
     return this.ingredientRepo.findOne({ where: { id } });
   }
+
+  async findOrCreateByName(name: string): Promise<Ingredient> {
+    const trimmed = name.trim();
+
+    // 1) Exact match first
+    let ingredient = await this.ingredientRepo.findOne({
+      where: { name: trimmed },
+    });
+
+    if (ingredient) {
+      return ingredient;
+    }
+
+    // 2) Fuzzy search in DB using ILIKE
+    // We’ll search by the main keyword (e.g. last word) to keep it cheap.
+    const searchTerm = await NormalizeForMatch(trimmed);
+    const tokens = searchTerm.split(' ').filter(Boolean);
+    const mainToken = tokens[tokens.length - 1] || searchTerm; // e.g. "apple"
+
+    const candidates = await this.ingredientRepo
+      .createQueryBuilder('ingredient')
+      .where('LOWER(ingredient.name) LIKE :q', { q: `%${mainToken}%` })
+      .limit(20)
+      .getMany();
+
+    // 3) Pick best candidate using a simple similarity score
+    let best: Ingredient | null = null;
+    let bestScore = 0;
+
+    for (const cand of candidates) {
+      const score = await ComputeNameSimilarity(trimmed, cand.name);
+      if (score > bestScore) {
+        bestScore = score;
+        best = cand;
+      }
+    }
+
+    // 4) If best match is good enough, reuse it; otherwise create a new ingredient
+    const THRESHOLD = 0.55; // tune if needed
+
+    if (best && bestScore >= THRESHOLD) {
+      this.logger.log(
+        `Matched LLM ingredient "${trimmed}" to existing "${best.name}" (score=${bestScore.toFixed(
+          2,
+        )})`,
+      );
+      return best;
+    }
+
+    // 5) No good match found -> create a new ingredient
+    const draft: Partial<Ingredient> = {
+      name: trimmed,
+      category: undefined,
+      unit_type: 'per_100g',
+      kcal_per_unit: undefined,
+      protein_per_unit: undefined,
+      carbs_per_unit: undefined,
+      fat_per_unit: undefined,
+      estimated_price_per_unit_gbp: undefined,
+      allergen_keys: [],
+    };
+
+    ingredient = this.ingredientRepo.create(draft);
+    await this.ingredientRepo.save(ingredient);
+    this.logger.log(
+      `Created new ingredient from LLM: "${trimmed}" (no good fuzzy match, bestScore=${bestScore.toFixed(
+        2,
+      )})`,
+    );
+
+    return ingredient;
+  }
+
 
   // Try to resolve by id or name; if not found and a name is provided, create a minimal ingredient entry.
   async resolveOrCreateLoose(identifier?: string) {

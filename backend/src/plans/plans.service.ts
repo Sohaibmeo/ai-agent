@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Not } from 'typeorm';
-import { PlanDay, PlanMeal, WeeklyPlan, PlanActionLog } from '../database/entities';
+import { PlanDay, PlanMeal, WeeklyPlan, PlanActionLog, Recipe, RecipeIngredient } from '../database/entities';
 import { RecipesService } from '../recipes/recipes.service';
 import { UsersService } from '../users/users.service';
 import { calculateTargets } from './utils/profile-targets';
@@ -26,12 +26,16 @@ export class PlansService {
     private readonly planMealRepo: Repository<PlanMeal>,
     @InjectRepository(PlanActionLog)
     private readonly planActionLogRepo: Repository<PlanActionLog>,
+    @InjectRepository(Recipe)
+    private readonly recipeRepo: Repository<Recipe>,
+    @InjectRepository(RecipeIngredient)
+    private readonly recipeIngredientRepo: Repository<RecipeIngredient>,
     private readonly recipesService: RecipesService,
     private readonly usersService: UsersService,
     private readonly shoppingListService: ShoppingListService,
     private readonly preferencesService: PreferencesService,
     private readonly agentsService: AgentsService,
-  private readonly ingredientsService: IngredientsService,
+    private readonly ingredientsService: IngredientsService,
   ) {}
 
   findAll() {
@@ -237,7 +241,7 @@ export class PlansService {
       return false;
     });
 
-    // For now pick first candidate per slot per day; later integrate Coach Agent.
+    // When useAgent is true, rely on the Day LLM to generate full recipes; otherwise use existing candidate logic.
     const plan = this.weeklyPlanRepo.create({
       user: { id: userId } as any,
       week_start_date: weekStartDate,
@@ -247,30 +251,6 @@ export class PlansService {
     this.logger.log(`plan persisted id=${savedPlan.id} user=${userId}`);
 
     const dayEntities: PlanDay[] = [];
-    let agentPlan:
-      | { week_start_date?: string; days?: { day_index: number; meals: any[] }[] }
-      | undefined;
-    if (useAgent) {
-      try {
-        agentPlan = await this.agentsService.coachPlan({
-          profile,
-          week_start_date: weekStartDate,
-          weekly_budget_gbp: overrides?.weeklyBudgetGbp,
-          sameMealsAllWeek: overrides?.sameMealsAllWeek,
-        });
-        this.logger.log(`coachPlan succeeded user=${userId}`);
-      } catch (e) {
-        this.logger.warn(
-          `coachPlan failed user=${userId} fallback to heuristic err=${
-            (e as Error)?.message || String(e)
-          }`,
-        );
-        if (e instanceof Error && (e as any).issues) {
-          this.logger.warn(`coachPlan zod issues=${JSON.stringify((e as any).issues)}`);
-        }
-        agentPlan = undefined;
-      }
-    }
 
     for (let dayIdx = 0; dayIdx < 7; dayIdx += 1) {
       const day = this.planDayRepo.create({
@@ -309,32 +289,108 @@ export class PlansService {
           }
         } else {
           const requiredSlots = mealSlots.length ? mealSlots : ['meal'];
-          const dayWithRecipes = await this.agentsService.generateDayWithRecipes({
+          const dayPlan = await this.agentsService.generateDayPlanWithCoachLLM({
             profile,
             day_index: dayIdx,
-            required_slots: requiredSlots,
+            week_state: {
+              week_start_date: weekStartDate,
+              weekly_budget_gbp: overrides?.weeklyBudgetGbp ?? profile.weekly_budget_gbp,
+              used_budget_gbp: 0,
+              remaining_days: 7 - dayIdx,
+            },
+            targets: {
+              daily_kcal: targets.dailyCalories,
+              daily_protein: targets.dailyProtein,
+            },
+            meal_slots: requiredSlots,
           });
           this.logger.log(
-            `generateWeek day=${dayIdx} dayGenerator meals=${dayWithRecipes.meals?.length || 0}`,
+            `generateWeek day=${dayIdx} dayGenerator meals=${dayPlan.meals?.length || 0}`,
           );
-          for (const m of dayWithRecipes.meals || []) {
+          for (const m of dayPlan.meals || []) {
             if (!requiredSlots.includes(m.meal_slot)) continue;
-            const recipe = await this.recipesService.generateRecipeFromStub({
-              stub: m.recipe,
-              userId,
+
+            const instructions =
+              Array.isArray(m.instructions) && m.instructions.length
+                ? m.instructions.join('\n')
+                : typeof m.instructions === 'string'
+                  ? m.instructions
+                  : undefined;
+
+            const recipe = this.recipeRepo.create({
+              name: m.name,
+              meal_slot: m.meal_slot,
+              meal_type: 'solid',
+              difficulty: m.difficulty || 'easy',
+              is_custom: true,
+              source: 'llm',
+              is_searchable: false,
+              price_estimated: true,
+              createdByUser: userId ? ({ id: userId } as any) : undefined,
+              instructions,
             });
-            if (!recipe) continue;
+            const savedRecipe = await this.recipeRepo.save(recipe);
+
+            let totalKcal = 0;
+            let totalProtein = 0;
+            let totalCarbs = 0;
+            let totalFat = 0;
+            let totalCost = 0;
+
+            const ris: RecipeIngredient[] = [];
+            for (const ing of m.ingredients || []) {
+              const ingredientEntity = await this.ingredientsService.findOrCreateByName(
+                ing.ingredient_name,
+              );
+              const quantity = Number(ing.quantity);
+              const unit = ing.unit || 'g';
+              const ri = this.recipeIngredientRepo.create({
+                recipe: savedRecipe,
+                ingredient: ingredientEntity,
+                quantity,
+                unit,
+              });
+              ris.push(ri);
+
+              const unitType = ingredientEntity.unit_type || '';
+              let factor = quantity;
+              if (unitType === 'per_100g' && unit === 'g') {
+                factor = quantity / 100;
+              } else if (unitType === 'per_ml' && unit === 'ml') {
+                factor = quantity / 100;
+              } else if (unitType === 'per_piece' && unit === 'piece') {
+                factor = quantity;
+              }
+
+              totalKcal += (Number(ingredientEntity.kcal_per_unit) || 0) * factor;
+              totalProtein += (Number(ingredientEntity.protein_per_unit) || 0) * factor;
+              totalCarbs += (Number(ingredientEntity.carbs_per_unit) || 0) * factor;
+              totalFat += (Number(ingredientEntity.fat_per_unit) || 0) * factor;
+              totalCost += (Number(ingredientEntity.estimated_price_per_unit_gbp) || 0) * factor;
+            }
+
+            if (ris.length) {
+              await this.recipeIngredientRepo.save(ris);
+            }
+
+            savedRecipe.base_kcal = totalKcal;
+            savedRecipe.base_protein = totalProtein;
+            savedRecipe.base_carbs = totalCarbs;
+            savedRecipe.base_fat = totalFat;
+            savedRecipe.base_cost_gbp = totalCost;
+            await this.recipeRepo.save(savedRecipe);
+
             const portion = 1;
             const meal = this.planMealRepo.create({
               planDay: savedDay,
               meal_slot: m.meal_slot,
-              recipe,
+              recipe: savedRecipe,
               portion_multiplier: portion,
-              meal_kcal: recipe.base_kcal ? Number(recipe.base_kcal) * portion : undefined,
-              meal_protein: recipe.base_protein ? Number(recipe.base_protein) * portion : undefined,
-              meal_carbs: recipe.base_carbs ? Number(recipe.base_carbs) * portion : undefined,
-              meal_fat: recipe.base_fat ? Number(recipe.base_fat) * portion : undefined,
-              meal_cost_gbp: recipe.base_cost_gbp ? Number(recipe.base_cost_gbp) * portion : undefined,
+              meal_kcal: totalKcal ? Number(totalKcal) * portion : undefined,
+              meal_protein: totalProtein ? Number(totalProtein) * portion : undefined,
+              meal_carbs: totalCarbs ? Number(totalCarbs) * portion : undefined,
+              meal_fat: totalFat ? Number(totalFat) * portion : undefined,
+              meal_cost_gbp: totalCost ? Number(totalCost) * portion : undefined,
             });
             await this.planMealRepo.save(meal);
             currentDayKcal += Number(meal.meal_kcal || 0);

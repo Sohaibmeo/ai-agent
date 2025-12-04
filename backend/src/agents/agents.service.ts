@@ -6,16 +6,31 @@ import { ExplanationRequestDto, ExplanationResponseDto } from './dto/explanation
 import { NutritionAdviceRequestDto, NutritionAdviceResponseDto } from './dto/nutrition-advice.dto';
 import { reviewInstructionSchema, ReviewInstruction } from './schemas/review-instruction.schema';
 import { ChooseIngredientDto } from './dto/choose-ingredient.dto';
+import { calculateTargets } from '../plans/utils/profile-targets';
 
-const PlanMealSchema = z.object({
+const DayMealIngredientSchema = z.object({
+  ingredient_name: z.string(),
+  quantity: z.preprocess((v) => {
+    if (v === '' || v === null || v === undefined) return 0;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  }, z.number()),
+  unit: z.string(),
+});
+
+const DayMealSchema = z.object({
   meal_slot: z.string(),
-  recipe_id: z.string(),
-  portion_multiplier: z.number().optional(),
+  name: z.string(),
+  difficulty: z.string().optional(),
+  instructions: z.union([z.string(), z.array(z.string())]),
+  ingredients: z.array(DayMealIngredientSchema),
+  target_kcal: z.number().optional(),
+  target_protein: z.number().optional(),
 });
 
 const PlanDaySchema = z.object({
   day_index: z.number(),
-  meals: z.array(PlanMealSchema),
+  meals: z.array(DayMealSchema),
 });
 
 const WeeklyPlanSchema = z.object({
@@ -49,8 +64,8 @@ const DayWithRecipesSchema = z.object({
   ),
 });
 
-type PlanMeal = z.infer<typeof PlanMealSchema>;
-type PlanDay = z.infer<typeof PlanDaySchema>;
+export type LlmDayMeal = z.infer<typeof DayMealSchema>;
+export type LlmPlanDay = z.infer<typeof PlanDaySchema>;
 type WeeklyPlan = z.infer<typeof WeeklyPlanSchema>;
 type DayWithRecipes = z.infer<typeof DayWithRecipesSchema>;
 
@@ -111,19 +126,39 @@ export class AgentsService {
     return reviewInstructionSchema.parse(raw);
   }
 
-  private async generateDayPlanWithCoachLLM(payload: {
+  async generateDayPlanWithCoachLLM(payload: {
     profile: any;
     day_index: number;
     week_state: WeekState;
-  }): Promise<PlanDay> {
+    targets: {
+      daily_kcal: number;
+      daily_protein: number;
+    };
+    meal_slots: string[];
+  }): Promise<LlmPlanDay> {
     const prompt: { role: 'system' | 'user'; content: string }[] = [
       {
         role: 'system',
         content:
-          'You are Day Coach. Plan meals for ONE DAY only. ' +
-          'Use the profile and week_state to respect budget, constraints and variety across the week. ' +
-          'Return ONLY JSON with shape: {day_index, meals:[{meal_slot, recipe_id, portion_multiplier?}]}. ' +
-          'Do NOT invent new keys or return prose.',
+          'You are Day Coach.\n' +
+          '- Plan ALL meals for ONE day for this user.\n' +
+          '- You receive: profile, the day index, weekly state, daily macro targets, and a list of meal_slots.\n' +
+          '- For each meal_slot, you must propose ONE complete recipe: name, difficulty, ingredient list, and instructions.\n' +
+          '- Ingredients must have ingredient_name, quantity (number), and unit (e.g. "g", "ml", "piece").\n' +
+          '- You may roughly allocate daily_kcal and daily_protein across meals and record that in target_kcal and target_protein per meal.\n' +
+          '- Use simple, realistic ingredients available in a typical UK supermarket.\n' +
+          '- Avoid very niche or branded ingredients.\n' +
+          '- Respond ONLY with JSON of the form:\n' +
+          '  { day_index, meals:[{\n' +
+          '     meal_slot,\n' +
+          '     name,\n' +
+          '     difficulty?,\n' +
+          '     instructions: string | string[],\n' +
+          '     ingredients:[{ingredient_name, quantity, unit}],\n' +
+          '     target_kcal?,\n' +
+          '     target_protein?\n' +
+          '  }] }\n' +
+          '- Do NOT include any IDs or database keys. Do NOT mention recipe_id or candidate recipes. Do NOT return prose.',
       },
       {
         role: 'user',
@@ -131,17 +166,53 @@ export class AgentsService {
           profile: payload.profile,
           day_index: payload.day_index,
           week_state: payload.week_state,
+          targets: payload.targets,
+          meal_slots: payload.meal_slots,
         }),
       },
     ];
 
-    const raw = await this.callModel(this.coachModel, prompt, 'coach');
+    let raw: any;
+    try {
+      raw = await this.callModel(this.coachModel, prompt, 'coach');
+    } catch (err) {
+      this.logger.error(
+        `[coach] day_index=${payload.day_index} parse_failed err=${(err as Error)?.message}`,
+      );
+      return { day_index: payload.day_index, meals: [] };
+    }
     this.logAgent('coach', `day_index=${payload.day_index} model=${this.coachModel}`);
+
+    const rawMeals = Array.isArray((raw as any)?.meals) ? (raw as any).meals : [];
+    const normalizedMeals = rawMeals
+      .filter((m: any) => m && typeof m === 'object' && !Array.isArray(m))
+      .map((m: any) => ({
+        meal_slot: m.meal_slot,
+        name: m.name,
+        difficulty: m.difficulty,
+        instructions:
+          Array.isArray(m.instructions) || typeof m.instructions === 'string'
+            ? m.instructions
+            : undefined,
+        ingredients: Array.isArray(m.ingredients)
+          ? m.ingredients
+              .filter((ing: any) => ing && typeof ing === 'object')
+              .map((ing: any) => ({
+                ingredient_name: ing.ingredient_name,
+                quantity: ing.quantity,
+                unit: ing.unit || 'g',
+              }))
+          : [],
+        target_kcal: m.target_kcal,
+        target_protein: m.target_protein,
+      }));
 
     const candidate = {
       day_index: (raw as any)?.day_index ?? payload.day_index,
-      meals: (raw as any)?.meals ?? [],
+      meals: normalizedMeals,
     };
+
+    console.log('Candidate Day Plan:', candidate);
 
     return PlanDaySchema.parse(candidate);
   }
@@ -202,6 +273,16 @@ export class AgentsService {
     const week_start_date =
       payload.week_start_date || new Date().toISOString().slice(0, 10);
 
+    const targets = calculateTargets(payload.profile || {});
+    const mealSlots = ['breakfast', 'snack', 'lunch', 'dinner'].filter((slot) => {
+      if (slot === 'breakfast') return payload.profile?.breakfast_enabled !== false;
+      if (slot === 'snack') return payload.profile?.snack_enabled !== false;
+      if (slot === 'lunch') return payload.profile?.lunch_enabled !== false;
+      if (slot === 'dinner') return payload.profile?.dinner_enabled !== false;
+      return true;
+    });
+    const coachMealSlots = mealSlots.length ? mealSlots : ['meal'];
+
     // Initialise week state for the orchestrator
     const weekState: WeekState = {
       week_start_date,
@@ -211,13 +292,18 @@ export class AgentsService {
       notes: 'Start of week. Aim to stay within budget',
     };
 
-    const days: PlanDay[] = [];
+    const days: LlmPlanDay[] = [];
 
     if (payload.sameMealsAllWeek) {
       const baseDay = await this.generateDayPlanWithCoachLLM({
         profile: payload.profile,
         day_index: 0,
         week_state: weekState,
+        targets: {
+          daily_kcal: targets.dailyCalories,
+          daily_protein: targets.dailyProtein,
+        },
+        meal_slots: coachMealSlots,
       });
       for (let i = 0; i < 7; i++) {
         days.push({ ...baseDay, day_index: i });
@@ -230,7 +316,12 @@ export class AgentsService {
           profile: payload.profile,
           day_index,
           week_state: weekState,
-        });
+        targets: {
+          daily_kcal: targets.dailyCalories,
+          daily_protein: targets.dailyProtein,
+        },
+        meal_slots: coachMealSlots,
+      });
 
         // TODO: once you have per-recipe costs available here,
         // estimate the cost of this day and update weekState.used_budget_gbp.
