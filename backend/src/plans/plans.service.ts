@@ -260,7 +260,14 @@ export class PlansService {
         });
         this.logger.log(`coachPlan succeeded user=${userId}`);
       } catch (e) {
-        this.logger.warn(`coachPlan failed user=${userId} fallback to heuristic`);
+        this.logger.warn(
+          `coachPlan failed user=${userId} fallback to heuristic err=${
+            (e as Error)?.message || String(e)
+          }`,
+        );
+        if (e instanceof Error && (e as any).issues) {
+          this.logger.warn(`coachPlan zod issues=${JSON.stringify((e as any).issues)}`);
+        }
         agentPlan = undefined;
       }
     }
@@ -275,37 +282,37 @@ export class PlansService {
       let currentDayProtein = 0;
       let currentDayCost = 0;
 
-      const agentMealsForDay = agentPlan?.days?.find((d) => d.day_index === dayIdx)?.meals;
-      if (agentMealsForDay?.length) {
-        for (const m of agentMealsForDay) {
-          const recipe = m.recipe_id ? await this.recipesService.findOneById(m.recipe_id) : null;
-          if (!recipe) continue;
-          const portion = m.portion_multiplier ?? 1;
-          const meal = this.planMealRepo.create({
-            planDay: savedDay,
-            meal_slot: m.meal_slot,
-            recipe,
-            portion_multiplier: portion,
-            meal_kcal: recipe.base_kcal ? Number(recipe.base_kcal) * portion : undefined,
-            meal_protein: recipe.base_protein ? Number(recipe.base_protein) * portion : undefined,
-            meal_carbs: recipe.base_carbs ? Number(recipe.base_carbs) * portion : undefined,
-            meal_fat: recipe.base_fat ? Number(recipe.base_fat) * portion : undefined,
-            meal_cost_gbp: recipe.base_cost_gbp ? Number(recipe.base_cost_gbp) * portion : undefined,
+      if (useAgent) {
+        if (overrides?.sameMealsAllWeek && dayIdx > 0 && dayEntities[0]) {
+          const baseMeals = await this.planMealRepo.find({
+            where: { planDay: { id: dayEntities[0].id } as any },
+            relations: ['recipe'],
           });
-          await this.planMealRepo.save(meal);
-          currentDayKcal += Number(meal.meal_kcal || 0);
-          currentDayProtein += Number(meal.meal_protein || 0);
-          currentDayCost += Number(meal.meal_cost_gbp || 0);
-        }
-      } else {
-        for (const slot of mealSlots) {
-          let chosenRecipe;
-          if (overrides?.useLlmRecipes) {
+          for (const bm of baseMeals) {
+            const meal = this.planMealRepo.create({
+              planDay: savedDay,
+              meal_slot: bm.meal_slot,
+              recipe: bm.recipe,
+              portion_multiplier: bm.portion_multiplier,
+              meal_kcal: bm.meal_kcal,
+              meal_protein: bm.meal_protein,
+              meal_carbs: bm.meal_carbs,
+              meal_fat: bm.meal_fat,
+              meal_cost_gbp: bm.meal_cost_gbp,
+            });
+            await this.planMealRepo.save(meal);
+            currentDayKcal += Number(meal.meal_kcal || 0);
+            currentDayProtein += Number(meal.meal_protein || 0);
+            currentDayCost += Number(meal.meal_cost_gbp || 0);
+          }
+        } else {
+          const slots = mealSlots.length ? mealSlots : ['meal'];
+          for (const slot of slots) {
             const perMealBudget =
-              profile.weekly_budget_gbp && mealSlots.length
-                ? Number(profile.weekly_budget_gbp) / (mealSlots.length * 7)
+              profile.weekly_budget_gbp && slots.length
+                ? Number(profile.weekly_budget_gbp) / (slots.length * 7)
                 : undefined;
-            chosenRecipe = await this.recipesService.generateRecipeFromLLM({
+            const generated = await this.recipesService.generateRecipeFromLLM({
               userId,
               note: undefined,
               mealSlot: slot,
@@ -313,23 +320,39 @@ export class PlansService {
               difficulty: profile.max_difficulty,
               budgetPerMeal: perMealBudget,
             });
-          } else {
-            const candidates = await this.recipesService.findCandidatesForUser({
-              userId,
-              mealSlot: slot,
-              maxDifficulty: profile.max_difficulty,
-              weeklyBudgetGbp: profile.weekly_budget_gbp ? Number(profile.weekly_budget_gbp) : undefined,
-              mealsPerDay: mealSlots.length,
-              estimatedDayCost: currentDayCost,
-              includeNonSearchable: true,
+            if (!generated) continue;
+            const portion = 1;
+            const meal = this.planMealRepo.create({
+              planDay: savedDay,
+              meal_slot: slot,
+              recipe: generated,
+              portion_multiplier: portion,
+              meal_kcal: generated.base_kcal ? Number(generated.base_kcal) * portion : undefined,
+              meal_protein: generated.base_protein ? Number(generated.base_protein) * portion : undefined,
+              meal_carbs: generated.base_carbs ? Number(generated.base_carbs) * portion : undefined,
+              meal_fat: generated.base_fat ? Number(generated.base_fat) * portion : undefined,
+              meal_cost_gbp: generated.base_cost_gbp ? Number(generated.base_cost_gbp) * portion : undefined,
             });
-            chosenRecipe = selectRecipe(candidates, {
-              avoidNames: new Set(), // could track weekly variety
-              costCapPerMeal: profile.weekly_budget_gbp
-                ? Number(profile.weekly_budget_gbp) / (mealSlots.length * 7)
-                : undefined,
-            });
+            await this.planMealRepo.save(meal);
+            currentDayKcal += Number(meal.meal_kcal || 0);
+            currentDayProtein += Number(meal.meal_protein || 0);
+            currentDayCost += Number(meal.meal_cost_gbp || 0);
           }
+        }
+      } else {
+        for (const slot of mealSlots) {
+          const perMealBudget =
+            profile.weekly_budget_gbp && mealSlots.length
+              ? Number(profile.weekly_budget_gbp) / (mealSlots.length * 7)
+              : undefined;
+          const chosenRecipe = await this.recipesService.generateRecipeFromLLM({
+            userId,
+            note: undefined,
+            mealSlot: slot,
+            mealType: undefined,
+            difficulty: profile.max_difficulty,
+            budgetPerMeal: perMealBudget,
+          });
           if (!chosenRecipe) continue;
           const portion = portionTowardsTarget(
             chosenRecipe,

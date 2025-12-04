@@ -111,7 +111,12 @@ export class AgentsService {
     const raw = await this.callModel(this.coachModel, prompt, 'coach');
     this.logAgent('coach', `day_index=${payload.day_index} model=${this.coachModel}`);
 
-    return PlanDaySchema.parse(raw);
+    const candidate = {
+      day_index: (raw as any)?.day_index ?? payload.day_index,
+      meals: (raw as any)?.meals ?? [],
+    };
+
+    return PlanDaySchema.parse(candidate);
   }
 
   async coachPlan(payload: {
@@ -129,7 +134,7 @@ export class AgentsService {
       weekly_budget_gbp: payload.weekly_budget_gbp,
       used_budget_gbp: 0,
       remaining_days: 7,
-      notes: 'Start of week. Aim to stay within budget and provide variety across days.',
+      notes: 'Start of week. Aim to stay within budget',
     };
 
     const days: PlanDay[] = [];
@@ -381,19 +386,21 @@ export class AgentsService {
     };
 
     const schema = z.object({
-      name: z.string(),
+      name: z.string().optional(),
       meal_slot: z.string().optional(),
-      meal_type: z.string().optional(),
+      meal_type: z.string().nullable().optional(),
       difficulty: z.string().optional(),
       base_cost_gbp: z.preprocess(toNum, z.number().optional()),
-      instructions: z.union([z.string(), z.array(z.string())]).optional(),
-      ingredients: z.array(
-        z.object({
-          ingredient_name: z.string(),
-          quantity: z.preprocess(toNum, z.number()),
-          unit: z.string(),
-        }),
-      ),
+      instructions: z.any().optional(),
+      ingredients: z
+        .array(
+          z.object({
+            ingredient_name: z.string(),
+            quantity: z.preprocess(toNum, z.number()),
+            unit: z.string().nullable().optional(),
+          }),
+        )
+        .optional(),
     });
     const prompt: { role: 'system' | 'user'; content: string }[] = [
       {

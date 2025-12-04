@@ -236,11 +236,16 @@ export class RecipesService {
     });
 
     const instructions =
-      Array.isArray(draft.instructions) ? draft.instructions.join('\n') : draft.instructions || null;
+      Array.isArray(draft.instructions)
+        ? draft.instructions.join('\n')
+        : typeof draft.instructions === 'object' && draft.instructions !== null
+          ? JSON.stringify(draft.instructions)
+          : draft.instructions || null;
 
     // Resolve ingredients
+    const ingList = draft.ingredients || [];
     const resolvedIngredients: Ingredient[] = [];
-    for (const ing of draft.ingredients || []) {
+    for (const ing of ingList) {
       const resolved = await this.ingredientsService.resolveOrCreateLoose(ing.ingredient_name);
       if (resolved) {
         resolvedIngredients.push(resolved);
@@ -251,22 +256,26 @@ export class RecipesService {
 
     // Build ris
     const ris: RecipeIngredient[] = [];
-    for (let i = 0; i < (draft.ingredients || []).length; i++) {
-      const item = draft.ingredients[i];
+    for (let i = 0; i < ingList.length; i++) {
+      const item = ingList[i];
       const ingredient = resolvedIngredients[i];
       if (!ingredient) continue;
       const ri = this.recipeIngredientRepo.create({
         ingredient,
         quantity: item.quantity,
-        unit: item.unit,
+        unit: item.unit || 'g',
       });
       ris.push(ri);
     }
 
+    const mealSlot = (draft.meal_slot || input.mealSlot || 'meal').toString().slice(0, 50);
+    const mealTypeRaw = (draft.meal_type as any) || input.mealType || 'solid';
+    const mealType: 'solid' | 'drinkable' = mealTypeRaw === 'drinkable' ? 'drinkable' : 'solid';
+
     const recipe = this.recipeRepo.create({
-      name: draft.name,
-      meal_slot: draft.meal_slot || input.mealSlot || 'meal',
-      meal_type: (draft.meal_type as any) || 'solid',
+      name: draft.name || `Generated meal ${Date.now()}`,
+      meal_slot: mealSlot,
+      meal_type: mealType,
       difficulty: draft.difficulty || 'easy',
       is_custom: true,
       source: 'llm',
