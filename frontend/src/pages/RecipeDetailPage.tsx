@@ -9,7 +9,7 @@ import { notify } from '../lib/toast';
 import { saveCustomRecipe, aiAdjustMeal } from '../api/plans';
 import { fetchIngredients } from '../api/ingredients';
 import { fetchRecipeById } from '../api/recipes';
-import type { Ingredient, Recipe, RecipeWithIngredients } from '../api/types';
+import type { Ingredient, RecipeWithIngredients } from '../api/types';
 
 type IngredientRow = {
   id: string; // recipe_ingredient id
@@ -17,6 +17,12 @@ type IngredientRow = {
   name: string;
   amount: number;
   unit: string;
+  unitType?: string | null;
+  kcalPerUnit?: number | null;
+  proteinPerUnit?: number | null;
+  carbsPerUnit?: number | null;
+  fatPerUnit?: number | null;
+  pricePerUnit?: number | null;
 };
 
 const toIngredientRows = (ris: any[] | undefined): IngredientRow[] =>
@@ -26,6 +32,12 @@ const toIngredientRows = (ris: any[] | undefined): IngredientRow[] =>
     name: ri.ingredient?.name || 'Ingredient',
     amount: Number(ri.quantity || 0),
     unit: ri.unit || 'g',
+    unitType: ri.ingredient?.unit_type,
+    kcalPerUnit: ri.ingredient?.kcal_per_unit,
+    proteinPerUnit: ri.ingredient?.protein_per_unit,
+    carbsPerUnit: ri.ingredient?.carbs_per_unit,
+    fatPerUnit: ri.ingredient?.fat_per_unit,
+    pricePerUnit: ri.ingredient?.estimated_price_per_unit_gbp,
   }));
 
 export function RecipeDetailPage() {
@@ -75,6 +87,18 @@ export function RecipeDetailPage() {
   }, [recipeIngredients]);
 
   const fmt = (val?: number | null, suffix = '') => (val || val === 0 ? `${Math.round(Number(val))}${suffix}` : '—');
+  const fmtCost = (val?: number | null) => (val || val === 0 ? `£${Number(val).toFixed(2)}` : '—');
+  const ingredientTotals = (ing: IngredientRow) => {
+    const baseUnit = (ing.unitType || '').toLowerCase();
+    const divisor = baseUnit === 'per_ml' ? 100 : baseUnit === 'per_100g' ? 100 : 100;
+    const factor = ing.amount / divisor;
+    const kcal = (Number(ing.kcalPerUnit) || 0) * factor;
+    const protein = (Number(ing.proteinPerUnit) || 0) * factor;
+    const carbs = (Number(ing.carbsPerUnit) || 0) * factor;
+    const fat = (Number(ing.fatPerUnit) || 0) * factor;
+    const cost = (Number(ing.pricePerUnit) || 0) * factor;
+    return { kcal, protein, carbs, fat, cost };
+  };
   const macrosLine = recipe
     ? `P: ${fmt(m?.meal_protein ?? recipe.base_protein, 'g')} · C: ${fmt(m?.meal_carbs ?? recipe.base_carbs, 'g')} · F: ${fmt(m?.meal_fat ?? recipe.base_fat, 'g')}`
     : 'P: — · C: — · F: —';
@@ -102,6 +126,12 @@ export function RecipeDetailPage() {
       name: replacement.name,
       amount: amountFromModal || swapTarget.amount,
       unit: unitFromModal || swapTarget.unit,
+      unitType: replacement.unit_type,
+      kcalPerUnit: replacement.kcal_per_unit,
+      proteinPerUnit: replacement.protein_per_unit,
+      carbsPerUnit: replacement.carbs_per_unit,
+      fatPerUnit: replacement.fat_per_unit,
+      pricePerUnit: replacement.estimated_price_per_unit_gbp,
     };
     if (addMode) {
       setIngredients((prev) => {
@@ -257,6 +287,15 @@ export function RecipeDetailPage() {
               >
                 <div className="flex-1">
                   <div className="font-medium text-slate-900">{ing.name}</div>
+                  <div className="text-[11px] text-slate-500">
+                    {(() => {
+                      const totals = ingredientTotals(ing);
+                      return `P: ${fmt(totals.protein, 'g')} · C: ${fmt(totals.carbs, 'g')} · F: ${fmt(
+                        totals.fat,
+                        'g',
+                      )} · kcal: ${fmt(totals.kcal)} · Cost: ${fmtCost(totals.cost)}`;
+                    })()}
+                  </div>
                   <div className="text-[11px] text-slate-500">Click to replace</div>
                 </div>
                 <div className="flex items-center gap-2">

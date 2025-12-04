@@ -145,7 +145,8 @@ export class AgentsService {
           '- Plan ALL meals for ONE day for this user.\n' +
           '- You receive: profile, the day index, weekly state, daily macro targets, and a list of meal_slots.\n' +
           '- For each meal_slot, you must propose ONE complete recipe: name, difficulty, ingredient list, and instructions.\n' +
-          '- Ingredients must have ingredient_name, quantity (number), and unit (e.g. "g", "ml", "piece").\n' +
+          '- Ingredients must have ingredient_name, quantity (number), and unit.\n' +
+          '- All ingredient quantities MUST be in grams ("g") when possible. Avoid "piece", "cup", etc. If unavoidable, convert to grams yourself and still return unit="g".\n' +
           '- You may roughly allocate daily_kcal and daily_protein across meals and record that in target_kcal and target_protein per meal.\n' +
           '- Use simple, realistic ingredients available in a typical UK supermarket.\n' +
           '- Avoid very niche or branded ingredients.\n' +
@@ -209,7 +210,7 @@ export class AgentsService {
                   .map((ing: any) => ({
                     ingredient_name: ing.ingredient_name,
                     quantity: ing.quantity,
-                    unit: ing.unit || 'g',
+                    unit: 'g',
                   }))
               : [],
             target_kcal: m.target_kcal,

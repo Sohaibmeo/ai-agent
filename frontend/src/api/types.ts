@@ -41,6 +41,12 @@ export interface RecipeIngredient {
   ingredient: {
     id: string;
     name: string;
+    unit_type?: string | null;
+    kcal_per_unit?: number | null;
+    protein_per_unit?: number | null;
+    carbs_per_unit?: number | null;
+    fat_per_unit?: number | null;
+    estimated_price_per_unit_gbp?: number | null;
   };
 }
 
@@ -48,6 +54,12 @@ export interface Ingredient {
   id: string;
   name: string;
   category?: string | null;
+  unit_type?: string | null;
+  kcal_per_unit?: number | null;
+  protein_per_unit?: number | null;
+  carbs_per_unit?: number | null;
+  fat_per_unit?: number | null;
+  estimated_price_per_unit_gbp?: number | null;
 }
 
 export interface PlanMeal {

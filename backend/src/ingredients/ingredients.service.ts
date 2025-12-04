@@ -58,53 +58,93 @@ async findOrCreateByName(name: string): Promise<Ingredient> {
   let ingredient = await this.ingredientRepo.findOne({
     where: { name: trimmed },
   });
+  if (ingredient) return ingredient;
 
-  if (ingredient) {
-    return ingredient;
+  // 2) Normalize and pick a "main" food token
+  const normalizedInput = NormalizeForMatch(trimmed); // e.g. "mixed berries 100g" -> "mixed berries 100g"
+  let tokens = normalizedInput.split(/\s+/).filter(Boolean);
+
+  // Remove obvious measure / unit tokens for main-token selection
+  const MEASURE_WORDS = new Set([
+    'g', 'gram', 'grams',
+    'kg', 'ml', 'l', 'litre', 'litres', 'liter', 'liters',
+    'cup', 'cups', 'tbsp', 'tablespoon', 'tablespoons',
+    'tsp', 'teaspoon', 'teaspoons',
+    'slice', 'slices', 'piece', 'pieces',
+    'small', 'medium', 'large',
+    'oz', 'ounce', 'ounces',
+  ]);
+
+  const foodTokens = tokens.filter((t) => {
+    if (/^\d+(\.\d+)?$/.test(t)) return false; // pure numbers
+    if (MEASURE_WORDS.has(t)) return false;
+    return true;
+  });
+
+  const rawMainToken = foodTokens[foodTokens.length - 1]
+    ?? tokens[tokens.length - 1]
+    ?? normalizedInput;
+
+  const mainTokenRoot = Singularize(rawMainToken); // berries -> berry, apples -> apple, wraps -> wrap
+  const searchPrimary = mainTokenRoot || rawMainToken || normalizedInput;
+
+  // Helper to run LIKE search
+  const runSearch = async (token: string | null | undefined) => {
+    if (!token) return [] as Ingredient[];
+    const q = `%${token.toLowerCase()}%`;
+    return this.ingredientRepo
+      .createQueryBuilder('ingredient')
+      .where('LOWER(ingredient.name) LIKE :q', { q })
+      .limit(50)
+      .getMany();
+  };
+
+  let candidates: Ingredient[] = [];
+
+  // 3) Try with the root token first (e.g. "berry")
+  candidates = await runSearch(searchPrimary);
+
+  // 4) If none, try with raw main token (e.g. "berries")
+  if (candidates.length === 0 && rawMainToken !== searchPrimary) {
+    candidates = await runSearch(rawMainToken);
   }
 
-  // 2) Fuzzy search in DB using a singularized main token
-  const normalized = NormalizeForMatch(trimmed);        // e.g. "mixed berries"
-  const tokens = normalized.split(' ').filter(Boolean);      // ["mixed", "berries"]
+  // 5) If still none, try with the whole normalized phrase ("mixed berries")
+  if (candidates.length === 0 && normalizedInput !== rawMainToken) {
+    candidates = await runSearch(normalizedInput);
+  }
 
-  // Take last token as main food word, e.g. "berries"
-  const rawMainToken = tokens[tokens.length - 1] || normalized;
-  const mainTokenRoot = Singularize(rawMainToken);      // "berry"
+  // Filter out junk candidates with empty names
+  candidates = candidates.filter((c) => (c.name || '').trim().length > 0);
 
-  // If the root is empty for some reason, fall back to full normalized string
-  const searchToken = mainTokenRoot || normalized;
-
-  // Ex: WHERE name ILIKE '%berry%'
-  const candidates = await this.ingredientRepo
-    .createQueryBuilder('ingredient')
-    .where('LOWER(ingredient.name) LIKE :q', { q: `%${searchToken}%` })
-    .limit(20)
-    .getMany();
-
-  // 3) Pick best candidate using similarity
+  // 6) Pick best candidate using similarity on *normalized* strings
   let best: Ingredient | null = null;
   let bestScore = 0;
 
   for (const cand of candidates) {
-    const score = ComputeNameSimilarity(trimmed, cand.name);
+    const candNormalized = NormalizeForMatch(cand.name);
+    const score = ComputeNameSimilarity(normalizedInput, candNormalized);
     if (score > bestScore) {
       bestScore = score;
       best = cand;
     }
   }
 
-  const THRESHOLD = 0.55; // tune as needed
+  // This threshold is intentionally modest.
+  // Examples it should now catch:
+  // - "Mixed Berries (100g)"  -> "Strawberries, raw" / "Raspberries, raw"
+  // - "Greek yoghurt"         -> "Yogurt, Greek, plain, nonfat"
+  // - "whole wheat wrap"      -> "Bread, whole-wheat, commercially prepared" (if no better wrap exists)
+  const THRESHOLD = 0.4;
 
   if (best && bestScore >= THRESHOLD) {
     this.logger.log(
-      `Matched LLM ingredient "${trimmed}" to existing "${best.name}" (score=${bestScore.toFixed(
-        2,
-      )})`,
+      `Matched LLM ingredient "${trimmed}" -> "${best.name}" (score=${bestScore.toFixed(2)})`,
     );
     return best;
   }
 
-  // 4) No good match found -> create a new ingredient
+  // 7) Otherwise, create a new ingredient
   const draft: Partial<Ingredient> = {
     name: trimmed,
     category: undefined,
@@ -127,6 +167,7 @@ async findOrCreateByName(name: string): Promise<Ingredient> {
 
   return ingredient;
 }
+
 
 
   // Try to resolve by id or name; if not found and a name is provided, create a minimal ingredient entry.

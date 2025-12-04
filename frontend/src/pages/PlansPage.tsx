@@ -316,7 +316,7 @@ export function PlansPage() {
 
       {activeTab === 'current' && (
         <div className="grid grid-cols-1 gap-3">
-          {isError && (
+          {isError && !plan && (
             <Card>
               <div className="flex items-center justify-between text-sm text-red-600">
                 <div>Could not load the plan.</div>

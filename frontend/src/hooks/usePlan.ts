@@ -6,7 +6,7 @@ import type { WeeklyPlan } from '../api/types';
 export function useActivePlan(userId: string = DEMO_USER_ID) {
   const queryClient = useQueryClient();
 
-  const planQuery = useQuery<WeeklyPlan>({
+  const planQuery = useQuery<WeeklyPlan | null>({
     queryKey: ['plan', 'active', userId],
     queryFn: () => fetchActivePlan(userId),
   });

@@ -347,7 +347,7 @@ export class PlansService {
                 ing.ingredient_name,
               );
               const quantity = Number(ing.quantity);
-              const unit = ing.unit || 'g';
+              const unit = 'g';
               const ri = this.recipeIngredientRepo.create({
                 recipe: savedRecipe,
                 ingredient: ingredientEntity,
@@ -356,15 +356,9 @@ export class PlansService {
               });
               ris.push(ri);
 
-              const unitType = ingredientEntity.unit_type || '';
-              let factor = quantity;
-              if (unitType === 'per_100g' && unit === 'g') {
-                factor = quantity / 100;
-              } else if (unitType === 'per_ml' && unit === 'ml') {
-                factor = quantity / 100;
-              } else if (unitType === 'per_piece' && unit === 'piece') {
-                factor = quantity;
-              }
+              const unitType = (ingredientEntity.unit_type || '').toLowerCase();
+              const divisor = unitType === 'per_ml' ? 100 : unitType === 'per_100g' ? 100 : 100;
+              const factor = quantity / divisor;
 
               totalKcal += (Number(ingredientEntity.kcal_per_unit) || 0) * factor;
               totalProtein += (Number(ingredientEntity.protein_per_unit) || 0) * factor;
