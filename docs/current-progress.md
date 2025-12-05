@@ -2,15 +2,33 @@
 
 ## Backend
 
-We have to make sure plans are better designed; better budgets; better goal requirements; agent is actually thinking smartly about these. (Improved coach agent)
 We have to make sure that wherever user types to say something like change this or that. it actually works as well. (Improved review agent)
 
 ## Next steps (recipes/plans with LLM)
 - Add `is_searchable`, `source` (catalog|user|llm), and `price_estimated` to recipes (migration + entity). Default is_searchable=false; source=llm for generated recipes.
-- Adjust recipe generation to accept LLM prices with a clamp; set price_estimated=true; persist generated recipes with is_searchable=false.
-- When user explicitly saves a recipe, set is_searchable=true (and source=user if user-initiated).
-- Filter catalog/candidate search by is_searchable=true; allow non-searchable generated recipes for auto swaps/plan generation.
-- For swap intent with a note, route through review → ai_adjust_recipe or generate-and-set; no note uses catalog/auto swap.
+
+Add fix cost and calories to the newly created ingredients (0.4 gbo per 100g) 4p 4c 9f or something
+
+
+## Flows that needs to be improved
+
+Ok. Now its time to work on the review agent.
+
+Review agent is responsible for making any changes in the plan.
+
+There are 3 ways to make the change.
+
+One is to the whole plan (User will do it by selecting multiple days and clicking the modify button which will give user a text area in which he can enter the changes he wants)
+
+Second has two parts first is to click on the swap button and then choosing auto decide for me (We try and see if we can find another dish wil almost close to the same macros).
+
+In the swap menu if user decides to auto swap and then to describe we generate that one
+
+Lasly user can select on a recipe to see the recipe detail page and there he can type any change that will work to only that recipe as well
+
+We can have the plan controller receive our api call
+
+plan service will call the interpretor function or whatever and then pass that info to review agent who will have access to the day generator or a single recipe generator. and then the requested change will be made accordingly
 
 # Suggestions for next changes : 
 

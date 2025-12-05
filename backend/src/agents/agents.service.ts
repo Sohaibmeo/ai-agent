@@ -288,53 +288,6 @@ export class AgentsService {
     return { day_index: payload.day_index, meals: [] };
   }
 
-  async generateDayWithRecipes(payload: {
-    profile: any;
-    day_index: number;
-    required_slots: string[];
-  }): Promise<DayWithRecipes> {
-    const prompt: { role: 'system' | 'user'; content: string }[] = [
-      {
-        role: 'system',
-        content:
-          'You are Day Recipe Generator. Create ONE DAY of meals with inline recipes. ' +
-          'Include ALL required_slots. For each meal, return meal_slot and recipe with ingredients and instructions. ' +
-          'Do NOT include cost estimates; cost will be computed later. ' +
-          'Return ONLY JSON: {day_index, meals:[{meal_slot, recipe:{name, meal_slot, meal_type?, difficulty?, instructions?, ingredients:[{ingredient_name, quantity, unit}]}}]}',
-      },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          profile: payload.profile,
-          day_index: payload.day_index,
-          required_slots: payload.required_slots,
-        }),
-      },
-    ];
-    try {
-      const raw = await this.callModel(this.coachModel, prompt, 'coach');
-      this.logAgent('coach', `day_recipes day_index=${payload.day_index} model=${this.coachModel}`);
-      const rawMeals = Array.isArray((raw as any)?.meals) ? (raw as any).meals : [];
-      const normalizedMeals = rawMeals.map((m: any) => ({
-        meal_slot: m?.meal_slot,
-        recipe: {
-          ...(m?.recipe || {}),
-          meal_slot: (m?.recipe && m.recipe.meal_slot) || m?.meal_slot,
-        },
-      }));
-      const candidate = {
-        day_index: (raw as any)?.day_index ?? payload.day_index,
-        meals: normalizedMeals,
-      };
-      return DayWithRecipesSchema.parse(candidate);
-    } catch (err) {
-      this.logger.warn(
-        `[coach] day_recipes failed day_index=${payload.day_index} err=${(err as Error)?.message || String(err)}`,
-      );
-      return { day_index: payload.day_index, meals: [] };
-    }
-  }
-
   async coachPlan(payload: {
     profile: any;
     week_start_date?: string;
