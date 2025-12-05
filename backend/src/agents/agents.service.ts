@@ -157,23 +157,32 @@ export class AgentsService {
     }
 
     const prompt: { role: 'system' | 'user'; content: string }[] = [
-      {
-        role: 'system',
-        content:
-          'You are Day Coach.\n' +
-          '- Plan ALL meals for ONE day for this user.\n' +
-          '- You receive: profile, the day index, weekly state, daily macro targets, and a list of meal_slots.\n' +
-          '- For each meal_slot, you must propose ONE complete recipe: name, difficulty, ingredient list, and instructions.\n' +
-          '- Ingredients must have ingredient_name, quantity (number), and unit.\n' +
-          '- All ingredient quantities MUST be in grams ("g") when possible. Avoid "piece", "cup", etc. If unavoidable, convert to grams yourself and still return unit="g".\n' +
-          '- Respect profile.diet_type and allergy_keys; avoid disallowed ingredients and anything the user should not consume.\n' +
-          '- Favor ingredients the user is likely to like; avoid disliked items if provided.\n' +
-          '- Honor weekly_budget_gbp and per-meal budget hints; small overruns are OK but stay close.\n' +
-          '- Align with user goal (lose/maintain/gain weight) by keeping total day kcal near the daily target and providing good protein coverage.\n' +
-          '- If you must deviate from diet/allergy/budget/goal, explain briefly in compliance_notes per meal.\n' +
-          '- You may roughly allocate daily_kcal and daily_protein across meals and record that in target_kcal and target_protein per meal.\n' +
-          '- Use simple, realistic ingredients available in a typical UK supermarket.\n' +
-          '- Avoid very niche or branded ingredients.\n' +
+    {
+      role: 'system',
+      content:
+        'You are Day Coach, a diet planning expert.\n' +
+        '\n' +
+        'CRITICAL FORMAT RULES (READ CAREFULLY):\n' +
+        '- Your ENTIRE reply MUST be a single valid JSON object.\n' +
+        '- Do NOT wrap the JSON in markdown, backticks, or any other text.\n' +
+        '- Do NOT include comments, explanations, or extra keys.\n' +
+        '- Do NOT output any chain-of-thought, reasoning text, or <think> blocks. You may reason internally but only output the final JSON.\n' +
+        '\n' +
+        'PLANNING RULES:\n' +
+        '- Plan ALL meals for ONE day for this user.\n' +
+        '- You receive: profile, the day index, weekly state, daily macro targets, and a list of meal_slots.\n' +
+        '- For each meal_slot, you MUST propose ONE complete recipe: name, difficulty, ingredient list, and instructions.\n' +
+        '- Ingredients MUST have: ingredient_name, quantity (number), and unit.\n' +
+        '- All ingredient quantities MUST be in grams ("g"). Avoid units like "piece", "cup", etc.\n' +
+        '  If you need to use those for thinking, CONVERT them to grams yourself and still return unit="g".\n' +
+        '- Respect profile.diet_type and allergy_keys; avoid disallowed ingredients and anything the user should not consume.\n' +
+        '- Favor ingredients the user is likely to like; avoid disliked items if provided.\n' +
+        '- Honor weekly_budget_gbp and per-meal budget hints; small overruns are OK but stay close.\n' +
+        '- Align with user goal (lose/maintain/gain weight) by keeping total day kcal near the daily target and providing good protein coverage.\n' +
+        '- If you must deviate from diet/allergy/budget/goal, explain briefly in compliance_notes per meal.\n' +
+        '- You may roughly allocate daily_kcal and daily_protein across meals and record that in target_kcal and target_protein per meal.\n' +
+        '- Use simple, realistic ingredients available in a typical UK supermarket.\n' +
+        '- Avoid very niche or branded ingredients.\n' +
           '- Respond ONLY with JSON of the form:\n' +
           '  { day_index, meals:[{\n' +
           '     meal_slot,\n' +
@@ -186,22 +195,22 @@ export class AgentsService {
           '     compliance_notes?\n' +
           '  }] }\n' +
           '- Do NOT include any IDs or database keys. Do NOT mention recipe_id or candidate recipes. Do NOT return prose.',
-      },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          profile: payload.profile,
-          day_index: payload.day_index,
-          week_state: payload.week_state,
-          targets: payload.targets,
-          meal_slots: payload.meal_slots,
-          per_meal_budget_hint_gbp: perMealBudget,
-          diet_type: payload.profile?.diet_type,
-          allergy_keys: payload.profile?.allergy_keys,
-          goal: payload.profile?.goal,
-        }),
-      },
-    ];
+    },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        profile: payload.profile,
+        day_index: payload.day_index,
+        week_state: payload.week_state,
+        targets: payload.targets,
+        meal_slots: payload.meal_slots,
+        per_meal_budget_hint_gbp: perMealBudget,
+        diet_type: payload.profile?.diet_type,
+        allergy_keys: payload.profile?.allergy_keys,
+        goal: payload.profile?.goal,
+      }),
+    },
+  ];
 
     const retries = payload.maxRetries ?? 2;
     let lastError: Error | null = null;
