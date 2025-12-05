@@ -20,6 +20,11 @@ export class GeneratePlanDto {
   useLlmRecipes?: boolean;
 
   @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  sameMealsAllWeek?: boolean;
+
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   weeklyBudgetGbp?: number;

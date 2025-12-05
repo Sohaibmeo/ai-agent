@@ -6,6 +6,10 @@ class IngredientCandidateDto {
 
   @IsString()
   name!: string;
+
+  @IsOptional()
+  @IsString()
+  similarity_name?: string;
 }
 
 export class ChooseIngredientDto {

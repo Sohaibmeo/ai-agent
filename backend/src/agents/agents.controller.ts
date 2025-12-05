@@ -19,15 +19,6 @@ export class AgentsController {
     return this.agentsService.reviewAction(body);
   }
 
-  @Post('coach')
-  coach(@Body() body: CoachRequestDto) {
-    return this.agentsService.coachPlan({
-      profile: body.profile,
-      candidates: body.candidates,
-      week_start_date: body.week_start_date,
-    });
-  }
-
   @Post('review-and-swap')
   async reviewAndSwap(@Body() body: { planMealId: string; text?: string; currentPlanSnippet?: unknown; candidates?: any[] }) {
     const review = await this.agentsService.reviewAction({ text: body.text, currentPlanSnippet: body.currentPlanSnippet });

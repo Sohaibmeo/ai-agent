@@ -39,33 +39,6 @@ INSERT INTO user_profile (
   40
 );
 
--- Ingredients
-WITH ing AS (
-  INSERT INTO ingredients (id, name, category, unit_type, kcal_per_unit, protein_per_unit, carbs_per_unit, fat_per_unit, estimated_price_per_unit_gbp, allergen_keys)
-  VALUES
-    (uuid_generate_v4(), 'Chicken Breast', 'meat', 'per_100g', 165, 31, 0, 3.6, 1.20, ARRAY[]::text[]),
-    (uuid_generate_v4(), 'Broccoli', 'vegetable', 'per_100g', 35, 2.8, 7, 0.4, 0.50, ARRAY[]::text[]),
-    (uuid_generate_v4(), 'Egg', 'dairy', 'per_piece', 78, 6, 0.6, 5, 0.20, ARRAY['egg']),
-    (uuid_generate_v4(), 'Salmon', 'fish', 'per_100g', 208, 20, 0, 13, 2.00, ARRAY['fish']),
-    (uuid_generate_v4(), 'Rice', 'grain', 'per_100g', 130, 2.7, 28, 0.3, 0.30, ARRAY[]::text[]),
-    (uuid_generate_v4(), 'Peanut Butter', 'spread', 'per_100g', 588, 25, 20, 50, 1.50, ARRAY['peanut', 'tree_nut']),
-    (uuid_generate_v4(), 'Oats', 'grain', 'per_100g', 389, 17, 66, 7, 0.40, ARRAY['gluten']),
-    (uuid_generate_v4(), 'Banana', 'fruit', 'per_piece', 105, 1.3, 27, 0.3, 0.25, ARRAY[]::text[]),
-    (uuid_generate_v4(), 'Greek Yogurt', 'dairy', 'per_100g', 59, 10, 3.6, 0.4, 0.60, ARRAY['milk']),
-    (uuid_generate_v4(), 'Almonds', 'nut', 'per_100g', 579, 21, 22, 50, 1.80, ARRAY['tree_nut']),
-    (uuid_generate_v4(), 'Tofu', 'soy', 'per_100g', 76, 8, 1.9, 4.8, 0.70, ARRAY['soybean']),
-    (uuid_generate_v4(), 'Spinach', 'vegetable', 'per_100g', 23, 2.9, 3.6, 0.4, 0.40, ARRAY[]::text[]),
-    (uuid_generate_v4(), 'Whole Wheat Bread', 'grain', 'per_slice', 70, 3, 13, 1, 0.20, ARRAY['gluten']),
-    (uuid_generate_v4(), 'Cheddar Cheese', 'dairy', 'per_100g', 402, 25, 1.3, 33, 1.50, ARRAY['milk']),
-    (uuid_generate_v4(), 'Apple', 'fruit', 'per_piece', 95, 0.5, 25, 0.3, 0.30, ARRAY[]::text[]),
-    (uuid_generate_v4(), 'Lentils', 'legume', 'per_100g', 116, 9, 20, 0.4, 0.60, ARRAY[]::text[]),
-    (uuid_generate_v4(), 'Tomato', 'vegetable', 'per_100g', 18, 0.9, 3.9, 0.2, 0.30, ARRAY[]::text[]),
-    (uuid_generate_v4(), 'Cucumber', 'vegetable', 'per_100g', 16, 0.7, 3.6, 0.1, 0.25, ARRAY[]::text[]),
-    (uuid_generate_v4(), 'Chickpeas', 'legume', 'per_100g', 164, 9, 27, 2.6, 0.70, ARRAY[]::text[]),
-    (uuid_generate_v4(), 'Avocado', 'fruit', 'per_piece', 160, 2, 9, 15, 1.00, ARRAY[]::text[])
-  RETURNING id, name
-)
-SELECT 1;
 
 -- Recipes
 WITH rec AS (

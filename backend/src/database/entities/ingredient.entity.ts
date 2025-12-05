@@ -14,6 +14,9 @@ export class Ingredient {
   @Column({ nullable: true })
   unit_type?: string;
 
+  @Column({ nullable: true })
+  similarity_name?: string;
+
   @Column({ type: 'numeric', nullable: true })
   kcal_per_unit?: number;
 

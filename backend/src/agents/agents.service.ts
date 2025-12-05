@@ -6,22 +6,77 @@ import { ExplanationRequestDto, ExplanationResponseDto } from './dto/explanation
 import { NutritionAdviceRequestDto, NutritionAdviceResponseDto } from './dto/nutrition-advice.dto';
 import { reviewInstructionSchema, ReviewInstruction } from './schemas/review-instruction.schema';
 import { ChooseIngredientDto } from './dto/choose-ingredient.dto';
+import { calculateTargets } from '../plans/utils/profile-targets';
 
-const PlanMealSchema = z.object({
+const DayMealIngredientSchema = z.object({
+  ingredient_name: z.string(),
+  quantity: z.preprocess((v) => {
+    if (v === '' || v === null || v === undefined) return 0;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  }, z.number()),
+  unit: z.string(),
+});
+
+const DayMealSchema = z.object({
   meal_slot: z.string(),
-  recipe_id: z.string(),
-  portion_multiplier: z.number().optional(),
+  name: z.string(),
+  difficulty: z.string().optional(),
+  instructions: z.union([z.string(), z.array(z.string())]),
+  ingredients: z.array(DayMealIngredientSchema),
+  target_kcal: z.number().optional(),
+  target_protein: z.number().optional(),
+  compliance_notes: z.string().optional(),
 });
 
 const PlanDaySchema = z.object({
   day_index: z.number(),
-  meals: z.array(PlanMealSchema),
+  meals: z.array(DayMealSchema),
 });
 
 const WeeklyPlanSchema = z.object({
   week_start_date: z.string(),
   days: z.array(PlanDaySchema),
 });
+
+const RecipeStubSchema = z.object({
+  name: z.string(),
+  meal_slot: z.string(),
+  meal_type: z.string().optional(),
+  difficulty: z.string().optional(),
+  base_cost_gbp: z.number().optional(),
+  instructions: z.any().optional(),
+  ingredients: z.array(
+    z.object({
+      ingredient_name: z.string(),
+      quantity: z.number(),
+      unit: z.string().optional(),
+    }),
+  ),
+});
+
+const DayWithRecipesSchema = z.object({
+  day_index: z.number(),
+  meals: z.array(
+    z.object({
+      meal_slot: z.string(),
+      recipe: RecipeStubSchema,
+    }),
+  ),
+});
+
+export type LlmDayMeal = z.infer<typeof DayMealSchema>;
+export type LlmPlanDay = z.infer<typeof PlanDaySchema>;
+type WeeklyPlan = z.infer<typeof WeeklyPlanSchema>;
+type DayWithRecipes = z.infer<typeof DayWithRecipesSchema>;
+
+type WeekState = {
+  week_start_date: string;
+  weekly_budget_gbp?: number;
+  used_budget_gbp: number;
+  remaining_days: number;
+  notes?: string; // can hold diversity / constraint hints for the LLM
+};
 
 @Injectable()
 export class AgentsService {
@@ -72,29 +127,176 @@ export class AgentsService {
     return reviewInstructionSchema.parse(raw);
   }
 
-  async coachPlan(payload: {
+  async generateDayPlanWithCoachLLM(payload: {
     profile: any;
-    candidates: any;
-    week_start_date?: string;
-  }) {
+    day_index: number;
+    week_state: WeekState;
+    targets: {
+      daily_kcal: number;
+      daily_protein: number;
+    };
+    meal_slots: string[];
+    maxRetries?: number;
+  }): Promise<LlmPlanDay> {
+    const perMealBudget =
+      payload.week_state.weekly_budget_gbp && payload.meal_slots.length
+        ? Number(payload.week_state.weekly_budget_gbp) /
+          Math.max(1, payload.meal_slots.length * Math.max(1, payload.week_state.remaining_days || 1))
+        : undefined;
+
+    if (process.env.DEBUG_LLM === '1') {
+      this.logger.log(
+        `[coach-debug] day_index=${payload.day_index} goal=${payload.profile?.goal || 'unknown'} diet=${
+          payload.profile?.diet_type || 'any'
+        } allergies=${Array.isArray(payload.profile?.allergy_keys) ? payload.profile.allergy_keys.length : 0} budget=${
+          payload.week_state.weekly_budget_gbp ?? 'n/a'
+        } perMealBudget=${perMealBudget ?? 'n/a'} slots=${payload.meal_slots.join(',')} targets_kcal=${
+          payload.targets.daily_kcal
+        } targets_protein=${payload.targets.daily_protein}`,
+      );
+    }
+
     const prompt: { role: 'system' | 'user'; content: string }[] = [
-      {
-        role: 'system',
-        content:
-          'You are Coach Agent. Choose recipes from provided candidates for each day/meal. Output JSON {week_start_date, days:[{day_index, meals:[{meal_slot, recipe_id, portion_multiplier}]}]}. Use only provided recipe_id values.',
-      },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          profile: payload.profile,
-          candidates: payload.candidates,
-          week_start_date: payload.week_start_date || new Date().toISOString().slice(0, 10),
-        }),
-      },
-    ];
-    const raw = await this.callModel(this.coachModel, prompt, 'coach');
-    this.logAgent('coach', `model=${this.coachModel}`);
-    return WeeklyPlanSchema.parse(raw);
+    {
+      role: 'system',
+      content:
+        'You are Day Coach, a diet planning expert.\n' +
+        '\n' +
+        'CRITICAL FORMAT RULES (READ CAREFULLY):\n' +
+        '- Your ENTIRE reply MUST be a single valid JSON object.\n' +
+        '- Do NOT wrap the JSON in markdown, backticks, or any other text.\n' +
+        '- Do NOT include comments, explanations, or extra keys.\n' +
+        '- Do NOT output any chain-of-thought, reasoning text, or <think> blocks. You may reason internally but only output the final JSON.\n' +
+        '\n' +
+        'PLANNING RULES:\n' +
+        '- Plan ALL meals for ONE day for this user.\n' +
+        '- You receive: profile, the day index, weekly state, daily macro targets, and a list of meal_slots.\n' +
+        '- For each meal_slot, you MUST propose ONE complete recipe: name, difficulty, ingredient list, and instructions.\n' +
+        '- Ingredients MUST have: ingredient_name, quantity (number), and unit.\n' +
+        '- All ingredient quantities MUST be in grams ("g"). Avoid units like "piece", "cup", etc.\n' +
+        '  If you need to use those for thinking, CONVERT them to grams yourself and still return unit="g".\n' +
+        '- Respect profile.diet_type and allergy_keys; avoid disallowed ingredients and anything the user should not consume.\n' +
+        '- Favor ingredients the user is likely to like; avoid disliked items if provided.\n' +
+        '- Honor weekly_budget_gbp and per-meal budget hints; small overruns are OK but stay close.\n' +
+        '- Align with user goal (lose/maintain/gain weight) by keeping total day kcal near the daily target and providing good protein coverage.\n' +
+        '- If you must deviate from diet/allergy/budget/goal, explain briefly in compliance_notes per meal.\n' +
+        '- You may roughly allocate daily_kcal and daily_protein across meals and record that in target_kcal and target_protein per meal.\n' +
+        '- Use simple, realistic ingredients available in a typical UK supermarket.\n' +
+        '- Avoid very niche or branded ingredients.\n' +
+          '- Respond ONLY with JSON of the form:\n' +
+          '  { day_index, meals:[{\n' +
+          '     meal_slot,\n' +
+          '     name,\n' +
+          '     difficulty?,\n' +
+          '     instructions: string | string[],\n' +
+          '     ingredients:[{ingredient_name, quantity, unit}],\n' +
+          '     target_kcal?,\n' +
+          '     target_protein?,\n' +
+          '     compliance_notes?\n' +
+          '  }] }\n' +
+          '- Do NOT include any IDs or database keys. Do NOT mention recipe_id or candidate recipes. Do NOT return prose.',
+    },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        profile: payload.profile,
+        day_index: payload.day_index,
+        week_state: payload.week_state,
+        targets: payload.targets,
+        meal_slots: payload.meal_slots,
+        per_meal_budget_hint_gbp: perMealBudget,
+        diet_type: payload.profile?.diet_type,
+        allergy_keys: payload.profile?.allergy_keys,
+        goal: payload.profile?.goal,
+      }),
+    },
+  ];
+
+    const retries = payload.maxRetries ?? 2;
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+      try {
+        const raw = await this.callModel(this.coachModel, prompt, 'coach');
+        this.logAgent(
+          'coach',
+          `day_index=${payload.day_index} model=${this.coachModel} attempt=${attempt + 1}`,
+        );
+
+        const rawMeals = Array.isArray((raw as any)?.meals) ? (raw as any).meals : [];
+        const normalizedMeals = rawMeals
+          .filter((m: any) => m && typeof m === 'object' && !Array.isArray(m))
+          .map((m: any) => ({
+            meal_slot:
+              typeof m.meal_slot === 'string'
+                ? m.meal_slot.trim().toLowerCase() || 'meal'
+                : 'meal',
+            name: m.name,
+            difficulty:
+              typeof m.difficulty === 'string'
+                ? m.difficulty
+                : m.difficulty !== undefined && m.difficulty !== null
+                  ? String(m.difficulty)
+                  : 'easy',
+            instructions:
+              Array.isArray(m.instructions) || typeof m.instructions === 'string'
+                ? m.instructions
+                : undefined,
+            ingredients: Array.isArray(m.ingredients)
+              ? m.ingredients
+                  .filter((ing: any) => ing && typeof ing === 'object')
+                  .map((ing: any) => ({
+                    ingredient_name: ing.ingredient_name,
+                    quantity: ing.quantity,
+                    unit: 'g',
+                  }))
+              : [],
+            target_kcal: m.target_kcal,
+            target_protein: m.target_protein,
+            compliance_notes: m.compliance_notes,
+          }));
+
+        const candidate = {
+          day_index: (raw as any)?.day_index ?? payload.day_index,
+          meals: normalizedMeals,
+        };
+
+        console.log('Candidate:', JSON.stringify(candidate, null, 2));
+
+        const parsed = PlanDaySchema.safeParse(candidate);
+        const unitsOk = normalizedMeals.every(
+          (meal: any) => (meal.ingredients || []).every((ing: any) => (ing.unit || '').toLowerCase() === 'g'),
+        );
+        const slotsOk =
+          Array.isArray(payload.meal_slots) &&
+          payload.meal_slots.every((slot) => normalizedMeals.some((m: any) => m.meal_slot === slot));
+        const parsedOk = parsed.success && parsed.data.meals.length > 0;
+        if (parsedOk && unitsOk && slotsOk) {
+          return parsed.data;
+        }
+
+        this.logger.warn(
+          `[coach] day_index=${payload.day_index} attempt=${attempt + 1} invalid or empty meals (parsedOk=${parsedOk} unitsOk=${unitsOk} slotsOk=${slotsOk})`,
+        );
+        if (!parsed.success) {
+          lastError = new Error(JSON.stringify(parsed.error.issues));
+        }
+      } catch (err) {
+        lastError = err as Error;
+        this.logger.warn(
+          `[coach] day_index=${payload.day_index} attempt=${attempt + 1} failed: ${
+            (err as Error)?.message
+          }`,
+        );
+      }
+    }
+
+    if (lastError) {
+      this.logger.error(
+        `[coach] day_index=${payload.day_index} exhausted retries err=${lastError.message}`,
+      );
+    }
+    return { day_index: payload.day_index, meals: [] };
   }
 
   private async callModel(
@@ -303,19 +505,21 @@ export class AgentsService {
     };
 
     const schema = z.object({
-      name: z.string(),
+      name: z.string().optional(),
       meal_slot: z.string().optional(),
-      meal_type: z.string().optional(),
+      meal_type: z.string().nullable().optional(),
       difficulty: z.string().optional(),
       base_cost_gbp: z.preprocess(toNum, z.number().optional()),
-      instructions: z.union([z.string(), z.array(z.string())]).optional(),
-      ingredients: z.array(
-        z.object({
-          ingredient_name: z.string(),
-          quantity: z.preprocess(toNum, z.number()),
-          unit: z.string(),
-        }),
-      ),
+      instructions: z.any().optional(),
+      ingredients: z
+        .array(
+          z.object({
+            ingredient_name: z.string(),
+            quantity: z.preprocess(toNum, z.number()),
+            unit: z.string().nullable().optional(),
+          }),
+        )
+        .optional(),
     });
     const prompt: { role: 'system' | 'user'; content: string }[] = [
       {

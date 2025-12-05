@@ -29,6 +29,13 @@ export class ShoppingListService {
     @InjectEntityManager() private readonly entityManager: EntityManager,
   ) {}
 
+  private factorFromQuantity(quantity: number, unitType?: string | null) {
+    const normalized = Number(quantity) || 0;
+    const base = (unitType || '').toLowerCase();
+    const divisor = base === 'per_ml' ? 100 : base === 'per_100g' ? 100 : 1;
+    return divisor ? normalized / divisor : normalized;
+  }
+
   async getForPlan(planId: string, userId?: string) {
     const baseItems = await this.shoppingListRepo.find({
       where: { weeklyPlan: { id: planId } },
@@ -52,7 +59,10 @@ export class ShoppingListService {
     const items = baseItems.map((item) => {
       const pricePerUnit = overrideMap.get(item.ingredient.id);
       const hasItem = pantryMap.get(item.ingredient.id) ?? false;
-      const estimated = pricePerUnit ? pricePerUnit * Number(item.total_quantity) : item.estimated_cost_gbp;
+      const factor = this.factorFromQuantity(item.total_quantity, item.ingredient.unit_type);
+      const estimated = pricePerUnit
+        ? pricePerUnit * factor
+        : item.estimated_cost_gbp ?? (item.ingredient.estimated_price_per_unit_gbp || 0) * factor;
       return {
         ...item,
         estimated_cost_gbp: estimated,
@@ -130,7 +140,8 @@ export class ShoppingListService {
     const toSave: Partial<ShoppingListItem>[] = [];
     for (const [, val] of totals) {
       const pricePerUnit = overrideMap.get(val.ingredient.id) ?? val.costPerUnit;
-      const estimatedCost = pricePerUnit ? pricePerUnit * val.quantity : undefined;
+      const factor = this.factorFromQuantity(val.quantity, val.ingredient.unit_type);
+      const estimatedCost = pricePerUnit ? pricePerUnit * factor : undefined;
       const hasInPantry = pantryMap.get(val.ingredient.id) ?? false;
       toSave.push({
         weeklyPlan: { id: planId } as any,
@@ -192,7 +203,13 @@ export class ShoppingListService {
     unit: string,
     planId?: string,
   ) {
-    const perUnit = quantity > 0 ? pricePaid / quantity : null;
+    const normalizedQuantity =
+      unit === 'kg' ? quantity * 1000 : unit === 'g' ? quantity : unit === 'l' ? quantity * 1000 : unit === 'ml' ? quantity : quantity;
+    const ingredient = await this.priceRepo.manager.findOne(Ingredient, { where: { id: ingredientId } });
+    const unitType = ingredient?.unit_type || 'per_100g';
+    const divisor = unitType === 'per_ml' ? 100 : unitType === 'per_100g' ? 100 : 1;
+    const baseUnits = normalizedQuantity / divisor;
+    const perUnit = baseUnits > 0 ? pricePaid / baseUnits : null;
     if (!perUnit) {
       throw new Error('quantity must be greater than zero');
     }

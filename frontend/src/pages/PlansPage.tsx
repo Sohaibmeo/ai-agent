@@ -49,7 +49,11 @@ export function PlansPage() {
     max_difficulty: 'easy',
   });
   const [appliedBudget, setAppliedBudget] = useState<string>('');
+  const [sameMealsAllWeek, setSameMealsAllWeek] = useState(false);
+  const [appliedSameMealsAllWeek, setAppliedSameMealsAllWeek] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [isModifyMode, setIsModifyMode] = useState(false);
+  const [selectedDayIds, setSelectedDayIds] = useState<string[]>([]);
   const resetAdvanced = () => {
     setSlots((prev) => ({
       ...prev,
@@ -61,6 +65,7 @@ export function PlansPage() {
       save_settings: false,
     }));
     setWeeklyBudget(appliedBudget);
+    setSameMealsAllWeek(appliedSameMealsAllWeek);
   };
 
   const formatCurrency = (val?: number | null) => (val || val === 0 ? `£${Number(val).toFixed(2)}` : '—');
@@ -80,6 +85,7 @@ export function PlansPage() {
     if (!plansList) return [];
     return [...plansList].sort((a, b) => (a.week_start_date > b.week_start_date ? -1 : 1));
   }, [plansList]);
+  const selectAllChecked = useMemo(() => !!days.length && selectedDayIds.length === days.length, [days.length, selectedDayIds.length]);
 
   const avgKcal = plan && days.length ? (plan.total_kcal ? Math.round(Number(plan.total_kcal) / days.length) : null) : null;
   const avgProtein = plan && days.length ? (plan.total_protein ? Math.round(Number(plan.total_protein) / days.length) : null) : null;
@@ -108,6 +114,11 @@ export function PlansPage() {
     setAppliedBudget(budgetString);
     setInitialized(true);
   }, [initialized, profile]);
+
+  useEffect(() => {
+    setIsModifyMode(false);
+    setSelectedDayIds([]);
+  }, [plan?.id, days.length]);
 
   const goToRecipe = (mealId: string) => {
     navigate(`/plans/meal/${mealId}`);
@@ -173,68 +184,88 @@ export function PlansPage() {
       </div>
 
       <Card>
-        <div className="flex flex-wrap items-center gap-4 text-sm">
-          <button
-            className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
-            disabled={isGenerating}
-            onClick={async () => {
-              try {
-                notify.info('Generating plan...');
-                await generatePlan({
-                  useAgent: false,
-                  useLlmRecipes: true,
-                  weekStartDate: weekStart,
-                  weeklyBudgetGbp: weeklyBudget ? Number(weeklyBudget) : undefined,
-                  breakfast_enabled: slots.breakfast_enabled,
-                  snack_enabled: slots.snack_enabled,
-                  lunch_enabled: slots.lunch_enabled,
-                  dinner_enabled: slots.dinner_enabled,
-                  maxDifficulty: slots.max_difficulty,
-                });
-                notify.success('New plan generated');
-              } catch (e) {
-                notify.error('Could not generate plan');
-              }
-            }}
-          >
-            {isGenerating ? 'Generating...' : 'Generate New Week'}
-          </button>
-          <button
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-            onClick={() => {
-              resetAdvanced();
-              setIsAdvancedOpen(true);
-            }}
-          >
-            Advanced settings
-          </button>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700" aria-label="applied-plan-settings">
-            {appliedBudget && (
-              <span className="rounded-full border border-slate-200 bg-white px-2 py-1 font-semibold">£{appliedBudget}</span>
-            )}
-            {(['breakfast_enabled', 'snack_enabled', 'lunch_enabled', 'dinner_enabled'] as const)
-              .filter((k) => appliedSlots[k])
-              .map((k) => (
-                <span key={k} className="rounded-full border border-slate-200 bg-white px-2 py-1">
-                  {k.split('_')[0]}
-                </span>
-              ))}
-            <span className="rounded-full border border-slate-200 bg-white px-2 py-1">
-              Max {appliedSlots.max_difficulty || 'easy'}
-            </span>
+        <div className="flex flex-wrap items-center justify-between gap-4 text-sm">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
+              disabled={isGenerating}
+              onClick={async () => {
+                try {
+                  notify.info('Generating plan...');
+                  await generatePlan({
+                    useAgent: true,
+                    useLlmRecipes: false,
+                    sameMealsAllWeek,
+                    weekStartDate: weekStart,
+                    weeklyBudgetGbp: weeklyBudget ? Number(weeklyBudget) : undefined,
+                    breakfast_enabled: slots.breakfast_enabled,
+                    snack_enabled: slots.snack_enabled,
+                    lunch_enabled: slots.lunch_enabled,
+                    dinner_enabled: slots.dinner_enabled,
+                    maxDifficulty: slots.max_difficulty,
+                  });
+                  notify.success('New plan generated');
+                } catch (e) {
+                  notify.error('Could not generate plan');
+                }
+              }}
+            >
+              {isGenerating ? 'Generating...' : 'Generate New Week'}
+            </button>
+            <button
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              onClick={() => {
+                resetAdvanced();
+                setIsAdvancedOpen(true);
+              }}
+            >
+              Advanced settings
+            </button>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700" aria-label="applied-plan-settings">
+              {appliedBudget && (
+                <span className="rounded-full border border-slate-200 bg-white px-2 py-1 font-semibold">£{appliedBudget}</span>
+              )}
+              {(['breakfast_enabled', 'snack_enabled', 'lunch_enabled', 'dinner_enabled'] as const)
+                .filter((k) => appliedSlots[k])
+                .map((k) => (
+                  <span key={k} className="rounded-full border border-slate-200 bg-white px-2 py-1">
+                    {k.split('_')[0]}
+                  </span>
+                ))}
+              <span className="rounded-full border border-slate-200 bg-white px-2 py-1">
+                Max {appliedSlots.max_difficulty || 'easy'}
+              </span>
+            </div>
           </div>
+          <button
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100 disabled:opacity-50"
+            disabled={!plan || !days.length}
+            onClick={() => {
+              setIsModifyMode((prev) => !prev);
+              setSelectedDayIds([]);
+            }}
+          >
+            {isModifyMode ? 'Close Modify Mode' : 'Modify'}
+          </button>
         </div>
-        <div className="mt-3">
-          <label className="text-xs text-slate-600">Tell the AI what to prioritize this week (optional)</label>
-          <textarea
-            className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
-            rows={3}
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Higher protein lunches, simpler dinners; keep cost under £35; more drinkable breakfasts..."
-          />
-          <div className="mt-1 text-[11px] text-slate-500">AI will use this along with your profile defaults.</div>
-        </div>
+        {isModifyMode && selectedDayIds.length > 0 && (
+          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <label className="text-xs text-slate-600">Tell the AI what to prioritize for selected days</label>
+            <textarea
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
+              rows={3}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Higher protein lunches, simpler dinners; keep cost under £35; more drinkable breakfasts..."
+            />
+            <div className="mt-1 text-[11px] text-slate-500">AI will use this along with your profile defaults.</div>
+            <div className="mt-3 flex justify-end">
+              <button className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800">
+                Generate Changes
+              </button>
+            </div>
+          </div>
+        )}
       </Card>
 
       <Card>
@@ -312,7 +343,20 @@ export function PlansPage() {
 
       {activeTab === 'current' && (
         <div className="grid grid-cols-1 gap-3">
-          {isError && (
+          {isModifyMode && plan && days.length > 0 && (
+            <div className="flex items-center justify-between rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={selectAllChecked}
+                  onChange={(e) => setSelectedDayIds(e.target.checked ? days.map((d) => d.id) : [])}
+                />
+                Select all days
+              </label>
+              {selectedDayIds.length > 0 && <span className="text-xs text-emerald-700">{selectedDayIds.length} selected</span>}
+            </div>
+          )}
+          {isError && !plan && (
             <Card>
               <div className="flex items-center justify-between text-sm text-red-600">
                 <div>Could not load the plan.</div>
@@ -350,7 +394,7 @@ export function PlansPage() {
                 <div>No plan found.</div>
                 <button
                   className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-                  onClick={() => generatePlan({ useAgent: false, useLlmRecipes: true })}
+                  onClick={() => generatePlan({ useAgent: true, useLlmRecipes: false, sameMealsAllWeek })}
                 >
                   Generate a plan
                 </button>
@@ -362,67 +406,85 @@ export function PlansPage() {
             <div className="grid grid-cols-1 gap-3">
               {days.map((day) => {
                 const expanded = expandedDays[day.id] ?? false;
+                const selected = selectedDayIds.includes(day.id);
                 return (
-                  <Card key={day.id} className="p-0">
-                    <button
-                      className="flex w-full items-center justify-between px-4 py-3 text-left"
-                      onClick={() => toggleDay(day.id)}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-semibold text-slate-900">
-                          {dayNames[day.day_index] || `Day ${day.day_index + 1}`}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {formatKcal(day.daily_kcal)} · {formatProtein(day.daily_protein)} · {formatCurrency(day.daily_cost_gbp)}
-                        </span>
-                      </div>
-                      <span className="text-xs text-slate-500">{expanded ? '▴' : '▾'}</span>
-                    </button>
-                    {expanded && (
-                      <div className="space-y-3 px-4 pb-4">
-                        {day.meals.map((meal) => (
-                          <article
-                            key={meal.id}
-                            className="flex items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
-                            onClick={() => goToRecipe(meal.id)}
-                          >
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="rounded bg-slate-100 px-2 py-1 text-[11px] font-semibold uppercase text-slate-500">
-                                  {meal.meal_slot}
-                                </span>
-                                <span className="rounded bg-slate-100 px-2 py-1 text-[11px] text-slate-600">
-                                  {meal.recipe?.meal_type || 'solid'}
-                                </span>
-                              </div>
-                              <div className="mt-2 text-sm font-semibold text-slate-900">{meal.recipe?.name || '—'}</div>
-                              <div className="mt-1 text-[11px] text-slate-500">{formatMacros(meal)}</div>
-                            </div>
-                            <div className="flex flex-col items-end gap-2">
-                              <div className="flex items-center gap-2">
-                                <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
-                                  {formatCurrency(meal.meal_cost_gbp)}
-                                </span>
-                                <button
-                                  className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-100"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openSwap(meal.id, meal.meal_slot);
-                                  }}
-                                  title="Swap this meal"
-                                >
-                                  ⇄ Swap
-                                </button>
-                              </div>
-                              <div className="text-xs text-slate-600 text-right">
-                                {meal.meal_kcal ? `${Math.round(Number(meal.meal_kcal))} kcal` : '—'}
-                              </div>
-                            </div>
-                          </article>
-                        ))}
-                      </div>
+                  <div key={day.id} className="flex items-start gap-3">
+                    {isModifyMode && (
+                      <input
+                        type="checkbox"
+                        className="mt-4"
+                        checked={selected}
+                        onChange={(e) => {
+                          setSelectedDayIds((prev) => {
+                            if (e.target.checked) {
+                              return prev.includes(day.id) ? prev : [...prev, day.id];
+                            }
+                            return prev.filter((id) => id !== day.id);
+                          });
+                        }}
+                      />
                     )}
-                  </Card>
+                    <Card className="w-full p-0">
+                      <button
+                        className="flex w-full items-center justify-between px-4 py-3 text-left"
+                        onClick={() => toggleDay(day.id)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-semibold text-slate-900">
+                            {dayNames[day.day_index] || `Day ${day.day_index + 1}`}
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            {formatKcal(day.daily_kcal)} · {formatProtein(day.daily_protein)} · {formatCurrency(day.daily_cost_gbp)}
+                          </span>
+                        </div>
+                        <span className="text-xs text-slate-500">{expanded ? '▴' : '▾'}</span>
+                      </button>
+                      {expanded && (
+                        <div className="space-y-3 px-4 pb-4">
+                          {day.meals.map((meal) => (
+                            <article
+                              key={meal.id}
+                              className="flex items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+                              onClick={() => goToRecipe(meal.id)}
+                            >
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="rounded bg-slate-100 px-2 py-1 text-[11px] font-semibold uppercase text-slate-500">
+                                    {meal.meal_slot}
+                                  </span>
+                                  <span className="rounded bg-slate-100 px-2 py-1 text-[11px] text-slate-600">
+                                    {meal.recipe?.meal_type || 'solid'}
+                                  </span>
+                                </div>
+                                <div className="mt-2 text-sm font-semibold text-slate-900">{meal.recipe?.name || '—'}</div>
+                                <div className="mt-1 text-[11px] text-slate-500">{formatMacros(meal)}</div>
+                              </div>
+                              <div className="flex flex-col items-end gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                                    {formatCurrency(meal.meal_cost_gbp)}
+                                  </span>
+                                  <button
+                                    className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-100"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openSwap(meal.id, meal.meal_slot);
+                                    }}
+                                    title="Swap this meal"
+                                  >
+                                    ⇄ Swap
+                                  </button>
+                                </div>
+                                <div className="text-xs text-slate-600 text-right">
+                                  {meal.meal_kcal ? `${Math.round(Number(meal.meal_kcal))} kcal` : '—'}
+                                </div>
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      )}
+                    </Card>
+                  </div>
                 );
               })}
             </div>
@@ -509,6 +571,14 @@ export function PlansPage() {
                 Save these settings as defaults
               </label>
               <div className="flex gap-2">
+                <label className="flex items-center gap-2 text-sm text-slate-700 mr-4">
+                  <input
+                    type="checkbox"
+                    checked={sameMealsAllWeek}
+                    onChange={(e) => setSameMealsAllWeek(e.target.checked)}
+                  />
+                  Same meals all week
+                </label>
                 <button
                   className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
                   onClick={() => {
@@ -530,6 +600,7 @@ export function PlansPage() {
                       max_difficulty: slots.max_difficulty,
                     });
                     setAppliedBudget(weeklyBudget);
+                    setAppliedSameMealsAllWeek(sameMealsAllWeek);
                     if (slots.save_settings) {
                       saveProfile({
                         weekly_budget_gbp: weeklyBudget ? Number(weeklyBudget) : null,
