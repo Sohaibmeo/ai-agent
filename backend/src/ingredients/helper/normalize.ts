@@ -1,15 +1,25 @@
 export function NormalizeForMatch(str: string): string {
-  return str
-    .toLowerCase()
-    // drop anything in parentheses: "almond butter (halal)" -> "almond butter "
-    .replace(/\([^)]*\)/g, ' ')
-    // replace non-alphanumeric with space
-    .replace(/[^a-z0-9\s]/g, ' ')
-    // collapse multiple spaces
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+  let s = str.toLowerCase();
 
+  // Basic synonym / variant normalisation
+  s = s.replace(/yoghurt/g, 'yogurt');
+  s = s.replace(/low-fat/g, 'low fat');
+  s = s.replace(/lowfat/g, 'low fat');
+  s = s.replace(/semi-skimmed/g, 'low fat');
+  s = s.replace(/skimmed/g, 'nonfat'); // skimmed milk ≈ nonfat
+  s = s.replace(/wholemeal/g, 'whole wheat');
+
+  // drop anything in parentheses: "almond butter (halal)" -> "almond butter "
+  s = s.replace(/\([^)]*\)/g, ' ');
+
+  // replace non-alphanumeric with space
+  s = s.replace(/[^a-z0-9\s]/g, ' ');
+
+  // collapse multiple spaces
+  s = s.replace(/\s+/g, ' ').trim();
+
+  return s;
+}
 
 // Very simple English singularization for food words
 export function Singularize(word: string): string {
@@ -37,7 +47,6 @@ export function Singularize(word: string): string {
 
   return word;
 }
-
 
 function computeSingleSimilarity(a: string, b: string): number {
   const normA = NormalizeForMatch(a);
@@ -75,6 +84,7 @@ function computeSingleSimilarity(a: string, b: string): number {
     'canned',
     'added',
     'grade',
+    'style', // e.g. "Greek-style yogurt"
   ]);
 
   const tokensA = normA
@@ -119,8 +129,23 @@ function computeSingleSimilarity(a: string, b: string): number {
   const lengthPenalty = lenB > 0 ? Math.min((lenB - 1) * 0.1, 0.4) : 0; // up to -0.4
   const lengthFactor = 1 - lengthPenalty; // between 0.6 and 1.0
 
-  const baseScore = Math.max(tokenScore, charScore);
-  return baseScore * lengthFactor;
+  let score = Math.max(tokenScore, charScore) * lengthFactor;
+
+  // 4) Penalise flour/juice/oil/etc when query does not mention them
+  const penaltyKeywords = ['flour', 'juice', 'oil', 'powder', 'syrup', 'meal'];
+
+  const tokensAArray = Array.from(setA);
+  const tokensBArray = Array.from(setB);
+
+  for (const kw of penaltyKeywords) {
+    const inA = tokensAArray.includes(kw);
+    const inB = tokensBArray.includes(kw);
+    if (!inA && inB) {
+      score *= 0.8; // small, stackable penalties
+    }
+  }
+
+  return score;
 }
 
 /**
@@ -138,4 +163,3 @@ export function ComputeNameSimilarity(
     : 0;
   return Math.max(s1, s2);
 }
-

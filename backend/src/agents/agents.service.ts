@@ -252,6 +252,8 @@ export class AgentsService {
           meals: normalizedMeals,
         };
 
+        console.log('Candidate:', JSON.stringify(candidate, null, 2));
+
         const parsed = PlanDaySchema.safeParse(candidate);
         const unitsOk = normalizedMeals.every(
           (meal: any) => (meal.ingredients || []).every((ing: any) => (ing.unit || '').toLowerCase() === 'g'),
