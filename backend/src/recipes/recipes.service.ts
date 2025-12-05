@@ -225,6 +225,77 @@ export class RecipesService {
     return savedRecipe;
   }
 
+  async createRecipeFromPlannedMeal(input: {
+    name: string;
+    mealSlot: string;
+    difficulty?: string;
+    userId?: string;
+    instructions?: string;
+    ingredients?: { ingredient_name: string; quantity: number; unit?: string }[];
+    mealType?: 'solid' | 'drinkable';
+    source?: 'catalog' | 'user' | 'llm';
+    isSearchable?: boolean;
+    priceEstimated?: boolean;
+  }) {
+    const recipe = this.recipeRepo.create({
+      name: input.name,
+      meal_slot: input.mealSlot,
+      meal_type: input.mealType || 'solid',
+      difficulty: input.difficulty || 'easy',
+      is_custom: true,
+      source: input.source || 'llm',
+      is_searchable: input.isSearchable ?? false,
+      price_estimated: input.priceEstimated ?? true,
+      createdByUser: input.userId ? ({ id: input.userId } as any) : undefined,
+      instructions: input.instructions,
+    });
+    const savedRecipe = await this.recipeRepo.save(recipe);
+
+    let totalKcal = 0;
+    let totalProtein = 0;
+    let totalCarbs = 0;
+    let totalFat = 0;
+    let totalCost = 0;
+
+    const ris: RecipeIngredient[] = [];
+    for (const ing of input.ingredients || []) {
+      if (!ing?.ingredient_name) continue;
+      const ingredientEntity = await this.ingredientsService.findOrCreateByName(ing.ingredient_name);
+      const quantity = Number(ing.quantity);
+      const unit = ing.unit || 'g';
+      const ri = this.recipeIngredientRepo.create({
+        recipe: savedRecipe,
+        ingredient: ingredientEntity,
+        quantity,
+        unit,
+      });
+      ris.push(ri);
+
+      const unitType = (ingredientEntity.unit_type || '').toLowerCase();
+      const divisor = unitType === 'per_ml' ? 100 : unitType === 'per_100g' ? 100 : 100;
+      const factor = quantity / divisor;
+
+      totalKcal += (Number(ingredientEntity.kcal_per_unit) || 0) * factor;
+      totalProtein += (Number(ingredientEntity.protein_per_unit) || 0) * factor;
+      totalCarbs += (Number(ingredientEntity.carbs_per_unit) || 0) * factor;
+      totalFat += (Number(ingredientEntity.fat_per_unit) || 0) * factor;
+      totalCost += (Number(ingredientEntity.estimated_price_per_unit_gbp) || 0) * factor;
+    }
+
+    if (ris.length) {
+      await this.recipeIngredientRepo.save(ris);
+    }
+
+    savedRecipe.base_kcal = totalKcal;
+    savedRecipe.base_protein = totalProtein;
+    savedRecipe.base_carbs = totalCarbs;
+    savedRecipe.base_fat = totalFat;
+    savedRecipe.base_cost_gbp = totalCost;
+    await this.recipeRepo.save(savedRecipe);
+
+    return savedRecipe;
+  }
+
   async generateRecipeFromLLM(input: GenerateRecipeDto) {
     this.logger.log(`generateRecipe user=${input.userId} slot=${input.mealSlot ?? 'any'}`);
     const draft = await this.agentsService.generateRecipe({

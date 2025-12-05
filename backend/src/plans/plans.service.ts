@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Not } from 'typeorm';
-import { PlanDay, PlanMeal, WeeklyPlan, PlanActionLog, Recipe, RecipeIngredient } from '../database/entities';
+import { PlanDay, PlanMeal, WeeklyPlan, PlanActionLog } from '../database/entities';
 import { RecipesService } from '../recipes/recipes.service';
 import { UsersService } from '../users/users.service';
 import { calculateTargets } from './utils/profile-targets';
@@ -26,10 +26,6 @@ export class PlansService {
     private readonly planMealRepo: Repository<PlanMeal>,
     @InjectRepository(PlanActionLog)
     private readonly planActionLogRepo: Repository<PlanActionLog>,
-    @InjectRepository(Recipe)
-    private readonly recipeRepo: Repository<Recipe>,
-    @InjectRepository(RecipeIngredient)
-    private readonly recipeIngredientRepo: Repository<RecipeIngredient>,
     private readonly recipesService: RecipesService,
     private readonly usersService: UsersService,
     private readonly shoppingListService: ShoppingListService,
@@ -321,74 +317,36 @@ export class PlansService {
                   ? m.instructions
                   : undefined;
 
-            const recipe = this.recipeRepo.create({
+            const createdRecipe = await this.recipesService.createRecipeFromPlannedMeal({
               name: m.name,
-              meal_slot: slot,
-              meal_type: 'solid',
-              difficulty: m.difficulty || 'easy',
-              is_custom: true,
-              source: 'llm',
-              is_searchable: false,
-              price_estimated: true,
-              createdByUser: userId ? ({ id: userId } as any) : undefined,
+              mealSlot: slot,
+              mealType: 'solid',
+              difficulty: m.difficulty,
+              userId,
               instructions,
+              ingredients: (m.ingredients || []).map((ing) => ({
+                ingredient_name: ing.ingredient_name,
+                quantity: ing.quantity,
+                unit: 'g',
+              })),
+              source: 'llm',
+              isSearchable: false,
+              priceEstimated: true,
             });
-            const savedRecipe = await this.recipeRepo.save(recipe);
-
-            let totalKcal = 0;
-            let totalProtein = 0;
-            let totalCarbs = 0;
-            let totalFat = 0;
-            let totalCost = 0;
-
-            const ris: RecipeIngredient[] = [];
-            for (const ing of m.ingredients || []) {
-              const ingredientEntity = await this.ingredientsService.findOrCreateByName(
-                ing.ingredient_name,
-              );
-              const quantity = Number(ing.quantity);
-              const unit = 'g';
-              const ri = this.recipeIngredientRepo.create({
-                recipe: savedRecipe,
-                ingredient: ingredientEntity,
-                quantity,
-                unit,
-              });
-              ris.push(ri);
-
-              const unitType = (ingredientEntity.unit_type || '').toLowerCase();
-              const divisor = unitType === 'per_ml' ? 100 : unitType === 'per_100g' ? 100 : 100;
-              const factor = quantity / divisor;
-
-              totalKcal += (Number(ingredientEntity.kcal_per_unit) || 0) * factor;
-              totalProtein += (Number(ingredientEntity.protein_per_unit) || 0) * factor;
-              totalCarbs += (Number(ingredientEntity.carbs_per_unit) || 0) * factor;
-              totalFat += (Number(ingredientEntity.fat_per_unit) || 0) * factor;
-              totalCost += (Number(ingredientEntity.estimated_price_per_unit_gbp) || 0) * factor;
-            }
-
-            if (ris.length) {
-              await this.recipeIngredientRepo.save(ris);
-            }
-
-            savedRecipe.base_kcal = totalKcal;
-            savedRecipe.base_protein = totalProtein;
-            savedRecipe.base_carbs = totalCarbs;
-            savedRecipe.base_fat = totalFat;
-            savedRecipe.base_cost_gbp = totalCost;
-            await this.recipeRepo.save(savedRecipe);
 
             const portion = 1;
             const meal = this.planMealRepo.create({
               planDay: savedDay,
               meal_slot: slot,
-              recipe: savedRecipe,
+              recipe: createdRecipe,
               portion_multiplier: portion,
-              meal_kcal: totalKcal ? Number(totalKcal) * portion : undefined,
-              meal_protein: totalProtein ? Number(totalProtein) * portion : undefined,
-              meal_carbs: totalCarbs ? Number(totalCarbs) * portion : undefined,
-              meal_fat: totalFat ? Number(totalFat) * portion : undefined,
-              meal_cost_gbp: totalCost ? Number(totalCost) * portion : undefined,
+              meal_kcal: createdRecipe.base_kcal ? Number(createdRecipe.base_kcal) * portion : undefined,
+              meal_protein: createdRecipe.base_protein ? Number(createdRecipe.base_protein) * portion : undefined,
+              meal_carbs: createdRecipe.base_carbs ? Number(createdRecipe.base_carbs) * portion : undefined,
+              meal_fat: createdRecipe.base_fat ? Number(createdRecipe.base_fat) * portion : undefined,
+              meal_cost_gbp: createdRecipe.base_cost_gbp
+                ? Number(createdRecipe.base_cost_gbp) * portion
+                : undefined,
             });
             await this.planMealRepo.save(meal);
             currentDayKcal += Number(meal.meal_kcal || 0);
