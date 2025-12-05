@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Not } from 'typeorm';
-import { PlanDay, PlanMeal, WeeklyPlan, PlanActionLog } from '../database/entities';
+import { PlanDay, PlanMeal, WeeklyPlan, PlanActionLog, Recipe } from '../database/entities';
 import { RecipesService } from '../recipes/recipes.service';
 import { UsersService } from '../users/users.service';
 import { calculateTargets } from './utils/profile-targets';
@@ -199,6 +199,77 @@ export class PlansService {
     });
   }
 
+  private async createPlanDay(weeklyPlan: WeeklyPlan, dayIndex: number) {
+    const day = this.planDayRepo.create({
+      weeklyPlan,
+      day_index: dayIndex,
+    });
+    return this.planDayRepo.save(day);
+  }
+
+  private async createPlanMealFromRecipe(input: {
+    day: PlanDay;
+    mealSlot: string;
+    recipe: Recipe;
+    portionMultiplier?: number;
+    macroOverrides?: {
+      meal_kcal?: number | null;
+      meal_protein?: number | null;
+      meal_carbs?: number | null;
+      meal_fat?: number | null;
+      meal_cost_gbp?: number | null;
+    };
+  }) {
+    const portion = input.portionMultiplier ?? 1;
+    const meal = this.planMealRepo.create({
+      planDay: input.day,
+      meal_slot: input.mealSlot,
+      recipe: input.recipe,
+      portion_multiplier: portion,
+      meal_kcal:
+        input.macroOverrides?.meal_kcal ??
+        (input.recipe.base_kcal ? Number(input.recipe.base_kcal) * portion : undefined),
+      meal_protein:
+        input.macroOverrides?.meal_protein ??
+        (input.recipe.base_protein ? Number(input.recipe.base_protein) * portion : undefined),
+      meal_carbs:
+        input.macroOverrides?.meal_carbs ??
+        (input.recipe.base_carbs ? Number(input.recipe.base_carbs) * portion : undefined),
+      meal_fat:
+        input.macroOverrides?.meal_fat ??
+        (input.recipe.base_fat ? Number(input.recipe.base_fat) * portion : undefined),
+      meal_cost_gbp:
+        input.macroOverrides?.meal_cost_gbp ??
+        (input.recipe.base_cost_gbp ? Number(input.recipe.base_cost_gbp) * portion : undefined),
+    });
+    return this.planMealRepo.save(meal);
+  }
+
+  private async cloneMealsFromDay(sourceDayId: string, targetDay: PlanDay) {
+    const baseMeals = await this.planMealRepo.find({
+      where: { planDay: { id: sourceDayId } as any },
+      relations: ['recipe'],
+    });
+    const createdMeals: PlanMeal[] = [];
+    for (const bm of baseMeals) {
+      const meal = await this.createPlanMealFromRecipe({
+        day: targetDay,
+        mealSlot: bm.meal_slot,
+        recipe: bm.recipe,
+        portionMultiplier: bm.portion_multiplier ?? 1,
+        macroOverrides: {
+          meal_kcal: bm.meal_kcal,
+          meal_protein: bm.meal_protein,
+          meal_carbs: bm.meal_carbs,
+          meal_fat: bm.meal_fat,
+          meal_cost_gbp: bm.meal_cost_gbp,
+        },
+      });
+      createdMeals.push(meal);
+    }
+    return createdMeals;
+  }
+
   async generateWeek(
     userId: string,
     weekStartDate: string,
@@ -249,11 +320,7 @@ export class PlansService {
     const dayEntities: PlanDay[] = [];
 
     for (let dayIdx = 0; dayIdx < 7; dayIdx += 1) {
-      const day = this.planDayRepo.create({
-        weeklyPlan: savedPlan,
-        day_index: dayIdx,
-      });
-      const savedDay = await this.planDayRepo.save(day);
+      const savedDay = await this.createPlanDay(savedPlan, dayIdx);
       this.logger.log(`generateWeek day=${dayIdx} start useAgent=${useAgent}`);
       let currentDayKcal = 0;
       let currentDayProtein = 0;
@@ -262,23 +329,8 @@ export class PlansService {
       if (useAgent) {
         if (overrides?.sameMealsAllWeek && dayIdx > 0 && dayEntities[0]) {
           this.logger.log(`generateWeek day=${dayIdx} using sameMealsAllWeek replicate day0`);
-          const baseMeals = await this.planMealRepo.find({
-            where: { planDay: { id: dayEntities[0].id } as any },
-            relations: ['recipe'],
-          });
-          for (const bm of baseMeals) {
-            const meal = this.planMealRepo.create({
-              planDay: savedDay,
-              meal_slot: bm.meal_slot,
-              recipe: bm.recipe,
-              portion_multiplier: bm.portion_multiplier,
-              meal_kcal: bm.meal_kcal,
-              meal_protein: bm.meal_protein,
-              meal_carbs: bm.meal_carbs,
-              meal_fat: bm.meal_fat,
-              meal_cost_gbp: bm.meal_cost_gbp,
-            });
-            await this.planMealRepo.save(meal);
+          const cloned = await this.cloneMealsFromDay(dayEntities[0].id, savedDay);
+          for (const meal of cloned) {
             currentDayKcal += Number(meal.meal_kcal || 0);
             currentDayProtein += Number(meal.meal_protein || 0);
             currentDayCost += Number(meal.meal_cost_gbp || 0);
@@ -335,20 +387,12 @@ export class PlansService {
             });
 
             const portion = 1;
-            const meal = this.planMealRepo.create({
-              planDay: savedDay,
-              meal_slot: slot,
+            const meal = await this.createPlanMealFromRecipe({
+              day: savedDay,
+              mealSlot: slot,
               recipe: createdRecipe,
-              portion_multiplier: portion,
-              meal_kcal: createdRecipe.base_kcal ? Number(createdRecipe.base_kcal) * portion : undefined,
-              meal_protein: createdRecipe.base_protein ? Number(createdRecipe.base_protein) * portion : undefined,
-              meal_carbs: createdRecipe.base_carbs ? Number(createdRecipe.base_carbs) * portion : undefined,
-              meal_fat: createdRecipe.base_fat ? Number(createdRecipe.base_fat) * portion : undefined,
-              meal_cost_gbp: createdRecipe.base_cost_gbp
-                ? Number(createdRecipe.base_cost_gbp) * portion
-                : undefined,
+              portionMultiplier: portion,
             });
-            await this.planMealRepo.save(meal);
             currentDayKcal += Number(meal.meal_kcal || 0);
             currentDayProtein += Number(meal.meal_protein || 0);
             currentDayCost += Number(meal.meal_cost_gbp || 0);
@@ -377,18 +421,12 @@ export class PlansService {
             currentDayProtein,
             targets.dailyProtein,
           );
-          const meal = this.planMealRepo.create({
-            planDay: savedDay,
-            meal_slot: slot,
+          const meal = await this.createPlanMealFromRecipe({
+            day: savedDay,
+            mealSlot: slot,
             recipe: chosenRecipe,
-            portion_multiplier: portion,
-            meal_kcal: chosenRecipe.base_kcal ? Number(chosenRecipe.base_kcal) * portion : undefined,
-            meal_protein: chosenRecipe.base_protein ? Number(chosenRecipe.base_protein) * portion : undefined,
-            meal_carbs: chosenRecipe.base_carbs ? Number(chosenRecipe.base_carbs) * portion : undefined,
-            meal_fat: chosenRecipe.base_fat ? Number(chosenRecipe.base_fat) * portion : undefined,
-            meal_cost_gbp: chosenRecipe.base_cost_gbp ? Number(chosenRecipe.base_cost_gbp) * portion : undefined,
+            portionMultiplier: portion,
           });
-          await this.planMealRepo.save(meal);
           currentDayKcal += Number(meal.meal_kcal || 0);
           currentDayProtein += Number(meal.meal_protein || 0);
           currentDayCost += Number(meal.meal_cost_gbp || 0);
