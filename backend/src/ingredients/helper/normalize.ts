@@ -1,12 +1,15 @@
 export function NormalizeForMatch(str: string): string {
   return str
     .toLowerCase()
-    // remove punctuation
+    // drop anything in parentheses: "almond butter (halal)" -> "almond butter "
+    .replace(/\([^)]*\)/g, ' ')
+    // replace non-alphanumeric with space
     .replace(/[^a-z0-9\s]/g, ' ')
-    // collapse spaces
+    // collapse multiple spaces
     .replace(/\s+/g, ' ')
     .trim();
 }
+
 
 // Very simple English singularization for food words
 export function Singularize(word: string): string {
@@ -22,7 +25,7 @@ export function Singularize(word: string): string {
     return word.slice(0, -2); // drop "es"
   }
 
-  // generic -ies -> -y  (applies for things like "berries", "cherries")
+  // generic -ies -> -y (cherries -> cherry)
   if (word.endsWith('ies')) {
     return word.slice(0, -3) + 'y';
   }
@@ -35,7 +38,8 @@ export function Singularize(word: string): string {
   return word;
 }
 
-export function ComputeNameSimilarity(a: string, b: string): number {
+
+function computeSingleSimilarity(a: string, b: string): number {
   const normA = NormalizeForMatch(a);
   const normB = NormalizeForMatch(b);
 
@@ -62,9 +66,15 @@ export function ComputeNameSimilarity(a: string, b: string): number {
     'large',
     'small',
     'boneless',
-    'breast',
-    'thigh',
     'drumstick',
+    'thigh',
+    'breast',
+    'fillet',
+    'fillet', // double is fine
+    'frozen',
+    'canned',
+    'added',
+    'grade',
   ]);
 
   const tokensA = normA
@@ -82,28 +92,50 @@ export function ComputeNameSimilarity(a: string, b: string): number {
 
   if (setA.size === 0 || setB.size === 0) return 0;
 
-  // 1) Token overlap score (like Jaccard on min side)
+  // 1) Token overlap score (0..1)
   let intersection = 0;
   for (const t of setA) {
     if (setB.has(t)) intersection += 1;
   }
   const minSize = Math.min(setA.size, setB.size);
-  const tokenScore = intersection / minSize; // 0..1
+  const tokenScore = intersection / minSize;
 
-  // 2) Character-based overlap on roots as a backup
-  //   This helps "berry" vs "strawberry", etc.
+  // 2) Character-based substring score for roots, e.g. "berry" vs "strawberry"
   const rootA = Singularize(normA.replace(/\s+/g, ''));
   const rootB = Singularize(normB.replace(/\s+/g, ''));
 
   let charScore = 0;
   if (rootA && rootB) {
-    // check substring relation
     if (rootA.includes(rootB) || rootB.includes(rootA)) {
       const minLen = Math.min(rootA.length, rootB.length);
       const maxLen = Math.max(rootA.length, rootB.length);
-      charScore = minLen / maxLen; // e.g. "berry" vs "strawberry" ≈ 5/10 = 0.5
+      charScore = minLen / maxLen;
     }
   }
 
-  return Math.max(tokenScore, charScore);
+  // 3) Penalise very long candidate names for short queries
+  //    e.g. "salt" vs "nuts, almonds, dry roasted, with salt added"
+  const lenB = setB.size;
+  const lengthPenalty = lenB > 0 ? Math.min((lenB - 1) * 0.1, 0.4) : 0; // up to -0.4
+  const lengthFactor = 1 - lengthPenalty; // between 0.6 and 1.0
+
+  const baseScore = Math.max(tokenScore, charScore);
+  return baseScore * lengthFactor;
 }
+
+/**
+ * Compare LLM ingredient name against both the full DB `name`
+ * and optionally `similarity_name` and return the best score.
+ */
+export function ComputeNameSimilarity(
+  llmName: string,
+  dbName: string,
+  dbSimilarityName?: string,
+): number {
+  const s1 = computeSingleSimilarity(llmName, dbName);
+  const s2 = dbSimilarityName
+    ? computeSingleSimilarity(llmName, dbSimilarityName)
+    : 0;
+  return Math.max(s1, s2);
+}
+

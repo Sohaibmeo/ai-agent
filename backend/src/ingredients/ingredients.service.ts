@@ -53,8 +53,11 @@ export class IngredientsService implements OnModuleInit {
 
 async findOrCreateByName(name: string): Promise<Ingredient> {
   const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error('Ingredient name is empty');
+  }
 
-  // 1) Exact match first
+  // 1) Exact match on full name
   let ingredient = await this.ingredientRepo.findOne({
     where: { name: trimmed },
   });
@@ -63,23 +66,43 @@ async findOrCreateByName(name: string): Promise<Ingredient> {
     return ingredient;
   }
 
-  // 2) Normalise and tokenize
-  const normalized = NormalizeForMatch(trimmed); // e.g. "salmon fillet"
-  const tokens = normalized.split(' ').filter(Boolean); // ["salmon", "fillet"]
+  // 2) Exact match on similarity_name (using our normalized form)
+  const normalized = NormalizeForMatch(trimmed); // e.g. "salmon fillet" -> "salmon fillet"
+  if (normalized) {
+    ingredient = await this.ingredientRepo.findOne({
+      where: { similarity_name: normalized },
+    });
 
-  // Build a list of search tokens to try, from most specific to more generic
+    if (ingredient) {
+      this.logger.log(
+        `Matched LLM ingredient "${trimmed}" exactly by similarity_name -> "${ingredient.name}"`,
+      );
+      return ingredient;
+    }
+  }
+
+  // 3) Build search tokens (from most specific to more generic)
+  const tokens = normalized.split(' ').filter(Boolean); // ["salmon", "fillet"] etc.
   const searchTokens: string[] = [];
 
   if (tokens.length > 0) {
-    // main (last) token, e.g. "fillet"
+    // last token, singularized ("berries" -> "berry")
     const last = Singularize(tokens[tokens.length - 1]);
     if (last) searchTokens.push(last);
   }
 
   if (tokens.length > 1) {
-    // first token, e.g. "salmon"
+    // first token
     const first = Singularize(tokens[0]);
     if (first && !searchTokens.includes(first)) searchTokens.push(first);
+  }
+
+  // also try each individual token (helps with "red kidney beans" etc.)
+  for (const t of tokens) {
+    const sing = Singularize(t);
+    if (sing && !searchTokens.includes(sing)) {
+      searchTokens.push(sing);
+    }
   }
 
   // fallback: full normalized string
@@ -87,22 +110,25 @@ async findOrCreateByName(name: string): Promise<Ingredient> {
     searchTokens.push(normalized);
   }
 
-  // Optional: log for debugging
   this.logger.debug(
     `findOrCreateByName("${trimmed}") normalized="${normalized}", searchTokens=${JSON.stringify(
       searchTokens,
     )}`,
   );
 
-  // 3) Collect candidates for ALL search tokens
+  // 4) Collect candidates for ALL search tokens, searching both name & similarity_name
   const candidateMap = new Map<string, Ingredient>();
 
   for (const token of searchTokens) {
     const q = `%${token}%`;
+
     const partials = await this.ingredientRepo
       .createQueryBuilder('ingredient')
-      .where('LOWER(ingredient.name) LIKE :q', { q })
-      .limit(30)
+      .where(
+        '(LOWER(ingredient.name) LIKE :q OR LOWER(ingredient.similarity_name) LIKE :q)',
+        { q },
+      )
+      .limit(40)
       .getMany();
 
     for (const cand of partials) {
@@ -114,19 +140,23 @@ async findOrCreateByName(name: string): Promise<Ingredient> {
 
   const candidates = Array.from(candidateMap.values());
 
-  // 4) If we found candidates, pick best similarity
+  // 5) If we found candidates, pick best similarity (using name + similarity_name)
   let best: Ingredient | null = null;
   let bestScore = 0;
 
   for (const cand of candidates) {
-    const score = ComputeNameSimilarity(trimmed, cand.name);
+    const score = ComputeNameSimilarity(
+      trimmed,
+      cand.name,
+      cand.similarity_name ?? undefined,
+    );
     if (score > bestScore) {
       bestScore = score;
       best = cand;
     }
   }
 
-  const THRESHOLD = 0.55; // you can tune this
+  const THRESHOLD = 0.55; // tune if needed
 
   if (best && bestScore >= THRESHOLD) {
     this.logger.log(
@@ -137,7 +167,7 @@ async findOrCreateByName(name: string): Promise<Ingredient> {
     return best;
   }
 
-  // 5) No good match found -> create a new ingredient
+  // 6) No good match found -> create a new ingredient
   const draft: Partial<Ingredient> = {
     name: trimmed,
     category: undefined,
@@ -148,6 +178,7 @@ async findOrCreateByName(name: string): Promise<Ingredient> {
     fat_per_unit: undefined,
     estimated_price_per_unit_gbp: undefined,
     allergen_keys: [],
+    similarity_name: normalized || undefined,
   };
 
   ingredient = this.ingredientRepo.create(draft);
@@ -161,8 +192,6 @@ async findOrCreateByName(name: string): Promise<Ingredient> {
 
   return ingredient;
 }
-
-
 
 
   // Try to resolve by id or name; if not found and a name is provided, create a minimal ingredient entry.
