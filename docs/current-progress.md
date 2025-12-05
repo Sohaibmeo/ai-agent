@@ -16,7 +16,7 @@ Ok. Now its time to work on the review agent.
 
 Review agent is responsible for making any changes in the plan.
 
-There are 3 ways to make the change.
+There are 3 ways for users to make the change.
 
 One is to the whole plan (User will do it by selecting multiple days and clicking the modify button which will give user a text area in which he can enter the changes he wants)
 
