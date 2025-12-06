@@ -4,8 +4,6 @@ import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
 import { ExplanationRequestDto, ExplanationResponseDto } from './dto/explanation.dto';
 import { NutritionAdviceRequestDto, NutritionAdviceResponseDto } from './dto/nutrition-advice.dto';
-import { reviewInstructionSchema, ReviewInstruction } from './schemas/review-instruction.schema';
-import { ChooseIngredientDto } from './dto/choose-ingredient.dto';
 import { calculateTargets } from '../plans/utils/profile-targets';
 
 const DayMealIngredientSchema = z.object({
@@ -92,39 +90,6 @@ export class AgentsService {
   private llmApiKey = process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
   private logAgent(kind: string, message: string) {
     this.logger.log(`[${kind}] ${message}`);
-  }
-
-  async reviewAction(payload: {
-    userId?: string;
-    weeklyPlanId?: string;
-    actionContext?: any;
-    reasonText?: string;
-    text?: string;
-    profileSnippet?: any;
-    currentPlanSummary?: unknown;
-    currentPlanSnippet?: unknown; // legacy shape
-  }): Promise<ReviewInstruction> {
-    const prompt: { role: 'system' | 'user'; content: string }[] = [
-      {
-        role: 'system',
-        content:
-          'You are Review Agent. Map the user action + context to structured JSON ReviewInstruction. Return ONLY JSON.',
-      },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          userId: payload.userId,
-          weeklyPlanId: payload.weeklyPlanId,
-          actionContext: payload.actionContext,
-          reasonText: payload.reasonText || payload.text,
-          profileSnippet: payload.profileSnippet,
-          currentPlanSummary: payload.currentPlanSummary || payload.currentPlanSnippet,
-        }),
-      },
-    ];
-    const raw = await this.callModel(this.reviewModel, prompt, 'review');
-    this.logAgent('review', `model=${this.reviewModel}`);
-    return reviewInstructionSchema.parse(raw);
   }
 
   async generateDayPlanWithCoachLLM(payload: {
@@ -400,94 +365,6 @@ export class AgentsService {
         }),
       ),
     });
-    return schema.parse(raw);
-  }
-
-  async chooseIngredient(payload: ChooseIngredientDto): Promise<{ ingredient_id: string }> {
-    const candidateIds = new Set(payload.candidates.map((c) => c.id));
-    const prompt: { role: 'system' | 'user'; content: string }[] = [
-      {
-        role: 'system',
-        content:
-          'You are Ingredient Selector. Choose the most likely ingredient from the provided candidates. Return ONLY JSON {ingredient_id}. Do not invent new ids.',
-      },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          reasonText: payload.reasonText,
-          candidates: payload.candidates,
-        }),
-      },
-    ];
-    const schema = z.object({ ingredient_id: z.string() });
-    const raw = await this.callModel(this.reviewModel, prompt, 'review');
-    const parsed = schema.parse(raw);
-    if (!candidateIds.has(parsed.ingredient_id)) {
-      throw new Error('LLM returned ingredient_id not in provided candidates');
-    }
-    return parsed;
-  }
-
-  async chooseRecipe(payload: {
-    reasonText?: string;
-    candidates: {
-      id: string;
-      name: string;
-      meal_slot?: string;
-      meal_type?: string;
-      base_cost_gbp?: number | null;
-      base_kcal?: number | null;
-      base_protein?: number | null;
-      base_carbs?: number | null;
-      base_fat?: number | null;
-    }[];
-  }): Promise<{ recipe_id: string }> {
-    const candidateIds = new Set(payload.candidates.map((c) => c.id));
-    const prompt: { role: 'system' | 'user'; content: string }[] = [
-      {
-        role: 'system',
-        content:
-          'You are Recipe Selector. Choose ONE recipe_id from provided candidates. Return ONLY JSON {recipe_id}. Use note/reason if provided. Do not invent ids.',
-      },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          reasonText: payload.reasonText,
-          candidates: payload.candidates,
-        }),
-      },
-    ];
-    const schema = z.object({ recipe_id: z.string() });
-    const raw = await this.callModel(this.reviewModel, prompt, 'review');
-    const parsed = schema.parse(raw);
-    if (!candidateIds.has(parsed.recipe_id)) {
-      throw new Error('LLM returned recipe_id not in provided candidates');
-    }
-    return parsed;
-  }
-
-  async adjustRecipe(payload: { note: string; current: any }) {
-    const schema = z.object({
-      new_name: z.string().optional(),
-      instructions: z.string().optional(),
-      ingredients: z.array(
-        z.object({
-          ingredient_id: z.string().optional(),
-          ingredient_name: z.string().optional(),
-          quantity: z.number(),
-          unit: z.string(),
-        }),
-      ),
-    });
-    const prompt: { role: 'system' | 'user'; content: string }[] = [
-      {
-        role: 'system',
-        content:
-          'You are Recipe Adjuster. Given current recipe and user note, respond ONLY with JSON {new_name?, instructions?, ingredients:[{ingredient_id?, ingredient_name?, quantity, unit}]}. Use ingredient_id when provided; do not invent ids.',
-      },
-      { role: 'user', content: JSON.stringify(payload) },
-    ];
-    const raw = await this.callModel(this.reviewModel, prompt, 'review');
     return schema.parse(raw);
   }
 
