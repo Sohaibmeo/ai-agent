@@ -182,11 +182,16 @@ export function RecipeDetailPage() {
 
   const handleApplyAI = async () => {
     if (!m?.id) return;
+    if (!plan?.id) {
+      notify.error('Missing plan id for AI changes.');
+      return;
+    }
     try {
       setIsApplying(true);
       await aiPlanSwap({
         type: 'swap-inside-recipe',
         userId: DEMO_USER_ID,
+        weeklyPlanId: plan.id,
         planMealId: m.id,
         recipeId: recipe?.id,
         note: aiNote.trim() || undefined,

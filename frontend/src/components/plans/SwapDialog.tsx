@@ -8,11 +8,12 @@ interface SwapDialogProps {
   open: boolean;
   mealSlot?: string;
   planMealId?: string | null;
+  weeklyPlanId?: string | null;
   onClose: () => void;
   onSelect: (recipeId: string) => void;
 }
 
-export function SwapDialog({ open, mealSlot, planMealId, onClose, onSelect }: SwapDialogProps) {
+export function SwapDialog({ open, mealSlot, planMealId, weeklyPlanId, onClose, onSelect }: SwapDialogProps) {
   const { data: candidates, isLoading, isError, refetch } = useRecipeCandidates(mealSlot, DEMO_USER_ID);
   const [search, setSearch] = useState('');
   const [autoMode, setAutoMode] = useState<'prompt' | 'question' | null>(null);
@@ -49,11 +50,16 @@ export function SwapDialog({ open, mealSlot, planMealId, onClose, onSelect }: Sw
   if (!open) return null;
 
   const autoPick = async () => {
+    if (!weeklyPlanId) {
+      notify.error('Missing plan id for swap');
+      return;
+    }
     try {
       setIsAutoPicking(true);
       const payload = {
         type: autoNote.trim() ? 'auto-swap-with-context' : 'auto-swap-no-text',
         userId: DEMO_USER_ID,
+        weeklyPlanId,
         planMealId,
         note: autoNote.trim() || undefined,
         context: { source: 'swap-dialog', mealSlot },

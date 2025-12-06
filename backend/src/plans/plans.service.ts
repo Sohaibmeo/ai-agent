@@ -30,7 +30,7 @@ export class PlansService {
     private readonly preferencesService: PreferencesService,
     private readonly ingredientsService: IngredientsService,
     private readonly agentsService: AgentsService,
-  ) {}
+  ) { }
 
   findAll() {
     return this.weeklyPlanRepo.find({
@@ -449,60 +449,31 @@ export class PlansService {
     note?: string;
     context?: Record<string, any>;
   }) {
+    //check if plan exists
     const planId = payload.weeklyPlanId;
-    if (!planId) {
-      throw new Error('weeklyPlanId is required');
-    }
-    const plan = await this.weeklyPlanRepo.findOne({
-      where: { id: planId },
-      relations: ['days', 'days.meals', 'days.meals.recipe'],
-    });
-    if (!plan) {
-      throw new Error('Weekly plan not found');
+    const plan = planId ? await this.weeklyPlanRepo.findOne({ where: { id: planId } }) : null;
+    if (planId && !plan) {
+      throw new NotFoundException('Weekly plan not found');
     }
 
-    const interpreted = payload.note ? this.interpretNote(payload.note) : { intent: 'regenerate_week', modifiers: {} };
-    this.logger.log(
-      `regenerateWeek intent user=${payload.userId} plan=${planId} note=${payload.note ? payload.note.slice(0, 120) : 'none'} interpreted=${JSON.stringify(interpreted)} ctx=${JSON.stringify(payload.context)}`,
-    );
+    //interpret the note using LLM to determine action type and targets we will call a agent service interpretor agent llm
 
-    // For now, just return the interpreted payload and incoming targeting so we can observe wiring.
-    return {
-      ok: true,
-      interpreted,
-      planId,
-      planDayIds: payload.planDayIds,
-      planMealId: payload.planMealId,
-      recipeId: payload.recipeId,
-      type: payload.type,
-      note: payload.note,
-      context: payload.context,
-    };
-  }
 
-  private interpretNote(note: string) {
-    const lower = note.toLowerCase();
-    const avoidIngredients: string[] = [];
-    const modifiers: Record<string, any> = {};
 
-    if (lower.includes('no avocado') || lower.includes('avoid avocado') || lower.includes('without avocado')) {
-      avoidIngredients.push('avocado');
-    }
-    if (lower.includes('healthier') || lower.includes('lighter') || lower.includes('cleaner')) {
-      modifiers.makeHealthier = true;
-    }
-    if (lower.includes('higher protein') || lower.includes('more protein') || lower.includes('protein')) {
-      modifiers.higherProtein = true;
-    }
-    if (lower.includes('cheaper') || lower.includes('lower cost') || lower.includes('budget')) {
-      modifiers.lowerCost = true;
+    if (payload.type === 'swap-inside-recipe' || (payload.type === 'auto-swap-with-context' && payload.note)) {
+
+    } else if (payload.type === 'auto-swap-no-text' || (payload.type === 'auto-swap-with-context' && !payload.note)) {
+      
+    } else if (payload.planDayIds?.length && planId) {
+      for (const dayId of payload.planDayIds) {
+        // put the logic to change the day here?
+      }
+    } else if (planId) {
+      // regenerate full week
+      await this.generateWeek(payload.userId, plan ? plan.week_start_date : "", true);
     }
 
-    return {
-      intent: 'regenerate_week',
-      avoidIngredients: avoidIngredients.length ? avoidIngredients : undefined,
-      modifiers,
-    };
+    return "Goodbye";
   }
 
   private async logAction(entry: {

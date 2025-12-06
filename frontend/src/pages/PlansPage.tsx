@@ -511,7 +511,14 @@ export function PlansPage() {
         </div>
       )}
 
-      <SwapDialog open={Boolean(swapMealId)} mealSlot={swapMealSlot} planMealId={swapMealId} onClose={closeSwap} onSelect={handleSwapSelect} />
+      <SwapDialog
+        open={Boolean(swapMealId)}
+        mealSlot={swapMealSlot}
+        planMealId={swapMealId}
+        weeklyPlanId={plan?.id || null}
+        onClose={closeSwap}
+        onSelect={handleSwapSelect}
+      />
 
       {isAdvancedOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => { resetAdvanced(); setIsAdvancedOpen(false); }}>
