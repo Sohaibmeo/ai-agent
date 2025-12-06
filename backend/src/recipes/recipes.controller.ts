@@ -16,10 +16,7 @@ export class RecipesController {
     if (!userId) {
       throw new Error('userId is required');
     }
-    return this.recipesService.findCandidatesForUser({
-      userId,
-      mealSlot: mealSlot || undefined,
-    });
+    return []
   }
 
   @Get(':id')
