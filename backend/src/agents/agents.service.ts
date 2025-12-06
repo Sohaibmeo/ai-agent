@@ -1,72 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { z } from 'zod';
-import { ExplanationRequestDto, ExplanationResponseDto } from './dto/explanation.dto';
-import { NutritionAdviceRequestDto, NutritionAdviceResponseDto } from './dto/nutrition-advice.dto';
-import { calculateTargets } from '../plans/utils/profile-targets';
-
-const DayMealIngredientSchema = z.object({
-  ingredient_name: z.string(),
-  quantity: z.preprocess((v) => {
-    if (v === '' || v === null || v === undefined) return 0;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  }, z.number()),
-  unit: z.string(),
-});
-
-const DayMealSchema = z.object({
-  meal_slot: z.string(),
-  name: z.string(),
-  difficulty: z.string().optional(),
-  instructions: z.union([z.string(), z.array(z.string())]),
-  ingredients: z.array(DayMealIngredientSchema),
-  target_kcal: z.number().optional(),
-  target_protein: z.number().optional(),
-  compliance_notes: z.string().optional(),
-});
-
-const PlanDaySchema = z.object({
-  day_index: z.number(),
-  meals: z.array(DayMealSchema),
-});
-
-const WeeklyPlanSchema = z.object({
-  week_start_date: z.string(),
-  days: z.array(PlanDaySchema),
-});
-
-const RecipeStubSchema = z.object({
-  name: z.string(),
-  meal_slot: z.string(),
-  meal_type: z.string().optional(),
-  difficulty: z.string().optional(),
-  base_cost_gbp: z.number().optional(),
-  instructions: z.any().optional(),
-  ingredients: z.array(
-    z.object({
-      ingredient_name: z.string(),
-      quantity: z.number(),
-      unit: z.string().optional(),
-    }),
-  ),
-});
-
-const DayWithRecipesSchema = z.object({
-  day_index: z.number(),
-  meals: z.array(
-    z.object({
-      meal_slot: z.string(),
-      recipe: RecipeStubSchema,
-    }),
-  ),
-});
-
-export type LlmDayMeal = z.infer<typeof DayMealSchema>;
-export type LlmPlanDay = z.infer<typeof PlanDaySchema>;
-type WeeklyPlan = z.infer<typeof WeeklyPlanSchema>;
-type DayWithRecipes = z.infer<typeof DayWithRecipesSchema>;
+import {
+  DayMealSchema,
+  PlanDaySchema,
+  WeeklyPlanSchema,
+  LlmDayMeal,
+  LlmPlanDay,
+} from './schemas/plan-generation.schema';
 
 type WeekState = {
   week_start_date: string;
@@ -323,90 +264,5 @@ export class AgentsService {
             ? this.explainModel
             : this.nutritionModel;
     return { baseUrl, apiKey, model };
-  }
-
-  async explain(request: ExplanationRequestDto): Promise<ExplanationResponseDto> {
-    const prompt: { role: 'system' | 'user'; content: string }[] = [
-      {
-        role: 'system',
-        content:
-          'You are Explanation Agent. Given a question and context (plan/profile/reasons), reply ONLY with JSON {explanation: string, evidence: string[]}. Be concise, no prose.',
-      },
-      {
-        role: 'user',
-        content: JSON.stringify(request),
-      },
-    ];
-    const raw = await this.callModel(this.explainModel, prompt, 'explain');
-    const schema = z.object({
-      explanation: z.string(),
-      evidence: z.array(z.string()).default([]),
-    });
-    const parsed = schema.parse(raw);
-    return parsed;
-  }
-
-  async nutritionAdvice(request: NutritionAdviceRequestDto): Promise<NutritionAdviceResponseDto> {
-    const prompt: { role: 'system' | 'user'; content: string }[] = [
-      {
-        role: 'system',
-        content:
-          'You are Nutrition Advisor. Provide 3-6 concise suggestions in JSON {advice:[{title, detail, category?}]}. Focus on diet improvements, hydration, or timing. No prose.',
-      },
-      { role: 'user', content: JSON.stringify(request) },
-    ];
-    const raw = await this.callModel(this.nutritionModel, prompt, 'nutrition');
-    const schema = z.object({
-      advice: z.array(
-        z.object({
-          title: z.string(),
-          detail: z.string(),
-          category: z.string().optional(),
-        }),
-      ),
-    });
-    return schema.parse(raw);
-  }
-
-  async generateRecipe(payload: {
-    note?: string;
-    meal_slot?: string;
-    meal_type?: string;
-    difficulty?: string;
-    budget_per_meal?: number;
-  }) {
-    const toNum = (v: any) => {
-      if (v === null || v === undefined || v === '') return 0;
-      const n = Number(v);
-      return Number.isFinite(n) ? n : 0;
-    };
-
-    const schema = z.object({
-      name: z.string().optional(),
-      meal_slot: z.string().optional(),
-      meal_type: z.string().nullable().optional(),
-      difficulty: z.string().optional(),
-      base_cost_gbp: z.preprocess(toNum, z.number().optional()),
-      instructions: z.any().optional(),
-      ingredients: z
-        .array(
-          z.object({
-            ingredient_name: z.string(),
-            quantity: z.preprocess(toNum, z.number()),
-            unit: z.string().nullable().optional(),
-          }),
-        )
-        .optional(),
-    });
-    const prompt: { role: 'system' | 'user'; content: string }[] = [
-      {
-        role: 'system',
-        content:
-          'You are Recipe Generator. Return ONLY JSON with {name, meal_slot, meal_type?, difficulty?, base_cost_gbp?, instructions, ingredients:[{ingredient_name, quantity, unit}]}. Use concise instructions. Do not invent IDs.',
-      },
-      { role: 'user', content: JSON.stringify(payload) },
-    ];
-    const raw = await this.callModel(this.reviewModel, prompt, 'review');
-    return schema.parse(raw);
   }
 }

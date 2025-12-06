@@ -236,32 +236,6 @@ private async getOrCreateZeroMacroIngredient(
 }
 
 
-  // Try to resolve by id or name; if not found and a name is provided, create a minimal ingredient entry.
-  async resolveOrCreateLoose(identifier?: string) {
-    if (!identifier) return null;
-    const trimmed = identifier.trim();
-    if (!trimmed) return null;
-    const isUuid = /^[0-9a-fA-F-]{36}$/.test(trimmed);
-    if (isUuid) {
-      const byId = await this.findById(trimmed);
-      if (byId) return byId;
-    }
-    const byName = await this.findByNameCaseInsensitive(trimmed);
-    if (byName) return byName;
-    // Create minimal ingredient with safe defaults
-    const created = this.ingredientRepo.create({
-      name: trimmed,
-      category: 'custom',
-      unit_type: 'per_piece',
-      kcal_per_unit: 0,
-      protein_per_unit: 0,
-      carbs_per_unit: 0,
-      fat_per_unit: 0,
-      estimated_price_per_unit_gbp: 0,
-    });
-    return this.ingredientRepo.save(created);
-  }
-
   async searchFuzzy(query: string, limit = 5) {
     if (!query.trim()) return [];
     // Check if pg_trgm is available
