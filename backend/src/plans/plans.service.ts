@@ -456,79 +456,79 @@ export class PlansService {
     });
   }
 
-  private async swapIngredient(
-    planMealId: string,
-    ingredientIdentifierToRemove?: string | null,
-    ingredientIdentifierToAdd?: string | null,
-  ) {
-    const meal = await this.planMealRepo.findOne({
-      where: { id: planMealId },
-      relations: ['recipe', 'recipe.ingredients', 'recipe.ingredients.ingredient', 'planDay', 'planDay.weeklyPlan'],
-    });
-    if (!meal || !meal.recipe) return;
-    const recipe = meal.recipe as any;
-    const baseIngredients = recipe.ingredients || [];
-    const uuidRegex = /^[0-9a-fA-F-]{36}$/;
+  // private async swapIngredient(
+  //   planMealId: string,
+  //   ingredientIdentifierToRemove?: string | null,
+  //   ingredientIdentifierToAdd?: string | null,
+  // ) {
+  //   const meal = await this.planMealRepo.findOne({
+  //     where: { id: planMealId },
+  //     relations: ['recipe', 'recipe.ingredients', 'recipe.ingredients.ingredient', 'planDay', 'planDay.weeklyPlan'],
+  //   });
+  //   if (!meal || !meal.recipe) return;
+  //   const recipe = meal.recipe as any;
+  //   const baseIngredients = recipe.ingredients || [];
+  //   const uuidRegex = /^[0-9a-fA-F-]{36}$/;
 
-    let removeIdTarget: string | undefined;
-    if (ingredientIdentifierToRemove && ingredientIdentifierToRemove.trim()) {
-      const trimmed = ingredientIdentifierToRemove.trim();
-      if (uuidRegex.test(trimmed)) {
-        removeIdTarget = trimmed;
-      } else {
-        const resolved = await this.ingredientsService.findOrCreateByName(trimmed);
-        removeIdTarget = resolved?.id;
-      }
-    }
+  //   let removeIdTarget: string | undefined;
+  //   if (ingredientIdentifierToRemove && ingredientIdentifierToRemove.trim()) {
+  //     const trimmed = ingredientIdentifierToRemove.trim();
+  //     if (uuidRegex.test(trimmed)) {
+  //       removeIdTarget = trimmed;
+  //     } else {
+  //       const resolved = await this.ingredientsService.findOrCreateByName(trimmed);
+  //       removeIdTarget = resolved?.id;
+  //     }
+  //   }
 
-    let addIngredientId: string | undefined;
-    if (ingredientIdentifierToAdd && ingredientIdentifierToAdd.trim()) {
-      const trimmed = ingredientIdentifierToAdd.trim();
-      if (uuidRegex.test(trimmed)) {
-        const ing = await this.ingredientsService.findById(trimmed);
-        if (!ing) {
-          throw new Error(`Ingredient not found for id=${trimmed}`);
-        }
-        addIngredientId = ing.id;
-      } else {
-        const ing = await this.ingredientsService.findOrCreateByName(trimmed);
-        addIngredientId = ing.id;
-      }
-    }
+  //   let addIngredientId: string | undefined;
+  //   if (ingredientIdentifierToAdd && ingredientIdentifierToAdd.trim()) {
+  //     const trimmed = ingredientIdentifierToAdd.trim();
+  //     if (uuidRegex.test(trimmed)) {
+  //       const ing = await this.ingredientsService.findById(trimmed);
+  //       if (!ing) {
+  //         throw new Error(`Ingredient not found for id=${trimmed}`);
+  //       }
+  //       addIngredientId = ing.id;
+  //     } else {
+  //       const ing = await this.ingredientsService.findOrCreateByName(trimmed);
+  //       addIngredientId = ing.id;
+  //     }
+  //   }
 
-    const filteredIngredients = removeIdTarget
-      ? baseIngredients.filter((ri: any) => String(ri.ingredient?.id) !== removeIdTarget)
-      : baseIngredients;
+  //   const filteredIngredients = removeIdTarget
+  //     ? baseIngredients.filter((ri: any) => String(ri.ingredient?.id) !== removeIdTarget)
+  //     : baseIngredients;
 
-    if (removeIdTarget && filteredIngredients.length === baseIngredients.length) {
-      throw new Error(`No ingredient matched removal target ${removeIdTarget}`);
-    }
+  //   if (removeIdTarget && filteredIngredients.length === baseIngredients.length) {
+  //     throw new Error(`No ingredient matched removal target ${removeIdTarget}`);
+  //   }
 
-    // Create a custom recipe clone
-    const ingredientItems = filteredIngredients
-      .filter((ri: any) => ri.ingredient?.id)
-      .map((ri: any) => ({
-        ingredientId: String(ri.ingredient.id),
-        quantity: Number(ri.quantity || 0),
-        unit: ri.unit || '',
-      }))
-      .concat(
-        addIngredientId
-          ? [
-              {
-                ingredientId: addIngredientId,
-                quantity: 1,
-                unit: 'piece',
-              },
-            ]
-          : [],
-      );
+  //   // Create a custom recipe clone
+  //   const ingredientItems = filteredIngredients
+  //     .filter((ri: any) => ri.ingredient?.id)
+  //     .map((ri: any) => ({
+  //       ingredientId: String(ri.ingredient.id),
+  //       quantity: Number(ri.quantity || 0),
+  //       unit: ri.unit || '',
+  //     }))
+  //     .concat(
+  //       addIngredientId
+  //         ? [
+  //             {
+  //               ingredientId: addIngredientId,
+  //               quantity: 1,
+  //               unit: 'piece',
+  //             },
+  //           ]
+  //         : [],
+  //     );
 
-    const cloned = await this.recipesService.createCustomFromExisting({
-      baseRecipeId: recipe.id,
-      newName: `${recipe.name} (custom swap)`,
-      ingredientItems,
-    });
-    await this.setMealRecipe(meal.id, cloned.id);
-  }
+  //   const cloned = await this.recipesService.createCustomFromExisting({
+  //     baseRecipeId: recipe.id,
+  //     newName: `${recipe.name} (custom swap)`,
+  //     ingredientItems,
+  //   });
+  //   await this.setMealRecipe(meal.id, cloned.id);
+  // }
 }
