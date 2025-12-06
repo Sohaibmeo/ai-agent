@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { z } from 'zod';
 import {
   DayMealSchema,
   PlanDaySchema,
@@ -31,6 +32,52 @@ export class AgentsService {
   private llmApiKey = process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
   private logAgent(kind: string, message: string) {
     this.logger.log(`[${kind}] ${message}`);
+  }
+
+  async interpretPlanChange(payload: { note: string }) {
+    const actionSchema = z.object({
+      action: z.enum([
+        'regenerate_week',
+        'regenerate_day',
+        'regenerate_meal',
+        'swap_meal',
+        'swap_ingredient',
+        'remove_ingredient',
+        'adjust_recipe',
+        'adjust_macros',
+        'set_meal_type',
+        'avoid_ingredient_future',
+        'lock_meal',
+        'lock_day',
+        'set_fixed_breakfast',
+        'no_change_clarify',
+        'no_detectable_action',
+      ]),
+      targetLevel: z.enum(['week', 'day', 'meal', 'recipe']).optional(),
+      avoidIngredients: z.array(z.string()).optional(),
+      modifiers: z.record(z.string(), z.any()).optional(),
+      notes: z.string().optional(),
+    });
+    const schema = z.object({
+      actions: z.array(actionSchema).nonempty(),
+    });
+    const prompt: { role: 'system' | 'user'; content: string }[] = [
+      {
+        role: 'system',
+        content:
+          'You are Review Orchestrator. Given a user note, map it to ONE action from the provided list and return ONLY JSON.\n' +
+          'Allowed actions: regenerate_week, regenerate_day, regenerate_meal, swap_meal, swap_ingredient, remove_ingredient, adjust_recipe, adjust_macros, set_meal_type, avoid_ingredient_future, no_detectable_action.\n' +
+          'Additional actions you may emit: lock_meal, lock_day, set_fixed_breakfast, no_change_clarify.\n' +
+          'Use modifiers for macro tweaks (higher_protein, lower_carbs), meal type hints (prefer_meal_type="solid|drinkable"), or constraints (fixed_breakfast="protein shake").\n' +
+          'Return JSON: { actions: [ {action, targetLevel?, avoidIngredients?, modifiers?, notes?}, ... ] }. Do not invent IDs.',
+      },
+      {
+        role: 'user',
+        content: JSON.stringify(payload),
+      },
+    ];
+    const raw = await this.callModel(this.reviewModel, prompt, 'review');
+    return schema.parse(raw);
   }
 
   async generateDayPlanWithCoachLLM(payload: {

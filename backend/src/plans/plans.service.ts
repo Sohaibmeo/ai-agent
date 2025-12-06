@@ -438,7 +438,7 @@ export class PlansService {
     });
   }
 
-  // Orchestrator for LLM-driven week regeneration; currently logs interpreted intent only.
+  // Orchestrator for LLM-driven week regeneration; currently interprets note and routes by type.
   async regenerateWeek(payload: {
     userId: string;
     weeklyPlanId?: string;
@@ -449,35 +449,50 @@ export class PlansService {
     note?: string;
     context?: Record<string, any>;
   }) {
-    //check if plan exists
     const planId = payload.weeklyPlanId;
-    const plan = planId ? await this.weeklyPlanRepo.findOne({ where: { id: planId } }) : null;
-    if (planId && !plan) {
+    if (!planId) {
+      throw new NotFoundException('weeklyPlanId is required');
+    }
+    const plan = await this.weeklyPlanRepo.findOne({ where: { id: planId } });
+    if (!plan) {
       throw new NotFoundException('Weekly plan not found');
     }
 
-    //interpret the note using LLM to determine action type and targets we will call a agent service interpretor agent llm
+    const interpreted =
+      payload.note && payload.note.trim()
+        ? await this.agentsService.interpretPlanChange({ note: payload.note })
+        : { actions: [{ action: 'regenerate_week', targetLevel: 'week', weeklyPlanId: planId, modifiers: {} }] };
+    const firstAction = Array.isArray((interpreted as any)?.actions)
+      ? (interpreted as any).actions[0]
+      : null;
 
-
-
-    if (payload.type === 'swap-inside-recipe' || (payload.type === 'auto-swap-with-context' && payload.note)) {
-      // we will have to make a new agent llm service that will take current recipe as context and user note
-      // and then will return us a new recipe and we can replace the current recipe with the new one
-    } else if (payload.type === 'auto-swap-no-text' || (payload.type === 'auto-swap-with-context' && !payload.note)) {
-      // so we will simply make a generateMeal llm in agent service and then call it here to give us a new recipe on its own
-      // and then we will update our current recipe with the new one
-    } else if (payload.planDayIds?.length && planId) {
-      // for this one we will make a similar function like generate week and will update the current plan day with new meals
-      // our function will take the current day as context and user note as well to generate a new day
-      for (const dayId of payload.planDayIds) {
-       // I beleive the llm can be same as generate week just with more context
-      }
-    } else if (planId) {
-      // regenerate full week
-      await this.generateWeek(payload.userId, plan ? plan.week_start_date : "", true);
+    let targetLevel: 'week' | 'day' | 'meal' | 'recipe' = (firstAction?.targetLevel as any) || 'week';
+    const targetIds: Record<string, string | string[] | undefined> = { weeklyPlanId: planId };
+    if (payload.planDayIds?.length) {
+      targetLevel = 'day';
+      targetIds.planDayIds = payload.planDayIds;
+    }
+    if (payload.planMealId) {
+      targetLevel = 'meal';
+      targetIds.planMealId = payload.planMealId;
+    }
+    if (payload.recipeId) {
+      targetLevel = 'recipe';
+      targetIds.recipeId = payload.recipeId;
     }
 
-    return "Here we will return the updated plan after regeneration";
+    // TODO: wire actual execution paths once interpreter outputs are validated
+    return {
+      ok: true,
+      interpreted,
+      chosenAction: firstAction,
+      planId,
+      targetLevel,
+      targetIds,
+      type: payload.type,
+      note: payload.note,
+      context: payload.context,
+    };
   }
 
   private async logAction(entry: {
