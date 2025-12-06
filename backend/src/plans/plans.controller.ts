@@ -56,6 +56,13 @@ export class PlansController {
     return this.plansService.saveCustomRecipe(body.planMealId, body.newName, body.ingredientItems);
   }
 
+  @Post('ai-plan-swap')
+  aiPlanSwap(@Body() body: any) {
+    // eslint-disable-next-line no-console
+    console.log('[ai-plan-swap] request', JSON.stringify(body));
+    return { ok: true, received: body };
+  }
+
   @Get(':id')
   getById(@Param('id') id: string) {
     return this.plansService.findById(id);

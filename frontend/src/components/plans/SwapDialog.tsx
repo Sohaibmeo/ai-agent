@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRecipeCandidates } from '../../hooks/useRecipeCandidates';
 import { DEMO_USER_ID } from '../../lib/config';
 import { notify } from '../../lib/toast';
-import { autoSwapMeal } from '../../api/plans';
+import { aiPlanSwap } from '../../api/plans';
 
 interface SwapDialogProps {
   open: boolean;
@@ -49,25 +49,22 @@ export function SwapDialog({ open, mealSlot, planMealId, onClose, onSelect }: Sw
   if (!open) return null;
 
   const autoPick = async () => {
-    if (!planMealId) {
-      const choice = filtered[0] || candidates?.[0];
-      if (choice) {
-        onSelect(choice.id);
-        onClose();
-        notify.success('Auto-selected a replacement');
-      }
-      return;
-    }
     try {
       setIsAutoPicking(true);
-      const res = await autoSwapMeal({ planMealId, userId: DEMO_USER_ID, note: autoNote || undefined });
-      const chosenId = res.chosenRecipeId;
-      notify.success('Auto-selected a replacement');
+      const payload = {
+        type: autoNote.trim() ? 'auto-swap-with-context' : 'auto-swap-no-text',
+        userId: DEMO_USER_ID,
+        planMealId,
+        note: autoNote.trim() || undefined,
+        context: { source: 'swap-dialog', mealSlot },
+      };
+      const res: any = await aiPlanSwap(payload);
+      const chosenId = res?.chosenRecipeId || filtered[0]?.id || candidates?.[0]?.id;
+      notify.success('Request sent');
       onClose();
-      // Trigger parent refresh via onSelect for consistency
       if (chosenId) onSelect(chosenId);
     } catch (e) {
-      notify.error('Could not auto-select a meal');
+      notify.error('Could not send request');
     } finally {
       setIsAutoPicking(false);
     }

@@ -11,6 +11,17 @@ export class RecipesController {
     return this.recipesService.findAll();
   }
 
+  @Get('candidates')
+  async candidates(@Query('userId') userId: string, @Query('mealSlot') mealSlot?: string) {
+    if (!userId) {
+      throw new Error('userId is required');
+    }
+    return this.recipesService.findCandidatesForUser({
+      userId,
+      mealSlot: mealSlot || undefined,
+    });
+  }
+
   @Get(':id')
   async getOne(@Param('id') id: string) {
     return this.recipesService.findOneDetailed(id);

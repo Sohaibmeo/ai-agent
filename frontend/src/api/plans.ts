@@ -42,14 +42,6 @@ export function setMealRecipe(body: { planMealId: string; newRecipeId: string })
   return apiClient.post<WeeklyPlan>('/plans/set-meal-recipe', body);
 }
 
-export function autoSwapMeal(body: { planMealId: string; userId: string; note?: string }) {
-  return apiClient.post<{ chosenRecipeId: string }>('/plans/auto-swap', body);
-}
-
-export function aiAdjustMeal(planMealId: string, userId: string, note: string) {
-  return apiClient.post(`/plans/meal/${planMealId}/ai-adjust`, { userId, note });
-}
-
 export function activatePlan(planId: string) {
   return apiClient.post<WeeklyPlan>('/plans/activate', { planId });
 }
@@ -64,4 +56,8 @@ export function saveCustomRecipe(payload: {
   ingredientItems: { ingredientId: string; quantity: number; unit: string }[];
 }) {
   return apiClient.post('/plans/save-custom-recipe', payload);
+}
+
+export function aiPlanSwap(payload: any) {
+  return apiClient.post('/plans/ai-plan-swap', payload);
 }
