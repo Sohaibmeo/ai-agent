@@ -461,19 +461,23 @@ export class PlansService {
 
 
     if (payload.type === 'swap-inside-recipe' || (payload.type === 'auto-swap-with-context' && payload.note)) {
-
+      // we will have to make a new agent llm service that will take current recipe as context and user note
+      // and then will return us a new recipe and we can replace the current recipe with the new one
     } else if (payload.type === 'auto-swap-no-text' || (payload.type === 'auto-swap-with-context' && !payload.note)) {
-      
+      // so we will simply make a generateMeal llm in agent service and then call it here to give us a new recipe on its own
+      // and then we will update our current recipe with the new one
     } else if (payload.planDayIds?.length && planId) {
+      // for this one we will make a similar function like generate week and will update the current plan day with new meals
+      // our function will take the current day as context and user note as well to generate a new day
       for (const dayId of payload.planDayIds) {
-        // put the logic to change the day here?
+       // I beleive the llm can be same as generate week just with more context
       }
     } else if (planId) {
       // regenerate full week
       await this.generateWeek(payload.userId, plan ? plan.week_start_date : "", true);
     }
 
-    return "Goodbye";
+    return "Here we will return the updated plan after regeneration";
   }
 
   private async logAction(entry: {
