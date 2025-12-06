@@ -9,7 +9,7 @@ import { ShoppingListService } from '../shopping-list/shopping-list.service';
 import { PreferencesService } from '../preferences/preferences.service';
 import { Logger } from '@nestjs/common';
 import { IngredientsService } from '../ingredients/ingredients.service';
-import { AgentsService } from 'agents/agents.service';
+import { AgentsService } from '../agents/agents.service';
 
 @Injectable()
 export class PlansService {
@@ -436,6 +436,73 @@ export class PlansService {
       where: { id: meal.planDay.weeklyPlan.id },
       relations: ['days', 'days.meals', 'days.meals.recipe'],
     });
+  }
+
+  // Orchestrator for LLM-driven week regeneration; currently logs interpreted intent only.
+  async regenerateWeek(payload: {
+    userId: string;
+    weeklyPlanId?: string;
+    planDayIds?: string[];
+    planMealId?: string;
+    recipeId?: string;
+    type?: string;
+    note?: string;
+    context?: Record<string, any>;
+  }) {
+    const planId = payload.weeklyPlanId;
+    if (!planId) {
+      throw new Error('weeklyPlanId is required');
+    }
+    const plan = await this.weeklyPlanRepo.findOne({
+      where: { id: planId },
+      relations: ['days', 'days.meals', 'days.meals.recipe'],
+    });
+    if (!plan) {
+      throw new Error('Weekly plan not found');
+    }
+
+    const interpreted = payload.note ? this.interpretNote(payload.note) : { intent: 'regenerate_week', modifiers: {} };
+    this.logger.log(
+      `regenerateWeek intent user=${payload.userId} plan=${planId} note=${payload.note ? payload.note.slice(0, 120) : 'none'} interpreted=${JSON.stringify(interpreted)} ctx=${JSON.stringify(payload.context)}`,
+    );
+
+    // For now, just return the interpreted payload and incoming targeting so we can observe wiring.
+    return {
+      ok: true,
+      interpreted,
+      planId,
+      planDayIds: payload.planDayIds,
+      planMealId: payload.planMealId,
+      recipeId: payload.recipeId,
+      type: payload.type,
+      note: payload.note,
+      context: payload.context,
+    };
+  }
+
+  private interpretNote(note: string) {
+    const lower = note.toLowerCase();
+    const avoidIngredients: string[] = [];
+    const modifiers: Record<string, any> = {};
+
+    if (lower.includes('no avocado') || lower.includes('avoid avocado') || lower.includes('without avocado')) {
+      avoidIngredients.push('avocado');
+    }
+    if (lower.includes('healthier') || lower.includes('lighter') || lower.includes('cleaner')) {
+      modifiers.makeHealthier = true;
+    }
+    if (lower.includes('higher protein') || lower.includes('more protein') || lower.includes('protein')) {
+      modifiers.higherProtein = true;
+    }
+    if (lower.includes('cheaper') || lower.includes('lower cost') || lower.includes('budget')) {
+      modifiers.lowerCost = true;
+    }
+
+    return {
+      intent: 'regenerate_week',
+      avoidIngredients: avoidIngredients.length ? avoidIngredients : undefined,
+      modifiers,
+    };
   }
 
   private async logAction(entry: {

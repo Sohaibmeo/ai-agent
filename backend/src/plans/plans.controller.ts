@@ -60,7 +60,19 @@ export class PlansController {
   aiPlanSwap(@Body() body: any) {
     // eslint-disable-next-line no-console
     console.log('[ai-plan-swap] request', JSON.stringify(body));
-    return { ok: true, received: body };
+    if (body?.weeklyPlanId && body.userId) {
+      return this.plansService.regenerateWeek({
+        userId: body.userId,
+        weeklyPlanId: body.weeklyPlanId,
+        planDayIds: body.planDayIds,
+        planMealId: body.planMealId,
+        recipeId: body.recipeId,
+        type: body.type,
+        note: body.note,
+        context: body.context,
+      });
+    }
+    return { ok: true, received: body, warning: 'weeklyPlanId and userId are required' };
   }
 
   @Get(':id')
