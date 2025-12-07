@@ -94,7 +94,7 @@ export function AgentPipelineProvider({ children }: { children: ReactNode }) {
   });
 
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimer = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   type ServerPipelineStep = {
     id: string;

@@ -198,10 +198,7 @@ export function AgentPipelineModal() {
           )}
         </div>
 
-        <div className="mt-6 flex items-center justify-between text-xs text-slate-300">
-          <span className={hasError ? 'text-red-300' : 'text-slate-300'}>
-            {statusText(visibleStep, hasError ? state.errorMessage : undefined)}
-          </span>
+        <div className="mt-6 flex items-center justify-end text-xs text-slate-300">
           {(() => {
             const label = state.closing ? 'Closing...' : showClose ? 'Close' : 'Please wait';
             return (

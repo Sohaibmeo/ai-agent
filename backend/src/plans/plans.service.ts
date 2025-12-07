@@ -432,7 +432,7 @@ export class PlansService {
                 stage: 'ingredients',
                 mealsCreated: totalMeals,
               },
-              startProgress + Math.round((nextProgress - startProgress) * 0.4),
+              startProgress + Math.round((nextProgress - startProgress) * 0.6),
               `${dayName}: ingredient checks`,
             );
           }
@@ -456,6 +456,21 @@ export class PlansService {
           this.logger.log(
             `generateWeek day=${dayIdx} dayGenerator meals=${dayPlan.meals?.length || 0}`,
           );
+          if (pipeline) {
+            this.markPipelineStep(
+              pipeline,
+              'generate-days',
+              'running',
+              {
+                currentDay: dayIdx + 1,
+                totalDays,
+                dayName,
+                stage: 'recipes',
+              },
+              startProgress + Math.round((nextProgress - startProgress) * 0.25),
+              `${dayName}: drafting recipes`,
+            );
+          }
           for (const m of dayPlan.meals || []) {
             const slot =
               typeof m.meal_slot === 'string'
@@ -508,6 +523,27 @@ export class PlansService {
                 currentDay: dayIdx + 1,
                 totalDays,
                 dayName,
+                stage: 'aligning',
+                mealsCreated: totalMeals,
+                dailyMacros: {
+                  kcal: currentDayKcal,
+                  protein: currentDayProtein,
+                  cost: currentDayCost,
+                },
+              },
+              startProgress + Math.round((nextProgress - startProgress) * 0.5),
+              `${dayName}: aligning ingredients & macros`,
+            );
+          }
+          if (pipeline) {
+            this.markPipelineStep(
+              pipeline,
+              'generate-days',
+              'running',
+              {
+                currentDay: dayIdx + 1,
+                totalDays,
+                dayName,
                 stage: 'ingredients',
                 mealsCreated: totalMeals,
                 dailyMacros: {
@@ -516,7 +552,7 @@ export class PlansService {
                   cost: currentDayCost,
                 },
               },
-              startProgress + Math.round((nextProgress - startProgress) * 0.6),
+              startProgress + Math.round((nextProgress - startProgress) * 0.8),
               `${dayName}: ingredient recognition & pricing`,
             );
           }
