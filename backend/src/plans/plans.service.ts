@@ -461,9 +461,7 @@ export class PlansService {
         type: 'bulk_edit_days',
         weeklyPlanId: payload.weeklyPlanId,
         planDayIds: payload.planDayIds,
-        hint: 'user_selected_multiple_days',
         hasText,
-        rawType: payload.type,
       };
     }
 
@@ -473,9 +471,7 @@ export class PlansService {
         type: 'edit_day',
         weeklyPlanId: payload.weeklyPlanId,
         planDayIds: payload.planDayIds,
-        hint: 'single_day_edit',
         hasText,
-        rawType: payload.type,
       };
     }
 
@@ -487,9 +483,7 @@ export class PlansService {
           type: 'swap_meal_auto',
           weeklyPlanId: payload.weeklyPlanId,
           planMealId: payload.planMealId,
-          hint: 'auto_swap_without_text',
           hasText,
-          rawType: payload.type,
         };
       }
 
@@ -498,9 +492,7 @@ export class PlansService {
         type: 'meal_text_edit',
         weeklyPlanId: payload.weeklyPlanId,
         planMealId: payload.planMealId,
-        hint: 'user_described_meal_change',
         hasText,
-        rawType: payload.type,
       };
     }
 
@@ -508,9 +500,7 @@ export class PlansService {
     return {
       type: 'plan_level_freeform',
       weeklyPlanId: payload.weeklyPlanId,
-      hint: 'no_explicit_ids',
       hasText,
-      rawType: payload.type,
     };
   }
 
@@ -542,7 +532,7 @@ export class PlansService {
     }
 
     // 3) LLM interpreter: map actionContext + note -> JSON instruction
-    const reviewInstruction: ReviewInstruction = await this.agentsService.interpretReviewAction({
+    let reviewInstruction: ReviewInstruction = await this.agentsService.interpretReviewAction({
       userId,
       weeklyPlanId: plan.id,
       actionContext,
@@ -554,6 +544,54 @@ export class PlansService {
       },
       currentPlanSummary: undefined, // TODO: plug in a real summary later if needed
     });
+
+    // Safety net: if LLM still returns no_detectable_action, force a sensible default
+    if (
+      reviewInstruction.action === 'no_detectable_action' ||
+      reviewInstruction.action === 'no_change_clarify'
+    ) {
+      const hasNote = typeof payload.note === 'string' && payload.note.trim().length > 0;
+      const hasExplicitTarget =
+        !!actionContext.planMealId ||
+        (Array.isArray(actionContext.planDayIds) && actionContext.planDayIds.length > 0);
+
+      if (hasNote || hasExplicitTarget) {
+        this.logger.warn(
+          `[PlansService] Overriding LLM no_detectable_action for type=${actionContext.type}`,
+        );
+
+        // Simple deterministic fallback based on actionContext.type
+        if (actionContext.type === 'bulk_edit_days') {
+          reviewInstruction = {
+            action: 'regenerate_day',
+            targetLevel: 'day',
+            targetIds: {
+              planDayIds: actionContext.planDayIds || [],
+            },
+          } as ReviewInstruction;
+        } else if (actionContext.type === 'edit_day') {
+          reviewInstruction = {
+            action: 'regenerate_day',
+            targetLevel: 'day',
+            targetIds: {
+              planDayId: actionContext.planDayIds?.[0],
+            },
+          } as ReviewInstruction;
+        } else if (actionContext.type === 'meal_text_edit') {
+          reviewInstruction = {
+            action: 'swap_meal',
+            targetLevel: 'meal',
+            targetIds: { planMealId: actionContext.planMealId },
+          } as ReviewInstruction;
+        } else if (actionContext.type === 'plan_level_freeform') {
+          reviewInstruction = {
+            action: 'regenerate_week',
+            targetLevel: 'week',
+            targetIds: { weeklyPlanId: plan.id },
+          } as ReviewInstruction;
+        }
+      }
+    }
 
     // 4) Execute the instruction (calls generators / swappers / recipe adjustors)
     await this.executeReviewInstruction(userId, plan, reviewInstruction, payload.note);
