@@ -53,17 +53,30 @@ export class AgentsService {
       'no_detectable_action',
     ] as const;
 
+    const unwrapActionShape = (item: any) => {
+      if (item && typeof item === 'object' && !Array.isArray(item) && !item.action) {
+        const keys = Object.keys(item);
+        if (keys.length === 1 && allowedActions.includes(keys[0] as any)) {
+          return { action: keys[0], ...(item as any)[keys[0]] };
+        }
+      }
+      return item;
+    };
+
     const actionSchema = z.object({
       action: z.string(),
-      targetLevel: z.enum(['week', 'day', 'meal', 'recipe']).optional(),
-      avoidIngredients: z.array(z.string()).optional(),
+      targetLevel: z.union([z.enum(['week', 'day', 'meal', 'recipe']), z.string(), z.null()]).optional(),
+      avoidIngredients: z.union([z.array(z.string()), z.null()]).optional(),
       modifiers: z
         .union([
           z.record(z.string(), z.any()),
           z.array(z.string()).transform((arr) => ({ flags: arr })),
+          z.null(),
         ])
         .optional(),
-      notes: z.string().optional(),
+      notes: z
+        .union([z.string(), z.array(z.string()).transform((arr) => arr.join('; '))])
+        .optional(),
     });
     const schema = z.object({
       actions: z.array(actionSchema).nonempty(),
@@ -85,14 +98,23 @@ export class AgentsService {
     ];
     const raw = await this.callModel(this.reviewModel, prompt, 'review');
     this.logger.log(`[review] interpret raw=${JSON.stringify(raw)}`);
-    const parsed = schema.parse(raw);
+    const normalizedRaw =
+      raw && Array.isArray((raw as any).actions)
+        ? { ...raw, actions: (raw as any).actions.map(unwrapActionShape) }
+        : raw;
+    const parsed = schema.parse(normalizedRaw);
     const normalizedActions = (parsed.actions || []).map((act) => {
       const cleanedModifiers: Record<string, any> | undefined = Array.isArray((act as any)?.modifiers)
         ? { flags: act.modifiers }
         : act.modifiers && typeof act.modifiers === 'object'
           ? act.modifiers
           : undefined;
-      const normalized = { ...act, modifiers: cleanedModifiers };
+      const rawTarget = (act as any)?.targetLevel;
+      const cleanedTargetLevel =
+        rawTarget && rawTarget !== null && ['week', 'day', 'meal', 'recipe'].includes(rawTarget)
+          ? rawTarget
+          : undefined;
+      const normalized = { ...act, modifiers: cleanedModifiers, targetLevel: cleanedTargetLevel };
       if (allowedActions.includes(act.action as any)) return normalized;
       return { ...normalized, action: 'no_detectable_action', notes: `unrecognized_action:${act.action}` };
     });
@@ -142,11 +164,23 @@ export class AgentsService {
       },
       { role: 'user', content: JSON.stringify(payload) },
     ];
-    const raw = await this.callModel(this.reviewModel, prompt, 'review');
-    this.logger.log(
-      `[review] generateRecipe raw=${JSON.stringify(raw)} input=${JSON.stringify(payload)}`,
-    );
-    return schema.parse(raw);
+    const maxRetries = 2;
+    let lastErr: any;
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      try {
+        const raw = await this.callModel(this.reviewModel, prompt, 'review');
+        this.logger.log(
+          `[review] generateRecipe raw=${JSON.stringify(raw)} input=${JSON.stringify(payload)} attempt=${attempt + 1}`,
+        );
+        return schema.parse(raw);
+      } catch (err) {
+        lastErr = err;
+        this.logger.error(
+          `[review] generateRecipe parse_failed attempt=${attempt + 1} err=${(err as any)?.message || err}`,
+        );
+      }
+    }
+    throw lastErr;
   }
 
   async generateDayPlanWithCoachLLM(payload: {
@@ -159,6 +193,7 @@ export class AgentsService {
     };
     meal_slots: string[];
     maxRetries?: number;
+    note?: string;
   }): Promise<LlmPlanDay> {
     const perMealBudget =
       payload.week_state.weekly_budget_gbp && payload.meal_slots.length
@@ -201,7 +236,7 @@ export class AgentsService {
         '- Favor ingredients the user is likely to like; avoid disliked items if provided.\n' +
         '- Honor weekly_budget_gbp and per-meal budget hints; small overruns are OK but stay close.\n' +
         '- Align with user goal (lose/maintain/gain weight) by keeping total day kcal near the daily target and providing good protein coverage.\n' +
-        '- If you must deviate from diet/allergy/budget/goal, explain briefly in compliance_notes per meal.\n' +
+        '- If a note is provided, incorporate those user instructions and preferences explicitly.\n' +
         '- You may roughly allocate daily_kcal and daily_protein across meals and record that in target_kcal and target_protein per meal.\n' +
         '- Use simple, realistic ingredients available in a typical UK supermarket.\n' +
         '- Avoid very niche or branded ingredients.\n' +
@@ -230,6 +265,7 @@ export class AgentsService {
         diet_type: payload.profile?.diet_type,
         allergy_keys: payload.profile?.allergy_keys,
         goal: payload.profile?.goal,
+        note: payload.note,
       }),
     },
   ];

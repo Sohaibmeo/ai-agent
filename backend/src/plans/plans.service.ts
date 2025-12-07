@@ -657,12 +657,95 @@ export class PlansService {
   private async regenerateDay(userId: string, planDayId: string, note?: string) {
     const day = await this.planDayRepo.findOne({
       where: { id: planDayId },
-      relations: ['meals', 'weeklyPlan', 'weeklyPlan.user'],
+      relations: ['meals', 'weeklyPlan', 'weeklyPlan.user', 'weeklyPlan.days'],
     });
     if (!day) return;
-    this.logger.log(`[review] regenerateDay day=${planDayId} meals=${(day.meals || []).length}`);
-    for (const meal of day.meals || []) {
-      await this.regenerateMeal(meal.id, { userId, note });
+    const profile = await this.usersService.getProfile(userId);
+    const targets = calculateTargets(profile);
+    const mealSlots =
+      (day.meals || []).map((m) => m.meal_slot).filter(Boolean).length > 0
+        ? (day.meals || []).map((m) => m.meal_slot)
+        : ['breakfast', 'lunch', 'dinner', 'snack'];
+    const remainingDays =
+      (day.weeklyPlan?.days?.length || 7) - (typeof (day as any).day_index === 'number' ? (day as any).day_index : 0);
+
+    this.logger.log(
+      `[review] regenerateDay (coach) day=${planDayId} slots=${mealSlots.join(',')} targets_kcal=${targets.dailyCalories} targets_protein=${targets.dailyProtein}`,
+    );
+
+    const llmDay = await this.agentsService.generateDayPlanWithCoachLLM({
+      profile,
+      day_index: (day as any).day_index ?? 0,
+      week_state: {
+        week_start_date: day.weeklyPlan?.week_start_date || '',
+        weekly_budget_gbp: profile.weekly_budget_gbp,
+        used_budget_gbp: 0,
+        remaining_days: remainingDays > 0 ? remainingDays : 1,
+        notes: note,
+      },
+      targets: {
+        daily_kcal: targets.dailyCalories,
+        daily_protein: targets.dailyProtein,
+      },
+      meal_slots: mealSlots,
+      note,
+    });
+
+    const existingMeals = day.meals || [];
+    const mealsBySlot: Record<string, PlanMeal> = {};
+    for (const m of existingMeals) {
+      mealsBySlot[m.meal_slot] = m;
+    }
+
+    for (const mealSpec of llmDay.meals || []) {
+      const slot = mealSpec.meal_slot || 'meal';
+      const mealEntity =
+        mealsBySlot[slot] ||
+        this.planMealRepo.create({
+          meal_slot: slot,
+          portion_multiplier: 1,
+          planDay: day,
+        });
+
+      const created = await this.recipesService.createRecipeFromPlannedMeal({
+        name: mealSpec.name || `Generated meal ${Date.now()}`,
+        mealSlot: slot,
+        mealType: (mealSpec as any).meal_type || 'solid',
+        difficulty: (mealSpec as any).difficulty || profile.max_difficulty || 'easy',
+        userId,
+        instructions:
+          Array.isArray(mealSpec.instructions) && mealSpec.instructions.length
+            ? mealSpec.instructions.join('\n')
+            : typeof mealSpec.instructions === 'string'
+              ? mealSpec.instructions
+              : undefined,
+        ingredients: (mealSpec.ingredients || []).map((ing: any) => ({
+          ingredient_name: ing.ingredient_name,
+          quantity: Number(ing.quantity || 0),
+          unit: ing.unit || 'g',
+        })),
+        source: 'llm',
+        isSearchable: false,
+        priceEstimated: true,
+      });
+
+      mealEntity.recipe = created as any;
+      const portion = Number(mealEntity.portion_multiplier || 1);
+      mealEntity.meal_kcal = created.base_kcal ? Number(created.base_kcal) * portion : mealEntity.meal_kcal;
+      mealEntity.meal_protein = created.base_protein ? Number(created.base_protein) * portion : mealEntity.meal_protein;
+      mealEntity.meal_carbs = created.base_carbs ? Number(created.base_carbs) * portion : mealEntity.meal_carbs;
+      mealEntity.meal_fat = created.base_fat ? Number(created.base_fat) * portion : mealEntity.meal_fat;
+      mealEntity.meal_cost_gbp = created.base_cost_gbp ? Number(created.base_cost_gbp) * portion : mealEntity.meal_cost_gbp;
+      await this.planMealRepo.save(mealEntity);
+      mealsBySlot[slot] = mealEntity;
+    }
+
+    // Optionally remove meals not in new plan
+    const newSlots = new Set((llmDay.meals || []).map((m) => m.meal_slot || 'meal'));
+    for (const existing of existingMeals) {
+      if (!newSlots.has(existing.meal_slot)) {
+        await this.planMealRepo.remove(existing);
+      }
     }
   }
 
