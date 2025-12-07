@@ -30,6 +30,7 @@ export function SwapDialog({
   const [autoNote, setAutoNote] = useState('');
   const [isAutoPicking, setIsAutoPicking] = useState(false);
   const { runWithLlmLoader } = useLlmAction({
+    kind: 'review-plan',
     title: 'Adjusting your plan with AI...',
     subtitle: 'We are finding a better meal for this slot while keeping your goals in mind.',
   });

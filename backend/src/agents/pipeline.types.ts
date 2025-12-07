@@ -4,6 +4,8 @@ export interface PipelineStep {
   id: string;
   label: string;
   status: PipelineStepStatus;
+  detail?: string;
+  progressHint?: number;
   startedAt?: string;
   finishedAt?: string;
   meta?: Record<string, any>;
@@ -14,4 +16,6 @@ export interface AgentPipelineSummary {
   steps: PipelineStep[];
   startedAt: string;
   finishedAt?: string;
+  progress: number;
+  currentStepId?: string;
 }

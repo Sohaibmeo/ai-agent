@@ -22,10 +22,12 @@ export function PlansPage() {
   const { data: plansList } = usePlansList();
   const { data: profile, saveProfile } = useProfile();
   const { runWithLlmLoader: runPlanGeneration } = useLlmAction({
+    kind: 'generate-week',
     title: 'Generating your weekly plan...',
     subtitle: 'Your AI coach is planning meals around your macros and budget.',
   });
   const { runWithLlmLoader: runPlanAdjustment } = useLlmAction({
+    kind: 'review-plan',
     title: 'Adjusting your plan with AI...',
     subtitle: 'We will plan safe changes for your meals while keeping targets in mind.',
   });

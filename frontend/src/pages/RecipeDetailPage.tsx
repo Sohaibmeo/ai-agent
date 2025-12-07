@@ -46,6 +46,7 @@ export function RecipeDetailPage() {
   const navigate = useNavigate();
   const { data: plan, isLoading } = useActivePlan(DEMO_USER_ID);
   const { runWithLlmLoader } = useLlmAction({
+    kind: 'adjust-recipe',
     title: 'Adjusting your recipe with AI...',
     subtitle: 'We will tweak ingredients while keeping macros and budget in mind.',
   });
@@ -79,8 +80,7 @@ export function RecipeDetailPage() {
   });
 
   const m = meal?.meal;
-  const [localRecipe, setLocalRecipe] = useState<RecipeWithIngredients | null>(null);
-  const recipe = localRecipe || recipeDetail || m?.recipe;
+  const recipe = recipeDetail || m?.recipe;
   const recipeIngredients = recipe?.ingredients || [];
 
   useEffect(() => {

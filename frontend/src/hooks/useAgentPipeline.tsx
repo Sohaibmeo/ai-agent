@@ -1,4 +1,6 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState } from 'react';
+import type { ReactNode } from 'react';
+import { defaultStepsForKind } from '../config/agentSteps';
 
 export type AgentRunKind = 'generate-week' | 'review-plan' | 'adjust-recipe' | 'generic-llm';
 
@@ -9,6 +11,10 @@ export interface AgentPipelineStep {
   label: string;
   status: AgentStepStatus;
   detail?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  progressHint?: number;
+  meta?: Record<string, any>;
 }
 
 export interface AgentPipelineState {
@@ -19,6 +25,8 @@ export interface AgentPipelineState {
   steps: AgentPipelineStep[];
   canClose: boolean;
   errorMessage?: string;
+  progress: number;
+  closing: boolean;
 }
 
 type AgentPipelineContextValue = {
@@ -27,44 +35,61 @@ type AgentPipelineContextValue = {
     kind: AgentRunKind,
     opts?: { title?: string; subtitle?: string; steps?: AgentPipelineStep[] },
   ) => void;
-  updateStep: (stepId: string, status: AgentStepStatus, detail?: string) => void;
+  updateStep: (
+    stepId: string,
+    status: AgentStepStatus,
+    detail?: string,
+    meta?: Record<string, any>,
+    progressHint?: number,
+  ) => void;
   endRun: () => void;
   setError: (message: string) => void;
 };
 
 const AgentPipelineContext = createContext<AgentPipelineContextValue | null>(null);
 
+const computeProgress = (
+  steps: AgentPipelineStep[],
+  hint?: number,
+  prevProgress = 0,
+): number => {
+  if (typeof hint === 'number' && Number.isFinite(hint)) {
+    return Math.max(prevProgress, Math.min(100, Math.round(hint)));
+  }
+  if (!steps.length) return prevProgress;
+  const total = steps.length;
+  const doneCount = steps.filter((s) => s.status === 'done').length;
+  const activeIndex = steps.findIndex((s) => s.status === 'active');
+  const base = (doneCount / total) * 100;
+  const activeBonus = activeIndex >= 0 ? (40 / total) : 0;
+  return Math.max(prevProgress, Math.min(100, Math.round(base + activeBonus)));
+};
+
+const buildSteps = (kind: AgentRunKind, overrides?: AgentPipelineStep[]): AgentPipelineStep[] => {
+  const now = new Date().toISOString();
+  const source = overrides && overrides.length ? overrides : defaultStepsForKind(kind);
+  return source.map((step, idx) => ({
+    ...step,
+    status: step.status ?? (idx === 0 ? 'active' : 'pending'),
+    startedAt: idx === 0 ? now : step.startedAt,
+  }));
+};
+
 export function AgentPipelineProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AgentPipelineState>({
     isOpen: false,
     kind: null,
     title: '',
+    subtitle: undefined,
     steps: [],
     canClose: false,
+    errorMessage: undefined,
+    progress: 0,
+    closing: false,
   });
 
   const startRun: AgentPipelineContextValue['startRun'] = (kind, opts = {}) => {
-    const defaultSteps: AgentPipelineStep[] =
-      kind === 'generate-week'
-        ? [
-            { id: 'prepare-profile', label: 'Preparing your profile & targets', status: 'active' },
-            { id: 'generate-days', label: 'Generating daily meals with the coach', status: 'pending' },
-            { id: 'save-plan', label: 'Saving plan and recomputing totals', status: 'pending' },
-            { id: 'shopping-list', label: 'Building shopping list', status: 'pending' },
-          ]
-        : kind === 'generic-llm'
-          ? [
-              { id: 'sending', label: 'Sending request', status: 'active' },
-              { id: 'thinking', label: 'LLM thinking', status: 'pending' },
-              { id: 'applying', label: 'Updating your plan', status: 'pending' },
-            ]
-          : [
-              { id: 'interpret-request', label: 'Understanding your request', status: 'active' },
-              { id: 'plan-changes', label: 'Planning safe changes to your plan', status: 'pending' },
-              { id: 'apply-changes', label: 'Applying changes to your meals', status: 'pending' },
-              { id: 'recompute', label: 'Recomputing nutrition and costs', status: 'pending' },
-            ];
-
+    const steps = buildSteps(kind, opts.steps);
     setState({
       isOpen: true,
       kind,
@@ -78,41 +103,117 @@ export function AgentPipelineProvider({ children }: { children: ReactNode }) {
       subtitle:
         opts.subtitle ??
         'This can take a little while. We will keep you updated as the agent moves through each step.',
-      steps: opts.steps ?? defaultSteps,
+      steps,
       canClose: false,
       errorMessage: undefined,
+      progress: computeProgress(steps, steps[0]?.progressHint, 0),
+      closing: false,
     });
   };
 
-  const updateStep = (stepId: string, status: AgentStepStatus, detail?: string) => {
-    setState((prev) => ({
-      ...prev,
-      steps: prev.steps.map((s) =>
-        s.id === stepId ? { ...s, status, detail: detail ?? s.detail } : s,
-      ),
-    }));
+  const updateStep: AgentPipelineContextValue['updateStep'] = (
+    stepId,
+    status,
+    detail,
+    meta,
+    progressHint,
+  ) => {
+    const now = new Date().toISOString();
+    setState((prev) => {
+      let steps = [...prev.steps];
+      let targetIndex = steps.findIndex((s) => s.id === stepId);
+      if (targetIndex === -1) {
+        steps.push({
+          id: stepId,
+          label: stepId,
+          status: 'pending',
+        });
+        targetIndex = steps.length - 1;
+      }
+
+      if (status === 'active') {
+        steps = steps.map((s, idx) =>
+          idx !== targetIndex && s.status === 'active'
+            ? { ...s, status: 'done', finishedAt: s.finishedAt ?? now }
+            : s,
+        );
+      }
+
+      steps = steps.map((s, idx) => {
+        if (idx !== targetIndex) return s;
+        const finished =
+          status === 'done' || status === 'error'
+            ? s.finishedAt ?? now
+            : s.finishedAt;
+        return {
+          ...s,
+          status,
+          detail: detail ?? s.detail,
+          startedAt: s.startedAt ?? now,
+          finishedAt: finished,
+          progressHint: progressHint ?? s.progressHint,
+          meta: meta ? { ...(s.meta || {}), ...meta } : s.meta,
+        };
+      });
+
+      const progress = computeProgress(steps, progressHint, prev.progress);
+      const allDone = steps.length > 0 && steps.every((s) => s.status === 'done');
+      const hasError = steps.some((s) => s.status === 'error');
+      const canClose = prev.canClose || allDone || hasError;
+
+      return {
+        ...prev,
+        steps,
+        progress,
+        canClose,
+      };
+    });
   };
 
   const setError = (message: string) => {
-    setState((prev) => ({
-      ...prev,
-      errorMessage: message,
-      steps: prev.steps.map((s) =>
-        s.status === 'active' || s.status === 'pending' ? { ...s, status: 'error' } : s,
-      ),
-      canClose: true,
-    }));
+    setState((prev) => {
+      const now = new Date().toISOString();
+      const steps: AgentPipelineStep[] = prev.steps.map((s) =>
+        s.status === 'active' || s.status === 'pending'
+          ? { ...s, status: 'error' as const, finishedAt: s.finishedAt ?? now }
+          : s,
+      );
+      return {
+        ...prev,
+        errorMessage: message,
+        canClose: true,
+        steps,
+        progress: Math.max(prev.progress, 100),
+      };
+    });
   };
 
   const endRun = () => {
-    setState((prev) => ({
-      ...prev,
-      isOpen: false,
-      kind: null,
-      steps: [],
-      errorMessage: undefined,
-      canClose: false,
-    }));
+    setState((prev) => {
+      const allowClose =
+        prev.canClose ||
+        prev.steps.every((s) => s.status === 'done') ||
+        !!prev.errorMessage;
+      if (!allowClose || prev.closing) return prev;
+      return { ...prev, closing: true };
+    });
+
+    setTimeout(() => {
+      setState((prev) => {
+        if (!prev.closing) return prev;
+        return {
+          isOpen: false,
+          kind: null,
+          title: '',
+          subtitle: undefined,
+          steps: [],
+          canClose: false,
+          errorMessage: undefined,
+          progress: 0,
+          closing: false,
+        };
+      });
+    }, 520);
   };
 
   return (
