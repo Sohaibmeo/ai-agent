@@ -12,6 +12,7 @@ import { IngredientsService } from '../ingredients/ingredients.service';
 import { AgentsService } from '../agents/agents.service';
 import { AiPlanSwapDto } from './dto/ai-plan-swap.dto';
 import { ReviewInstruction } from '../agents/schemas/review-instruction.schema';
+import type { AgentPipelineSummary, PipelineStep } from '../agents/pipeline.types';
 
 // Shape used between PlansService and AgentsService review interpreter.
 export interface ReviewActionContext {
@@ -45,6 +46,36 @@ export class PlansService {
     private readonly ingredientsService: IngredientsService,
     private readonly agentsService: AgentsService,
   ) { }
+
+  private initPipeline(
+    kind: AgentPipelineSummary['kind'],
+    steps: Omit<PipelineStep, 'status'>[],
+  ): AgentPipelineSummary {
+    return {
+      kind,
+      steps: steps.map((s) => ({ ...s, status: 'pending' as const })),
+      startedAt: new Date().toISOString(),
+    };
+  }
+
+  private markPipelineStep(
+    pipeline: AgentPipelineSummary,
+    stepId: string,
+    status: 'running' | 'done' | 'error',
+    meta?: Record<string, any>,
+  ) {
+    const now = new Date().toISOString();
+    pipeline.steps = pipeline.steps.map((step) => {
+      if (step.id !== stepId) return step;
+      return {
+        ...step,
+        status,
+        startedAt: step.startedAt ?? now,
+        finishedAt: status === 'done' || status === 'error' ? now : step.finishedAt,
+        meta: { ...(step.meta || {}), ...(meta || {}) },
+      };
+    });
+  }
 
   findAll() {
     return this.weeklyPlanRepo.find({
@@ -223,6 +254,18 @@ export class PlansService {
     },
   ) {
     this.logger.log(`generateWeek start user=${userId} date=${weekStartDate} useAgent=${useAgent}`);
+    let pipeline: AgentPipelineSummary | undefined;
+
+    if (useAgent) {
+      pipeline = this.initPipeline('generate-week', [
+        { id: 'prepare-profile', label: 'Prepare profile & targets' },
+        { id: 'generate-days', label: 'Generate days with agent' },
+        { id: 'save-plan', label: 'Persist plan to database' },
+        { id: 'shopping-list', label: 'Rebuild shopping list' },
+      ]);
+    }
+
+    if (pipeline) this.markPipelineStep(pipeline, 'prepare-profile', 'running');
     const profile = await this.usersService.getProfile(userId);
     if (overrides?.weeklyBudgetGbp !== undefined) {
       profile.weekly_budget_gbp = overrides.weeklyBudgetGbp;
@@ -236,6 +279,7 @@ export class PlansService {
       (profile as any).max_difficulty = overrides.maxDifficulty;
     }
     const targets = calculateTargets(profile);
+    if (pipeline) this.markPipelineStep(pipeline, 'prepare-profile', 'done');
 
     const mealSlots = ['breakfast', 'snack', 'lunch', 'dinner'].filter((slot) => {
       if (slot === 'breakfast') return profile.breakfast_enabled;
@@ -255,6 +299,10 @@ export class PlansService {
     this.logger.log(`plan persisted id=${savedPlan.id} user=${userId}`);
 
     const dayEntities: PlanDay[] = [];
+
+    if (pipeline) {
+      this.markPipelineStep(pipeline, 'generate-days', 'running');
+    }
 
     for (let dayIdx = 0; dayIdx < 7; dayIdx += 1) {
       const savedDay = await this.createPlanDay(savedPlan, dayIdx);
@@ -342,15 +390,33 @@ export class PlansService {
       dayEntities.push(savedDay);
     }
 
+    if (pipeline) {
+      this.markPipelineStep(pipeline, 'generate-days', 'done');
+    }
+
     // Recompute daily/weekly aggregates
+    if (pipeline) {
+      this.markPipelineStep(pipeline, 'save-plan', 'running');
+    }
     await this.recomputeAggregates(savedPlan.id);
+    if (pipeline) {
+      this.markPipelineStep(pipeline, 'save-plan', 'done');
+      this.markPipelineStep(pipeline, 'shopping-list', 'running');
+    }
 
     await this.shoppingListService.rebuildForPlan(savedPlan.id);
+    if (pipeline) {
+      this.markPipelineStep(pipeline, 'shopping-list', 'done');
+    }
 
     const result = await this.weeklyPlanRepo.findOne({
       where: { id: savedPlan.id },
       relations: ['days', 'days.meals', 'days.meals.recipe'],
     });
+    if (pipeline && result) {
+      pipeline.finishedAt = new Date().toISOString();
+      (result as any).agent_pipeline_summary = pipeline;
+    }
     this.logger.log(`generateWeek done id=${savedPlan.id}`);
     return result;
   }
@@ -522,16 +588,40 @@ export class PlansService {
     }
 
     const profile = await this.usersService.getProfile(userId);
+    const pipelineKind: AgentPipelineSummary['kind'] =
+      payload.context?.source === 'recipe-detail' ? 'adjust-recipe' : 'review-plan';
+    const pipeline = this.initPipeline(pipelineKind, [
+      { id: 'interpret-request', label: 'Interpret request' },
+      { id: 'plan-changes', label: 'Plan safe changes' },
+      { id: 'apply-changes', label: 'Apply changes to plan' },
+      { id: 'recompute', label: 'Recompute aggregates & shopping list' },
+    ]);
+    this.markPipelineStep(pipeline, 'interpret-request', 'running');
 
     // 1) Build normalized actionContext from the DTO
     const actionContext = this.buildReviewActionContext(payload);
+    this.markPipelineStep(pipeline, 'interpret-request', 'running', {
+      actionType: actionContext.type,
+    });
 
     // 2) Simple fast-path: pure auto swap with no text => no LLM
     if (actionContext.type === 'swap_meal_auto' && actionContext.planMealId) {
+      this.markPipelineStep(pipeline, 'interpret-request', 'done');
+      this.markPipelineStep(pipeline, 'plan-changes', 'running');
+      this.markPipelineStep(pipeline, 'plan-changes', 'done');
+      this.markPipelineStep(pipeline, 'apply-changes', 'running');
       await this.autoSwapMeal(actionContext.planMealId, userId, payload.note);
+      this.markPipelineStep(pipeline, 'apply-changes', 'done');
+      this.markPipelineStep(pipeline, 'recompute', 'running');
       await this.recomputeAggregates(plan.id);
       await this.shoppingListService.rebuildForPlan(plan.id);
-      return this.findById(plan.id);
+      this.markPipelineStep(pipeline, 'recompute', 'done');
+      pipeline.finishedAt = new Date().toISOString();
+      const updated = await this.findById(plan.id);
+      if (updated) {
+        (updated as any).agent_pipeline_summary = pipeline;
+      }
+      return updated;
     }
 
     // 3) LLM interpreter: map actionContext + note -> JSON instruction
@@ -547,6 +637,8 @@ export class PlansService {
       },
       currentPlanSummary: undefined, // TODO: plug in a real summary later if needed
     });
+    this.markPipelineStep(pipeline, 'interpret-request', 'done');
+    this.markPipelineStep(pipeline, 'plan-changes', 'running');
 
     // Safety net: if LLM still returns no_detectable_action, force a sensible default
     if (
@@ -626,6 +718,9 @@ export class PlansService {
     }
 
     // 4) Execute the instruction (calls generators / swappers / recipe adjustors)
+    this.markPipelineStep(pipeline, 'plan-changes', 'done');
+    this.markPipelineStep(pipeline, 'apply-changes', 'running');
+    this.markPipelineStep(pipeline, 'recompute', 'running');
     await this.executeReviewInstruction(userId, plan, reviewInstruction, payload.note);
 
     await this.logAction({
@@ -639,7 +734,15 @@ export class PlansService {
       success: true,
     });
 
-    return this.findById(plan.id);
+    this.markPipelineStep(pipeline, 'apply-changes', 'done');
+    this.markPipelineStep(pipeline, 'recompute', 'done');
+    pipeline.finishedAt = new Date().toISOString();
+
+    const updatedPlan = await this.findById(plan.id);
+    if (updatedPlan) {
+      (updatedPlan as any).agent_pipeline_summary = pipeline;
+    }
+    return updatedPlan;
   }
 
   // Legacy entry point kept for compatibility with older callers.

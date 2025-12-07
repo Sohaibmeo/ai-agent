@@ -16,3 +16,15 @@ body {
 .card {
   @apply bg-white shadow-card rounded-xl border border-slate-200;
 }
+
+@keyframes progress {
+  0% {
+    transform: translateX(-40%);
+  }
+  50% {
+    transform: translateX(40%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}

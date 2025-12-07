@@ -6,19 +6,24 @@ import { ProfilePage } from './pages/ProfilePage';
 import { PlansPage } from './pages/PlansPage';
 import { GroceriesPage } from './pages/GroceriesPage';
 import { RecipeDetailPage } from './pages/RecipeDetailPage';
+import { AgentPipelineProvider } from './hooks/useAgentPipeline';
+import { AgentPipelineModal } from './components/agents/AgentPipelineModal';
 
 function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <AppShell sidebar={<Sidebar />}>
-        <Routes>
-          <Route path="/" element={<ProfilePage />} />
-          <Route path="/plans" element={<PlansPage />} />
-          <Route path="/plans/meal/:mealId" element={<RecipeDetailPage />} />
-          <Route path="/groceries" element={<GroceriesPage />} />
-        </Routes>
-      </AppShell>
-      <Toaster position="top-right" toastOptions={{ className: 'text-sm' }} />
+      <AgentPipelineProvider>
+        <AppShell sidebar={<Sidebar />}>
+          <Routes>
+            <Route path="/" element={<ProfilePage />} />
+            <Route path="/plans" element={<PlansPage />} />
+            <Route path="/plans/meal/:mealId" element={<RecipeDetailPage />} />
+            <Route path="/groceries" element={<GroceriesPage />} />
+          </Routes>
+        </AppShell>
+        <AgentPipelineModal />
+        <Toaster position="top-right" toastOptions={{ className: 'text-sm' }} />
+      </AgentPipelineProvider>
     </div>
   );
 }

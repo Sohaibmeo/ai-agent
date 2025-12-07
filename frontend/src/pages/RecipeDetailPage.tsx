@@ -10,6 +10,7 @@ import { saveCustomRecipe, aiPlanSwap } from '../api/plans';
 import { fetchIngredients } from '../api/ingredients';
 import { fetchRecipeById } from '../api/recipes';
 import type { Ingredient, RecipeWithIngredients } from '../api/types';
+import { useAgentPipeline } from '../hooks/useAgentPipeline';
 
 type IngredientRow = {
   id: string; // recipe_ingredient id
@@ -44,6 +45,7 @@ export function RecipeDetailPage() {
   const { mealId } = useParams<{ mealId: string }>();
   const navigate = useNavigate();
   const { data: plan, isLoading } = useActivePlan(DEMO_USER_ID);
+  const { startRun, updateStep, endRun, setError } = useAgentPipeline();
   const [aiNote, setAiNote] = useState('');
   const [ingredients, setIngredients] = useState<IngredientRow[]>([]);
   const [initialIngredients, setInitialIngredients] = useState<IngredientRow[]>([]);
@@ -188,6 +190,12 @@ export function RecipeDetailPage() {
     }
     try {
       setIsApplying(true);
+      startRun('adjust-recipe', {
+        title: 'Adjusting your recipe with AI...',
+        subtitle: 'We will suggest ingredient changes while keeping macros and budget in mind.',
+      });
+      updateStep('interpret-request', 'active');
+
       await aiPlanSwap({
         type: 'swap-inside-recipe',
         userId: DEMO_USER_ID,
@@ -197,9 +205,17 @@ export function RecipeDetailPage() {
         note: aiNote.trim() || undefined,
         context: { source: 'recipe-detail' },
       });
+
+      updateStep('interpret-request', 'done');
+      updateStep('plan-changes', 'done');
+      updateStep('apply-changes', 'done');
+      updateStep('recompute', 'done');
       notify.success('Request sent');
+      setTimeout(() => endRun(), 500);
     } catch (e) {
+      console.error(e);
       notify.error('Could not send request');
+      setError('The AI review failed to apply changes. Please try again.');
     } finally {
       setIsApplying(false);
     }

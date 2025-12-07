@@ -3,6 +3,7 @@ import { useRecipeCandidates } from '../../hooks/useRecipeCandidates';
 import { DEMO_USER_ID } from '../../lib/config';
 import { notify } from '../../lib/toast';
 import { aiPlanSwap } from '../../api/plans';
+import { useAgentPipeline } from '../../hooks/useAgentPipeline';
 
 interface SwapDialogProps {
   open: boolean;
@@ -28,6 +29,7 @@ export function SwapDialog({
   const [autoMode, setAutoMode] = useState<'prompt' | 'question' | null>(null);
   const [autoNote, setAutoNote] = useState('');
   const [isAutoPicking, setIsAutoPicking] = useState(false);
+  const { startRun, updateStep, endRun, setError } = useAgentPipeline();
 
   const filtered = useMemo(() => {
     const list = candidates || [];
@@ -65,6 +67,11 @@ export function SwapDialog({
     }
     try {
       setIsAutoPicking(true);
+      startRun('review-plan', {
+        title: 'Adjusting your plan with AI...',
+        subtitle: 'We are finding a better meal for this slot while keeping your goals in mind.',
+      });
+      updateStep('interpret-request', 'active');
       const payload = {
         type: autoNote.trim() ? 'auto-swap-with-context' : 'auto-swap-no-text',
         userId: DEMO_USER_ID,
@@ -75,12 +82,19 @@ export function SwapDialog({
       };
       await aiPlanSwap(payload);
       notify.success('Request sent');
+      updateStep('interpret-request', 'done');
+      updateStep('plan-changes', 'done');
+      updateStep('apply-changes', 'done');
+      updateStep('recompute', 'done');
+      setTimeout(() => endRun(), 500);
       onClose();
       if (onPlanUpdated) {
         await onPlanUpdated();
       }
     } catch (e) {
+      console.error(e);
       notify.error('Could not send request');
+      setError('The AI review failed to apply changes. Please try again.');
     } finally {
       setIsAutoPicking(false);
     }
