@@ -6,7 +6,7 @@ import { useActivePlan } from '../hooks/usePlan';
 import { DEMO_USER_ID } from '../lib/config';
 import { IngredientSwapModal } from '../components/recipes/IngredientSwapModal';
 import { notify } from '../lib/toast';
-import { saveCustomRecipe, aiAdjustMeal } from '../api/plans';
+import { saveCustomRecipe, aiPlanSwap } from '../api/plans';
 import { fetchIngredients } from '../api/ingredients';
 import { fetchRecipeById } from '../api/recipes';
 import type { Ingredient, RecipeWithIngredients } from '../api/types';
@@ -182,25 +182,24 @@ export function RecipeDetailPage() {
 
   const handleApplyAI = async () => {
     if (!m?.id) return;
-    if (!aiNote.trim()) {
-      notify.error('Please describe what you want changed.');
+    if (!plan?.id) {
+      notify.error('Missing plan id for AI changes.');
       return;
     }
     try {
       setIsApplying(true);
-      const updated: any = await aiAdjustMeal(m.id, DEMO_USER_ID, aiNote);
-      if (updated?.recipe?.ingredients) {
-        const rows = toIngredientRows(updated.recipe.ingredients);
-        setIngredients(rows);
-        setInitialIngredients(rows);
-      }
-      if (updated?.recipe) {
-        setLocalRecipe(updated.recipe);
-      }
-      setDirty(false);
-      notify.success('AI applied changes');
+      await aiPlanSwap({
+        type: 'swap-inside-recipe',
+        userId: DEMO_USER_ID,
+        weeklyPlanId: plan.id,
+        planMealId: m.id,
+        recipeId: recipe?.id,
+        note: aiNote.trim() || undefined,
+        context: { source: 'recipe-detail' },
+      });
+      notify.success('Request sent');
     } catch (e) {
-      notify.error('Could not apply AI changes');
+      notify.error('Could not send request');
     } finally {
       setIsApplying(false);
     }

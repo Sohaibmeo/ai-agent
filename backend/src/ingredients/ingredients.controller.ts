@@ -30,7 +30,7 @@ export class IngredientsController {
     }
 
     if (body.createIfMissing) {
-      const created = await this.ingredientsService.resolveOrCreateLoose(body.query);
+      const created = await this.ingredientsService.findOrCreateByName(body.query);
       return { matches: [], resolved: created };
     }
 

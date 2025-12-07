@@ -34,4 +34,7 @@ export class Ingredient {
 
   @Column({ type: 'text', array: true, default: () => 'ARRAY[]::text[]' })
   allergen_keys!: string[];
+
+  @Column({ type: 'timestamptz', default: () => 'NOW()' })
+  date_created!: Date;
 }

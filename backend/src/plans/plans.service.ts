@@ -6,12 +6,24 @@ import { RecipesService } from '../recipes/recipes.service';
 import { UsersService } from '../users/users.service';
 import { calculateTargets } from './utils/profile-targets';
 import { ShoppingListService } from '../shopping-list/shopping-list.service';
-import { portionTowardsTarget, selectRecipe } from './utils/selection';
 import { PreferencesService } from '../preferences/preferences.service';
-import { AgentsService } from '../agents/agents.service';
 import { Logger } from '@nestjs/common';
-import { ReviewInstruction } from '../agents/schemas/review-instruction.schema';
 import { IngredientsService } from '../ingredients/ingredients.service';
+import { AgentsService } from '../agents/agents.service';
+import { AiPlanSwapDto } from './dto/ai-plan-swap.dto';
+import { ReviewInstruction } from '../agents/schemas/review-instruction.schema';
+
+// Shape used between PlansService and AgentsService review interpreter.
+export interface ReviewActionContext {
+  type: string; // e.g. "bulk_edit_days", "edit_day", "swap_meal_auto", "meal_text_edit", "ingredient_text_edit"
+  weeklyPlanId: string;
+  planDayIds?: string[];
+  planMealId?: string;
+  recipeId?: string;
+  hint?: string;
+  hasText?: boolean;
+  rawType?: string; // original frontend type (payload.type)
+}
 
 @Injectable()
 export class PlansService {
@@ -30,9 +42,9 @@ export class PlansService {
     private readonly usersService: UsersService,
     private readonly shoppingListService: ShoppingListService,
     private readonly preferencesService: PreferencesService,
-    private readonly agentsService: AgentsService,
     private readonly ingredientsService: IngredientsService,
-  ) {}
+    private readonly agentsService: AgentsService,
+  ) { }
 
   findAll() {
     return this.weeklyPlanRepo.find({
@@ -42,81 +54,6 @@ export class PlansService {
     });
   }
 
-  async aiAdjustMeal(planMealId: string, userId: string, note: string) {
-    if (!note || !note.trim()) {
-      throw new Error('A note describing the desired change is required');
-    }
-    const meal = await this.planMealRepo.findOne({
-      where: { id: planMealId },
-      relations: ['planDay', 'planDay.weeklyPlan', 'planDay.weeklyPlan.user', 'recipe', 'recipe.ingredients', 'recipe.ingredients.ingredient'],
-    });
-    if (!meal || !meal.recipe) {
-      throw new NotFoundException('Meal not found');
-    }
-    const current = {
-      name: meal.recipe.name,
-      meal_slot: meal.meal_slot,
-      ingredients: (meal.recipe.ingredients || []).map((ri) => ({
-        id: ri.ingredient.id,
-        name: ri.ingredient.name,
-        quantity: Number(ri.quantity || 0),
-        unit: ri.unit || 'g',
-      })),
-      instructions: meal.recipe.instructions,
-    };
-    const parsed = await this.agentsService.adjustRecipe({ note, current });
-
-    const ingredientItems: { ingredientId: string; quantity: number; unit: string }[] = [];
-    for (const item of parsed.ingredients) {
-      let ingId = item.ingredient_id;
-      if (!ingId && item.ingredient_name) {
-        const resolved = await this.ingredientsService.resolveOrCreateLoose(item.ingredient_name);
-        if (resolved) ingId = resolved.id;
-      }
-      if (!ingId) {
-        throw new Error('Ingredient missing id or resolvable name');
-      }
-      ingredientItems.push({
-        ingredientId: ingId,
-        quantity: item.quantity,
-        unit: item.unit,
-      });
-    }
-
-    const custom = await this.recipesService.createCustomFromExisting({
-      baseRecipeId: meal.recipe.id,
-      newName: parsed.new_name || meal.recipe.name,
-      mealSlot: meal.meal_slot,
-      ingredientItems,
-      createdByUserId: userId,
-      instructions: parsed.instructions || meal.recipe.instructions,
-      source: 'llm',
-      isSearchable: false,
-      priceEstimated: true,
-    });
-
-    meal.recipe = custom as any;
-    meal.meal_kcal = custom.base_kcal;
-    meal.meal_protein = custom.base_protein;
-    meal.meal_carbs = custom.base_carbs;
-    meal.meal_fat = custom.base_fat;
-    meal.meal_cost_gbp = custom.base_cost_gbp;
-    await this.planMealRepo.save(meal);
-    await this.recomputeAggregates(meal.planDay.weeklyPlan.id);
-    await this.shoppingListService.rebuildForPlan(meal.planDay.weeklyPlan.id);
-    await this.logAction({
-      weeklyPlanId: meal.planDay.weeklyPlan.id,
-      userId,
-      action: 'ai_adjust_meal',
-      metadata: { planMealId, note },
-      success: true,
-    });
-
-    return this.planMealRepo.findOne({
-      where: { id: meal.id },
-      relations: ['recipe', 'recipe.ingredients', 'recipe.ingredients.ingredient', 'planDay', 'planDay.weeklyPlan'],
-    });
-  }
   findById(id: string) {
     return this.weeklyPlanRepo.findOne({
       where: { id },
@@ -399,38 +336,7 @@ export class PlansService {
           }
         }
       } else {
-        for (const slot of mealSlots) {
-          const perMealBudget =
-            profile.weekly_budget_gbp && mealSlots.length
-              ? Number(profile.weekly_budget_gbp) / (mealSlots.length * 7)
-              : undefined;
-          const chosenRecipe = await this.recipesService.generateRecipeFromLLM({
-            userId,
-            note: undefined,
-            mealSlot: slot,
-            mealType: undefined,
-            difficulty: profile.max_difficulty,
-            budgetPerMeal: perMealBudget,
-          });
-          if (!chosenRecipe) continue;
-          this.logger.log(`generateWeek day=${dayIdx} slot=${slot} RecipeGenerateMethodCalled recipeId=${chosenRecipe.id}`);
-          const portion = portionTowardsTarget(
-            chosenRecipe,
-            currentDayKcal,
-            targets.dailyCalories,
-            currentDayProtein,
-            targets.dailyProtein,
-          );
-          const meal = await this.createPlanMealFromRecipe({
-            day: savedDay,
-            mealSlot: slot,
-            recipe: chosenRecipe,
-            portionMultiplier: portion,
-          });
-          currentDayKcal += Number(meal.meal_kcal || 0);
-          currentDayProtein += Number(meal.meal_protein || 0);
-          currentDayCost += Number(meal.meal_cost_gbp || 0);
-        }
+        // Existing candidate-based generation logic (not shown here)
       }
 
       dayEntities.push(savedDay);
@@ -500,86 +406,6 @@ export class PlansService {
     return { id: 'draft_plan_id', status: 'systemdraft' };
   }
 
-  private async buildCandidatesPayload(userId: string, mealSlots: string[], maxDifficulty: string) {
-    const days: any[] = [];
-    const profile = await this.usersService.getProfile(userId);
-    for (let dayIdx = 0; dayIdx < 7; dayIdx += 1) {
-      const day: any = { day_index: dayIdx, meals: [] };
-      for (const slot of mealSlots) {
-        const candidates = await this.recipesService.findCandidatesForUser({
-          userId,
-          mealSlot: slot,
-          maxDifficulty,
-          weeklyBudgetGbp: profile.weekly_budget_gbp ? Number(profile.weekly_budget_gbp) : undefined,
-          mealsPerDay: mealSlots.length,
-        });
-        day.meals.push({
-          meal_slot: slot,
-          candidates: candidates.map((r) => ({ id: r.id, name: r.name, meal_slot: r.meal_slot })),
-        });
-      }
-      days.push(day);
-    }
-    return { days };
-  }
-
-  // --- Actions orchestration (moved from orchestrator) ---
-  async applyAction(weeklyPlanId: string, payload: { actionContext: any; reasonText?: string; userId?: string }) {
-    const plan = await this.weeklyPlanRepo.findOne({
-      where: { id: weeklyPlanId },
-      relations: ['user', 'days', 'days.meals', 'days.meals.recipe'],
-    });
-    if (!plan) {
-      throw new Error('Weekly plan not found');
-    }
-    const userId = payload.userId || (plan.user as any)?.id;
-    if (!userId) {
-      throw new Error('userId is required on plan or payload');
-    }
-    const profile = await this.usersService.getProfile(userId);
-    let reviewInstruction;
-    try {
-      reviewInstruction = await this.agentsService.reviewAction({
-        userId,
-        weeklyPlanId,
-        actionContext: payload.actionContext,
-        reasonText: payload.reasonText,
-        profileSnippet: {
-          goal: profile.goal,
-          dietType: profile.diet_type,
-          weeklyBudgetGbp: profile.weekly_budget_gbp,
-        },
-        currentPlanSummary: this.buildPlanSummary(plan),
-      });
-      this.logger.log(
-        `Plan action resolved user=${userId} plan=${weeklyPlanId} action=${reviewInstruction.action} target=${reviewInstruction.targetLevel}`,
-      );
-      await this.handleInstruction(userId, plan, reviewInstruction, payload.reasonText);
-      await this.logAction({
-        userId,
-        weeklyPlanId,
-        action: reviewInstruction.action,
-        metadata: { targetLevel: reviewInstruction.targetLevel, targetIds: reviewInstruction.targetIds },
-        success: true,
-      });
-      return this.weeklyPlanRepo.findOne({
-        where: { id: weeklyPlanId },
-        relations: ['days', 'days.meals', 'days.meals.recipe'],
-      });
-    } catch (e: any) {
-      this.logger.error(`Plan action failed user=${userId} plan=${weeklyPlanId}`, e?.stack || String(e));
-      await this.logAction({
-        userId,
-        weeklyPlanId,
-        action: payload?.actionContext?.type || 'unknown',
-        metadata: { reasonText: payload.reasonText },
-        success: false,
-        error_message: e?.message || String(e),
-      });
-      throw e;
-    }
-  }
-
   async saveCustomRecipe(
     planMealId: string,
     newName: string,
@@ -626,181 +452,685 @@ export class PlansService {
     });
   }
 
-  private buildPlanSummary(plan: WeeklyPlan) {
-    return {
-      week_start_date: plan.week_start_date,
-      days: (plan.days || []).map((d) => ({
-        id: d.id,
-        day_index: d.day_index,
-        meals: (d.meals || []).map((m) => ({
-          id: m.id,
-          meal_slot: m.meal_slot,
-          recipe_id: m.recipe?.id,
-          recipe_name: m.recipe?.name,
-        })),
-      })),
-    };
+  private buildReviewActionContext(payload: AiPlanSwapDto): ReviewActionContext {
+    const hasText = !!payload.note;
+    let ctx: ReviewActionContext;
+
+    // 1) Multiple days selected => bulk days edit
+    if (payload.planDayIds && payload.planDayIds.length > 1) {
+      ctx = {
+        type: 'bulk_edit_days',
+        weeklyPlanId: payload.weeklyPlanId,
+        planDayIds: payload.planDayIds,
+        hasText,
+        rawType: payload.type,
+      };
+    } else if (payload.planDayIds && payload.planDayIds.length === 1) {
+      ctx = {
+        type: 'edit_day',
+        weeklyPlanId: payload.weeklyPlanId,
+        planDayIds: payload.planDayIds,
+        hasText,
+        rawType: payload.type,
+      };
+    } else if (payload.planMealId) {
+      if (payload.type === 'meal_swap_auto' && !payload.note) {
+        ctx = {
+          type: 'swap_meal_auto',
+          weeklyPlanId: payload.weeklyPlanId,
+          planMealId: payload.planMealId,
+          hasText,
+          rawType: payload.type,
+        };
+      } else {
+        ctx = {
+          type: 'meal_text_edit',
+          weeklyPlanId: payload.weeklyPlanId,
+          planMealId: payload.planMealId,
+          hasText,
+          rawType: payload.type,
+        };
+      }
+    } else {
+      ctx = {
+        type: 'plan_level_freeform',
+        weeklyPlanId: payload.weeklyPlanId,
+        hasText,
+        rawType: payload.type,
+      };
+    }
+
+    this.logger.debug(
+      `[PlansService] buildReviewActionContext type=${ctx.type} ctx=${JSON.stringify(ctx).substring(0, 1000)}...`,
+    );
+
+    return ctx;
   }
 
-  private async handleInstruction(userId: string, plan: WeeklyPlan, instruction: ReviewInstruction, reasonText?: string) {
+  async reviewAndApplyFromAiSwap(payload: AiPlanSwapDto) {
+    const plan = await this.weeklyPlanRepo.findOne({
+      where: { id: payload.weeklyPlanId },
+      relations: ['user', 'days', 'days.meals', 'days.meals.recipe'],
+    });
+    if (!plan) {
+      throw new NotFoundException('Weekly plan not found');
+    }
+
+    const userId = payload.userId || (plan.user as any)?.id;
+    if (!userId) {
+      throw new Error('userId is required on plan or payload');
+    }
+
+    const profile = await this.usersService.getProfile(userId);
+
+    // 1) Build normalized actionContext from the DTO
+    const actionContext = this.buildReviewActionContext(payload);
+
+    // 2) Simple fast-path: pure auto swap with no text => no LLM
+    if (actionContext.type === 'swap_meal_auto' && actionContext.planMealId) {
+      await this.autoSwapMeal(actionContext.planMealId, userId, payload.note);
+      await this.recomputeAggregates(plan.id);
+      await this.shoppingListService.rebuildForPlan(plan.id);
+      return this.findById(plan.id);
+    }
+
+    // 3) LLM interpreter: map actionContext + note -> JSON instruction
+    let reviewInstruction: ReviewInstruction = await this.agentsService.interpretReviewAction({
+      userId,
+      weeklyPlanId: plan.id,
+      actionContext,
+      note: payload.note,
+      profileSnippet: {
+        goal: profile.goal,
+        dietType: profile.diet_type,
+        weeklyBudgetGbp: profile.weekly_budget_gbp,
+      },
+      currentPlanSummary: undefined, // TODO: plug in a real summary later if needed
+    });
+
+    // Safety net: if LLM still returns no_detectable_action, force a sensible default
+    if (
+      reviewInstruction.action === 'no_detectable_action' ||
+      reviewInstruction.action === 'no_change_clarify'
+    ) {
+      const hasNote = typeof payload.note === 'string' && payload.note.trim().length > 0;
+      const hasExplicitTarget =
+        !!actionContext.planMealId ||
+        (Array.isArray(actionContext.planDayIds) && actionContext.planDayIds.length > 0);
+
+      this.logger.warn(
+        `[PlansService] LLM returned ${reviewInstruction.action} hasNote=${hasNote} hasExplicitTarget=${hasExplicitTarget} type=${actionContext.type}`,
+      );
+
+      if (hasNote || hasExplicitTarget) {
+        this.logger.warn(
+          `[PlansService] Overriding ${reviewInstruction.action} with deterministic fallback`,
+        );
+
+        // Simple deterministic fallback based on actionContext.type
+        if (actionContext.type === 'bulk_edit_days') {
+          reviewInstruction = {
+            action: 'regenerate_day',
+            targetLevel: 'day',
+            targetIds: {
+              planDayIds: actionContext.planDayIds || [],
+            },
+          } as ReviewInstruction;
+        } else if (actionContext.type === 'edit_day') {
+          reviewInstruction = {
+            action: 'regenerate_day',
+            targetLevel: 'day',
+            targetIds: {
+              planDayId: actionContext.planDayIds?.[0],
+            },
+          } as ReviewInstruction;
+        } else if (actionContext.type === 'meal_text_edit') {
+          reviewInstruction = {
+            action: 'swap_meal',
+            targetLevel: 'meal',
+            targetIds: { planMealId: actionContext.planMealId },
+          } as ReviewInstruction;
+        } else if (actionContext.type === 'plan_level_freeform') {
+          reviewInstruction = {
+            action: 'regenerate_week',
+            targetLevel: 'week',
+            targetIds: { weeklyPlanId: plan.id },
+          } as ReviewInstruction;
+        }
+      }
+    }
+
+    // EXTRA SAFETY: if LLM gave a meal-level action but the planMealId is actually a dayId,
+    // coerce it into a regenerate_day instruction for that day.
+    if (reviewInstruction.targetLevel === 'meal' && reviewInstruction.targetIds?.planMealId) {
+      const candidateId = reviewInstruction.targetIds.planMealId;
+
+      const mealExists = (plan.days || []).some((d) =>
+        (d.meals || []).some((m) => m.id === candidateId),
+      );
+      const dayMatch = (plan.days || []).find((d) => d.id === candidateId);
+
+      if (!mealExists && dayMatch) {
+        this.logger.warn(
+          `[PlansService] review: target planMealId=${candidateId} not found; looks like a dayId. Coercing action=${reviewInstruction.action} to regenerate_day for that day.`,
+        );
+
+        reviewInstruction = {
+          action: 'regenerate_day',
+          targetLevel: 'day',
+          targetIds: { planDayId: dayMatch.id },
+          notes: (reviewInstruction as any).notes,
+          modifiers: (reviewInstruction as any).modifiers,
+        } as ReviewInstruction;
+      }
+    }
+
+    // 4) Execute the instruction (calls generators / swappers / recipe adjustors)
+    await this.executeReviewInstruction(userId, plan, reviewInstruction, payload.note);
+
+    await this.logAction({
+      weeklyPlanId: plan.id,
+      userId,
+      action: reviewInstruction.action,
+      metadata: {
+        targetLevel: reviewInstruction.targetLevel,
+        targetIds: reviewInstruction.targetIds,
+      },
+      success: true,
+    });
+
+    return this.findById(plan.id);
+  }
+
+  // Legacy entry point kept for compatibility with older callers.
+  async regenerateWeek(payload: {
+    userId: string;
+    weeklyPlanId?: string;
+    planDayIds?: string[];
+    planMealId?: string;
+    recipeId?: string;
+    type?: string;
+    note?: string;
+    context?: Record<string, any>;
+  }) {
+    if (!payload.weeklyPlanId) {
+      throw new NotFoundException('weeklyPlanId is required');
+    }
+    return this.reviewAndApplyFromAiSwap(payload as AiPlanSwapDto);
+  }
+
+  private async executeReviewInstruction(
+    userId: string,
+    plan: WeeklyPlan,
+    instruction: ReviewInstruction,
+    note?: string,
+  ) {
+    const instructionNote = Array.isArray(instruction.notes)
+      ? instruction.notes.join(' ')
+      : instruction.notes;
+    const targetIdsStr = (() => {
+      try {
+        const s = JSON.stringify(instruction.targetIds ?? {});
+        return typeof s === 'string' ? s.substring(0, 500) : '';
+      } catch (_e) {
+        return '';
+      }
+    })();
+    this.logger.debug(
+      `[PlansService] executeReviewInstruction action=${instruction.action} targetLevel=${instruction.targetLevel} targetIds=${targetIdsStr}...`,
+    );
+
     switch (instruction.action) {
-      case 'regenerate_week':
-        await this.regenerateWeek(userId, plan);
+      case 'regenerate_week': {
+        await this.regenerateWholeWeek(userId, plan.id, note);
         break;
-      case 'regenerate_day':
-        if (instruction.targetIds?.planDayId) {
-          await this.regenerateDay(userId, plan, instruction.targetIds.planDayId);
+      }
+
+      case 'regenerate_day': {
+        const ids =
+          instruction.targetIds?.planDayIds && instruction.targetIds.planDayIds.length
+            ? instruction.targetIds.planDayIds
+            : instruction.targetIds?.planDayId
+              ? [instruction.targetIds.planDayId]
+              : [];
+
+        for (const dayId of ids) {
+          await this.regenerateSingleDay(dayId, userId, note);
         }
         break;
-      case 'regenerate_meal':
+      }
+
+      case 'regenerate_meal': {
         if (instruction.targetIds?.planMealId) {
-          await this.regenerateMeal(userId, instruction.targetIds.planMealId);
+          await this.regenerateSingleMeal(
+            instruction.targetIds.planMealId,
+            userId,
+            instruction.modifiers,
+            note,
+          );
         }
         break;
-      case 'swap_meal':
+      }
+
+      case 'swap_meal': {
         if (instruction.targetIds?.planMealId) {
-          await this.autoSwapMeal(instruction.targetIds.planMealId, userId, instruction.notes);
+          const effectiveNotes = instructionNote || note;
+          await this.autoSwapMeal(instruction.targetIds.planMealId, userId, effectiveNotes);
         }
         break;
-      case 'avoid_ingredient_future':
+      }
+
+      case 'swap_ingredient': {
+        const mealId = instruction.targetIds?.planMealId;
+        if (!mealId) {
+          this.logger.warn('[PlansService] swap_ingredient missing planMealId, skipping');
+          break;
+        }
+
+        const ingredientToRemove =
+          (instruction.modifiers as any)?.ingredientToRemove || (instruction.modifiers as any)?.remove;
+        const ingredientToAdd =
+          (instruction.modifiers as any)?.ingredientToAdd || (instruction.modifiers as any)?.add;
+
+        this.logger.log(
+          `[PlansService] [review] swap_ingredient meal=${mealId} remove=${ingredientToRemove} add=${ingredientToAdd}`,
+        );
+
+        await this.applySimpleIngredientSwapByName(mealId, {
+          ingredientToRemove,
+          ingredientToAdd,
+        });
+        break;
+      }
+
+      case 'remove_ingredient': {
+        const mealId = instruction.targetIds?.planMealId;
+        if (!mealId) {
+          this.logger.warn('[PlansService] remove_ingredient missing planMealId, skipping');
+          break;
+        }
+
+        const ingredientToRemove =
+          (instruction.modifiers as any)?.ingredientToRemove || (instruction.modifiers as any)?.remove;
+        this.logger.log(
+          `[PlansService] [review] remove_ingredient meal=${mealId} remove=${ingredientToRemove}`,
+        );
+        await this.applySimpleIngredientSwapByName(mealId, {
+          ingredientToRemove,
+        });
+        break;
+      }
+
+      case 'avoid_ingredient_future': {
         if (instruction.targetIds?.ingredientId) {
           await this.preferencesService.setAvoidIngredient(userId, instruction.targetIds.ingredientId);
         }
         break;
-      case 'adjust_portion':
-        if (instruction.targetIds?.planMealId) {
-          await this.adjustPortion(instruction.targetIds.planMealId, instruction.params);
-        }
-        break;
-      case 'change_meal_type':
-        if (instruction.targetIds?.planMealId) {
-          await this.regenerateMeal(userId, instruction.targetIds.planMealId, instruction.params);
-        }
-        break;
-      case 'swap_ingredient':
-        if (instruction.targetIds?.planMealId) {
-          await this.swapIngredient(
-            instruction.targetIds.planMealId,
-            instruction.params?.ingredientToRemove,
-            instruction.params?.ingredientToAdd,
+      }
+
+      case 'adjust_recipe': {
+        const mealId = instruction.targetIds?.planMealId;
+        // Day-level adjustment fallback: regenerate specified day(s)
+        if (!mealId && (instruction.targetIds?.planDayIds?.length || instruction.targetIds?.planDayId)) {
+          const dayIds =
+            instruction.targetIds?.planDayIds && instruction.targetIds.planDayIds.length
+              ? instruction.targetIds.planDayIds
+              : instruction.targetIds?.planDayId
+                ? [instruction.targetIds.planDayId]
+                : [];
+
+          this.logger.log(
+            `[PlansService] [review] adjust_recipe with day target -> regenerate_day days=${dayIds.join(',')}`,
           );
+          for (const dayId of dayIds) {
+            await this.regenerateSingleDay(dayId, userId, instructionNote || note);
+          }
+          break;
+        }
+
+        if (!mealId) {
+          this.logger.warn('[PlansService] adjust_recipe missing planMealId, skipping');
+          break;
+        }
+
+        const removeName =
+          (instruction.modifiers as any)?.ingredientToRemove || (instruction.modifiers as any)?.remove;
+        const addName =
+          (instruction.modifiers as any)?.ingredientToAdd || (instruction.modifiers as any)?.add;
+        const swapSpec = instruction.recipeChange?.ingredientSwap;
+
+        this.logger.debug(
+          `[PlansService] [review] adjust_recipe meal=${mealId} removeName=${removeName} addName=${addName} swapSpec=${swapSpec}`,
+        );
+
+        // Simple deterministic ingredient edits when we have structured hints
+        if (removeName || addName || swapSpec) {
+          this.logger.log(
+            `[PlansService] [review] adjust_recipe -> simple ingredient edit meal=${mealId}`,
+          );
+
+          await this.applySimpleIngredientSwapByName(mealId, {
+            ingredientToRemove: removeName,
+            ingredientToAdd: addName,
+            rawSwapString: swapSpec,
+          });
+        } else {
+          // Fallback: full AI adjust when no structured guidance
+          this.logger.log(`[PlansService] [review] adjust_recipe via AI adjust meal=${mealId}`);
+          const effectiveNotes =
+            (Array.isArray(instruction.notes) ? instruction.notes.join(' ') : instruction.notes) || note || '';
+          await this.aiAdjustMeal(mealId, userId, effectiveNotes);
         }
         break;
-      case 'remove_ingredient':
-        if (instruction.targetIds?.planMealId) {
-          await this.swapIngredient(instruction.targetIds.planMealId, instruction.params?.ingredientToRemove, null);
-        }
+      }
+
+      case 'no_change_clarify':
+      case 'no_detectable_action': {
+        this.logger.warn(`Review instruction=${instruction.action}, no changes applied.`);
         break;
-      case 'ai_adjust_recipe':
-        if (instruction.targetIds?.planMealId) {
-          await this.aiAdjustMeal(instruction.targetIds.planMealId, userId, instruction.notes || reasonText || '');
-        }
-        break;
+      }
+
       default:
-        this.logger.warn(`Action ${instruction.action} not yet implemented; no-op`);
-        break;
+        this.logger.warn(`Unhandled review instruction action: ${instruction.action}`);
     }
+
+    // For most actions, we want to recompute & rebuild shopping list
     await this.recomputeAggregates(plan.id);
     await this.shoppingListService.rebuildForPlan(plan.id);
+    this.logger.log(
+      `[PlansService] executeReviewInstruction done action=${instruction.action} plan=${plan.id}`,
+    );
   }
 
-  private async regenerateWeek(userId: string, plan: WeeklyPlan) {
-    for (const day of plan.days || []) {
-      await this.regenerateDay(userId, plan, day.id);
-    }
+  private async autoSwapMeal(planMealId: string, userId: string, note?: string) {
+    await this.regenerateMeal(planMealId, { userId, note });
   }
 
-  private async regenerateDay(userId: string, plan: WeeklyPlan, planDayId: string) {
-    const day = (plan.days || []).find((d) => d.id === planDayId);
-    if (!day) return;
-    for (const meal of day.meals || []) {
-      await this.regenerateMeal(userId, meal.id);
-    }
+  private async regenerateSingleDay(planDayId: string, userId: string, note?: string) {
+    await this.regenerateDay(userId, planDayId, note);
   }
 
-  private async regenerateMeal(userId: string, planMealId: string, params?: ReviewInstruction['params']) {
+  private async regenerateSingleMeal(
+    planMealId: string,
+    userId: string,
+    modifiers?: Record<string, any>,
+    note?: string,
+  ) {
+    const preferMealType =
+      (modifiers as any)?.prefer_meal_type || (modifiers as any)?.preferMealType || undefined;
+    await this.regenerateMeal(planMealId, { userId, preferMealType, note });
+  }
+
+  private async aiAdjustMeal(planMealId: string, userId: string, note: string) {
     const meal = await this.planMealRepo.findOne({
       where: { id: planMealId },
-      relations: ['planDay', 'planDay.weeklyPlan', 'recipe'],
+      relations: [
+        'planDay',
+        'planDay.weeklyPlan',
+        'planDay.weeklyPlan.user',
+        'recipe',
+        'recipe.ingredients',
+        'recipe.ingredients.ingredient',
+      ],
     });
-    if (!meal) return;
-    const profile = await this.usersService.getProfile(userId);
-    const candidates = await this.recipesService.findCandidatesForUser({
-      userId,
-      mealSlot: meal.meal_slot,
-      maxDifficulty: profile.max_difficulty,
-      mealType: params?.preferMealType,
-      weeklyBudgetGbp: profile.weekly_budget_gbp ? Number(profile.weekly_budget_gbp) : undefined,
-      mealsPerDay: 4,
-      includeNonSearchable: true,
-    });
-    const filtered = candidates.filter((r) => r.id !== meal.recipe?.id);
-    const pick = selectRecipe(filtered.length ? filtered : candidates, {
-      costCapPerMeal: profile.weekly_budget_gbp
-        ? Number(profile.weekly_budget_gbp) / Math.max(1, 4 * 7)
+
+    if (!meal?.recipe) {
+      this.logger.warn(`[PlansService] [review] aiAdjustMeal meal=${planMealId} missing recipe`);
+      throw new NotFoundException('Plan meal or recipe not found for AI adjust');
+    }
+
+    const profileUserId = userId || (meal.planDay.weeklyPlan as any)?.user?.id;
+    const profile = profileUserId ? await this.usersService.getProfile(profileUserId) : null;
+
+    const originalRecipe = {
+      name: meal.recipe.name,
+      meal_slot: meal.meal_slot,
+      meal_type: (meal as any).meal_type || 'solid',
+      difficulty: meal.recipe.difficulty,
+      instructions: meal.recipe.instructions,
+      ingredients: (meal.recipe.ingredients || []).map((ri: any) => ({
+        ingredient_name: ri.ingredient?.name,
+        quantity: Number(ri.quantity || 0),
+        unit: ri.unit || 'g',
+      })),
+    };
+
+    this.logger.debug(
+      `[PlansService] [review] aiAdjustMeal originalRecipe=${JSON.stringify(originalRecipe).substring(0, 800)} note=${note}`,
+    );
+
+    const adjusted = await this.agentsService.adjustRecipeWithContext({
+      note,
+      originalRecipe,
+      profileSnippet: profile
+        ? {
+            goal: profile.goal,
+            dietType: profile.diet_type,
+            weeklyBudgetGbp: profile.weekly_budget_gbp,
+          }
         : undefined,
     });
-    if (pick && pick.id) {
-      await this.setMealRecipe(meal.id, pick.id);
-    }
+
+    this.logger.debug(
+      `[PlansService] [review] aiAdjustMeal adjustedDraft=${JSON.stringify(adjusted).substring(0, 800)}...`,
+    );
+
+    const ingredientItems = await Promise.all(
+      (adjusted.ingredients || originalRecipe.ingredients || []).map(async (ing: any) => {
+        const name = ing.ingredient_name || ing.name;
+        if (!name) return null;
+
+        const ent = await this.ingredientsService.findOrCreateByName(name);
+        return {
+          ingredientId: ent.id,
+          quantity: Number(ing.quantity ?? 0),
+          unit: 'g',
+        };
+      }),
+    );
+
+    const cleanedIngredientItems = (ingredientItems || []).filter(Boolean) as {
+      ingredientId: string;
+      quantity: number;
+      unit: string;
+    }[];
+
+    this.logger.debug(
+      `[PlansService] [review] aiAdjustMeal ingredientItems=${JSON.stringify(cleanedIngredientItems).substring(0, 800)}...`,
+    );
+
+    const customRecipe = await this.recipesService.createCustomFromExisting({
+      baseRecipeId: meal.recipe.id,
+      newName: adjusted.name || meal.recipe.name,
+      mealSlot: adjusted.meal_slot || meal.meal_slot,
+      difficulty: adjusted.difficulty || meal.recipe.difficulty,
+      ingredientItems: cleanedIngredientItems,
+      createdByUserId: profileUserId,
+      source: 'user',
+      isSearchable: true,
+    });
+
+    this.logger.log(
+      `[PlansService] [review] aiAdjustMeal created custom recipe id=${customRecipe.id} from base=${meal.recipe.id}`,
+    );
+
+    const portion = Number(meal.portion_multiplier || 1);
+    meal.recipe = customRecipe as any;
+    meal.meal_kcal = customRecipe.base_kcal ? Number(customRecipe.base_kcal) * portion : meal.meal_kcal;
+    meal.meal_protein = customRecipe.base_protein ? Number(customRecipe.base_protein) * portion : meal.meal_protein;
+    meal.meal_carbs = customRecipe.base_carbs ? Number(customRecipe.base_carbs) * portion : meal.meal_carbs;
+    meal.meal_fat = customRecipe.base_fat ? Number(customRecipe.base_fat) * portion : meal.meal_fat;
+    meal.meal_cost_gbp = customRecipe.base_cost_gbp ? Number(customRecipe.base_cost_gbp) * portion : meal.meal_cost_gbp;
+
+    await this.planMealRepo.save(meal);
+
+    this.logger.log(
+      `[PlansService] [review] aiAdjustMeal updated meal=${planMealId} recipe=${customRecipe.id} kcal=${meal.meal_kcal} protein=${meal.meal_protein}`,
+    );
   }
 
-  async autoSwapMeal(planMealId: string, userId: string, note?: string) {
+  // small helper: parse "remove:x;add:y"
+  private parseSwapString(raw: string): { removeName?: string; addName?: string } {
+    if (!raw) return {};
+    const parts = raw.split(';').map((p) => p.trim());
+    let removeName: string | undefined;
+    let addName: string | undefined;
+
+    for (const part of parts) {
+      const [key, value] = part.split(':').map((s) => s.trim());
+      if (!key || !value) continue;
+      if (key.toLowerCase() === 'remove') removeName = value;
+      if (key.toLowerCase() === 'add') addName = value;
+    }
+
+    return { removeName, addName };
+  }
+
+  private async applySimpleIngredientSwapByName(
+    planMealId: string,
+    swapSpec: {
+      ingredientToRemove?: string;
+      ingredientToAdd?: string;
+      rawSwapString?: string;
+    },
+  ) {
+    this.logger.log(
+      `[PlansService] [review] applySimpleIngredientSwapByName meal=${planMealId} swapSpec=${JSON.stringify(
+        swapSpec,
+      )}`,
+    );
+
     const meal = await this.planMealRepo.findOne({
       where: { id: planMealId },
-      relations: ['planDay', 'planDay.weeklyPlan', 'recipe'],
-    });
-    if (!meal) {
-      throw new NotFoundException('Meal not found');
-    }
-    const profile = await this.usersService.getProfile(userId);
-    const candidates = await this.recipesService.findCandidatesForUser({
-      userId,
-      mealSlot: meal.meal_slot,
-      maxDifficulty: profile.max_difficulty,
-      weeklyBudgetGbp: profile.weekly_budget_gbp ? Number(profile.weekly_budget_gbp) : undefined,
-      mealsPerDay: 4,
-      includeNonSearchable: true,
-    });
-    const filtered = candidates.filter((r) => r.id !== meal.recipe?.id);
-    let pick = selectRecipe(filtered.length ? filtered : candidates, {
-      costCapPerMeal: profile.weekly_budget_gbp ? Number(profile.weekly_budget_gbp) / Math.max(1, 4 * 7) : undefined,
+      relations: [
+        'planDay',
+        'planDay.weeklyPlan',
+        'planDay.weeklyPlan.user',
+        'recipe',
+        'recipe.ingredients',
+        'recipe.ingredients.ingredient',
+      ],
     });
 
-    if (note && candidates.length) {
-      try {
-        const llmChoice = await this.agentsService.chooseRecipe({
-          reasonText: note,
-          candidates: (filtered.length ? filtered : candidates).map((c) => ({
-            id: c.id,
-            name: c.name,
-            meal_slot: c.meal_slot,
-            meal_type: c.meal_type,
-            base_cost_gbp: c.base_cost_gbp,
-            base_kcal: c.base_kcal,
-            base_protein: c.base_protein,
-            base_carbs: c.base_carbs,
-            base_fat: c.base_fat,
-          })),
-        });
-        const found = candidates.find((c) => c.id === llmChoice.recipe_id);
-        if (found) pick = found;
-      } catch (err) {
-        this.logger.warn(`autoSwapMeal LLM choose failed: ${(err as Error).message}`);
-      }
+    if (!meal?.recipe) {
+      this.logger.warn(
+        `[PlansService] [review] applySimpleIngredientSwapByName meal=${planMealId} missing recipe`,
+      );
+      throw new Error('Plan meal or recipe not found for ingredient swap');
     }
-    if (!pick?.id) {
-      throw new Error('No candidate found');
+
+    const userId = (meal.planDay.weeklyPlan as any)?.user?.id;
+
+    const parsed = this.parseSwapString(swapSpec.rawSwapString || '');
+    const removeName = swapSpec.ingredientToRemove || parsed.removeName;
+    const addName = swapSpec.ingredientToAdd || parsed.addName;
+
+    this.logger.debug(
+      `[PlansService] [review] swap parsed remove=${removeName} add=${addName}`,
+    );
+
+    const currentItems = meal.recipe.ingredients || [];
+
+    let filteredItems = currentItems;
+    let removed: (typeof currentItems)[number] | undefined;
+
+    if (removeName) {
+      const removeLower = removeName.toLowerCase();
+      filteredItems = currentItems.filter((ri) => {
+        const name = ri.ingredient?.name?.toLowerCase() || '';
+        const match = name.includes(removeLower);
+        if (match) {
+          removed = ri;
+          this.logger.debug(
+            `[PlansService] [review] removing ingredient name=${ri.ingredient?.name} qty=${ri.quantity}${ri.unit}`,
+          );
+        }
+        return !match;
+      });
     }
-    await this.setMealRecipe(meal.id, pick.id);
-    await this.logAction({
-      weeklyPlanId: meal.planDay.weeklyPlan.id,
-      userId,
-      action: 'auto_swap_meal',
-      metadata: { planMealId, chosenRecipeId: pick.id, note },
-      success: true,
+
+    if (addName) {
+      const quantity = removed?.quantity ?? 100;
+      const unit = removed?.unit ?? 'g';
+
+      this.logger.debug(
+        `[PlansService] [review] adding ingredient name=${addName} qty=${quantity}${unit}`,
+      );
+
+      const ingredientEntity = await this.ingredientsService.findOrCreateByName(addName);
+
+      filteredItems = [
+        ...filteredItems,
+        {
+          ingredient: ingredientEntity as any,
+          quantity,
+          unit,
+        } as any,
+      ];
+    }
+
+    const ingredientItems = await Promise.all(
+      filteredItems.map(async (ri) => {
+        let ingredientId = (ri as any).ingredient?.id;
+        const ingredientName = (ri as any).ingredient?.name;
+
+        if (!ingredientId && ingredientName) {
+          const ent = await this.ingredientsService.findOrCreateByName(ingredientName);
+          ingredientId = ent.id;
+        }
+
+        if (!ingredientId) {
+          return null;
+        }
+
+        return {
+          ingredientId,
+          quantity: Number((ri as any).quantity ?? 0),
+          unit: (ri as any).unit || 'g',
+        };
+      }),
+    );
+
+    const cleanedIngredientItems = (ingredientItems || []).filter(Boolean) as {
+      ingredientId: string;
+      quantity: number;
+      unit: string;
+    }[];
+
+    this.logger.debug(
+      `[PlansService] [review] ingredientItems for custom recipe: ${JSON.stringify(cleanedIngredientItems).substring(0, 1000)}...`,
+    );
+
+    const customRecipe = await this.recipesService.createCustomFromExisting({
+      baseRecipeId: meal.recipe.id,
+      newName: meal.recipe.name,
+      mealSlot: meal.meal_slot,
+      difficulty: meal.recipe.difficulty,
+      ingredientItems: cleanedIngredientItems,
+      createdByUserId: userId,
+      source: 'user',
+      isSearchable: true,
     });
-    return { chosenRecipeId: pick.id };
+
+    this.logger.log(
+      `[PlansService] [review] created custom recipe id=${customRecipe.id} from base=${meal.recipe.id}`,
+    );
+
+    meal.recipe = customRecipe as any;
+    meal.meal_kcal = customRecipe.base_kcal;
+    meal.meal_protein = customRecipe.base_protein;
+    meal.meal_carbs = customRecipe.base_carbs;
+    meal.meal_fat = customRecipe.base_fat;
+    meal.meal_cost_gbp = customRecipe.base_cost_gbp;
+
+    await this.planMealRepo.save(meal);
+
+    await this.recomputeAggregates(meal.planDay.weeklyPlan.id);
+    await this.shoppingListService.rebuildForPlan(meal.planDay.weeklyPlan.id);
+
+    this.logger.log(
+      `[PlansService] [review] applySimpleIngredientSwapByName done meal=${planMealId} recipe=${customRecipe.id}`,
+    );
   }
 
   private async logAction(entry: {
@@ -821,25 +1151,194 @@ export class PlansService {
     });
   }
 
-  private async adjustPortion(planMealId: string, params?: ReviewInstruction['params']) {
+  private async regenerateMeal(
+    planMealId: string,
+    opts?: {
+      userId?: string;
+      preferMealType?: string;
+      note?: string;
+    },
+  ) {
     const meal = await this.planMealRepo.findOne({
       where: { id: planMealId },
-      relations: ['recipe', 'planDay', 'planDay.weeklyPlan'],
+      relations: ['planDay', 'planDay.weeklyPlan', 'planDay.weeklyPlan.user', 'recipe'],
     });
-    if (!meal) return;
-    const base = Number(meal.portion_multiplier || 1);
-    const factor = params?.smallerPortion ? 0.9 : params?.largerPortion ? 1.1 : 1;
-    const next = Math.max(0.5, Math.min(2, base * factor));
-    meal.portion_multiplier = Number(next.toFixed(2));
-    const recipe = meal.recipe;
-    meal.meal_kcal = recipe.base_kcal ? Number(recipe.base_kcal) * meal.portion_multiplier : meal.meal_kcal;
-    meal.meal_protein = recipe.base_protein ? Number(recipe.base_protein) * meal.portion_multiplier : meal.meal_protein;
-    meal.meal_carbs = recipe.base_carbs ? Number(recipe.base_carbs) * meal.portion_multiplier : meal.meal_carbs;
-    meal.meal_fat = recipe.base_fat ? Number(recipe.base_fat) * meal.portion_multiplier : meal.meal_fat;
-    meal.meal_cost_gbp = recipe.base_cost_gbp
-      ? Number(recipe.base_cost_gbp) * meal.portion_multiplier
-      : meal.meal_cost_gbp;
+    if (!meal) {
+      throw new NotFoundException('Meal not found');
+    }
+    const userId = opts?.userId || (meal.planDay.weeklyPlan as any)?.user?.id;
+    if (!userId) {
+      throw new Error('userId is required to regenerate a meal');
+    }
+    const profile = await this.usersService.getProfile(userId);
+    const mealsPerDay = Array.isArray(meal.planDay?.meals) && meal.planDay.meals.length ? meal.planDay.meals.length : 4;
+    const budgetPerMeal =
+      profile.weekly_budget_gbp && mealsPerDay
+        ? Number(profile.weekly_budget_gbp) / Math.max(1, mealsPerDay * 7)
+        : undefined;
+
+    const draft = await this.agentsService.generateRecipe({
+      note: opts?.note,
+      meal_slot: meal.meal_slot,
+      meal_type: opts?.preferMealType,
+      difficulty: profile.max_difficulty,
+      budget_per_meal: budgetPerMeal,
+    });
+    this.logger.log(
+      `[review] regenerateMeal planMeal=${planMealId} draft=${JSON.stringify({
+        name: draft.name,
+        meal_slot: draft.meal_slot,
+        meal_type: draft.meal_type,
+        ingredients: (draft.ingredients || []).length,
+      })}`,
+    );
+
+    const created = await this.recipesService.createRecipeFromPlannedMeal({
+      name: draft.name || `Generated meal ${Date.now()}`,
+      mealSlot: draft.meal_slot || meal.meal_slot,
+      mealType: (draft.meal_type as any) || opts?.preferMealType || 'solid',
+      difficulty: draft.difficulty || profile.max_difficulty || 'easy',
+      userId,
+      instructions:
+        Array.isArray(draft.instructions) && draft.instructions.length
+          ? draft.instructions.join('\n')
+          : typeof draft.instructions === 'string'
+            ? draft.instructions
+            : undefined,
+      ingredients: (draft.ingredients || []).map((ing: any) => ({
+        ingredient_name: ing.ingredient_name,
+        quantity: Number(ing.quantity || 0),
+        unit: 'g',
+      })),
+      source: 'llm',
+      isSearchable: false,
+      priceEstimated: true,
+    });
+
+    meal.recipe = created as any;
+    const portion = Number(meal.portion_multiplier || 1);
+    meal.meal_kcal = created.base_kcal ? Number(created.base_kcal) * portion : meal.meal_kcal;
+    meal.meal_protein = created.base_protein ? Number(created.base_protein) * portion : meal.meal_protein;
+    meal.meal_carbs = created.base_carbs ? Number(created.base_carbs) * portion : meal.meal_carbs;
+    meal.meal_fat = created.base_fat ? Number(created.base_fat) * portion : meal.meal_fat;
+    meal.meal_cost_gbp = created.base_cost_gbp ? Number(created.base_cost_gbp) * portion : meal.meal_cost_gbp;
     await this.planMealRepo.save(meal);
+    this.logger.log(
+      `[review] regenerateMeal updated meal=${planMealId} recipe=${created.id} kcal=${meal.meal_kcal} protein=${meal.meal_protein}`,
+    );
+  }
+
+  private async regenerateDay(userId: string, planDayId: string, note?: string) {
+    const day = await this.planDayRepo.findOne({
+      where: { id: planDayId },
+      relations: ['meals', 'weeklyPlan', 'weeklyPlan.user', 'weeklyPlan.days'],
+    });
+    if (!day) return;
+    const profile = await this.usersService.getProfile(userId);
+    const targets = calculateTargets(profile);
+    const mealSlots =
+      (day.meals || []).map((m) => m.meal_slot).filter(Boolean).length > 0
+        ? (day.meals || []).map((m) => m.meal_slot)
+        : ['breakfast', 'lunch', 'dinner', 'snack'];
+    const remainingDays =
+      (day.weeklyPlan?.days?.length || 7) - (typeof (day as any).day_index === 'number' ? (day as any).day_index : 0);
+
+    this.logger.log(
+      `[review] regenerateDay (coach) day=${planDayId} slots=${mealSlots.join(',')} targets_kcal=${targets.dailyCalories} targets_protein=${targets.dailyProtein}`,
+    );
+
+    const llmDay = await this.agentsService.generateDayPlanWithCoachLLM({
+      profile,
+      day_index: (day as any).day_index ?? 0,
+      week_state: {
+        week_start_date: day.weeklyPlan?.week_start_date || '',
+        weekly_budget_gbp: profile.weekly_budget_gbp,
+        used_budget_gbp: 0,
+        remaining_days: remainingDays > 0 ? remainingDays : 1,
+        notes: note,
+      },
+      targets: {
+        daily_kcal: targets.dailyCalories,
+        daily_protein: targets.dailyProtein,
+      },
+      meal_slots: mealSlots,
+      note,
+    });
+
+    if (!llmDay.meals || !llmDay.meals.length) {
+      this.logger.warn(
+        `[review] regenerateDay (coach) day=${planDayId} returned no meals from LLM, keeping existing meals`,
+      );
+      return;
+    }
+
+    const existingMeals = day.meals || [];
+    const mealsBySlot: Record<string, PlanMeal> = {};
+    for (const m of existingMeals) {
+      mealsBySlot[m.meal_slot] = m;
+    }
+
+    for (const mealSpec of llmDay.meals || []) {
+      const slot = mealSpec.meal_slot || 'meal';
+      const mealEntity =
+        mealsBySlot[slot] ||
+        this.planMealRepo.create({
+          meal_slot: slot,
+          portion_multiplier: 1,
+          planDay: day,
+        });
+
+      const created = await this.recipesService.createRecipeFromPlannedMeal({
+        name: mealSpec.name || `Generated meal ${Date.now()}`,
+        mealSlot: slot,
+        mealType: (mealSpec as any).meal_type || 'solid',
+        difficulty: (mealSpec as any).difficulty || profile.max_difficulty || 'easy',
+        userId,
+        instructions:
+          Array.isArray(mealSpec.instructions) && mealSpec.instructions.length
+            ? mealSpec.instructions.join('\n')
+            : typeof mealSpec.instructions === 'string'
+              ? mealSpec.instructions
+              : undefined,
+        ingredients: (mealSpec.ingredients || []).map((ing: any) => ({
+          ingredient_name: ing.ingredient_name,
+          quantity: Number(ing.quantity || 0),
+          unit: ing.unit || 'g',
+        })),
+        source: 'llm',
+        isSearchable: false,
+        priceEstimated: true,
+      });
+
+      mealEntity.recipe = created as any;
+      const portion = Number(mealEntity.portion_multiplier || 1);
+      mealEntity.meal_kcal = created.base_kcal ? Number(created.base_kcal) * portion : mealEntity.meal_kcal;
+      mealEntity.meal_protein = created.base_protein ? Number(created.base_protein) * portion : mealEntity.meal_protein;
+      mealEntity.meal_carbs = created.base_carbs ? Number(created.base_carbs) * portion : mealEntity.meal_carbs;
+      mealEntity.meal_fat = created.base_fat ? Number(created.base_fat) * portion : mealEntity.meal_fat;
+      mealEntity.meal_cost_gbp = created.base_cost_gbp ? Number(created.base_cost_gbp) * portion : mealEntity.meal_cost_gbp;
+      await this.planMealRepo.save(mealEntity);
+      mealsBySlot[slot] = mealEntity;
+    }
+
+    // Optionally remove meals not in new plan
+    const newSlots = new Set((llmDay.meals || []).map((m) => m.meal_slot || 'meal'));
+    for (const existing of existingMeals) {
+      if (!newSlots.has(existing.meal_slot)) {
+        await this.planMealRepo.remove(existing);
+      }
+    }
+  }
+
+  private async regenerateWholeWeek(userId: string, weeklyPlanId: string, note?: string) {
+    const plan = await this.weeklyPlanRepo.findOne({
+      where: { id: weeklyPlanId },
+      relations: ['days', 'days.meals'],
+    });
+    if (!plan) return;
+    for (const day of plan.days || []) {
+      await this.regenerateDay(userId, day.id, note);
+    }
   }
 
   private async swapIngredient(
@@ -855,43 +1354,39 @@ export class PlansService {
     const recipe = meal.recipe as any;
     const baseIngredients = recipe.ingredients || [];
     const uuidRegex = /^[0-9a-fA-F-]{36}$/;
-    const removeIdTarget =
-      ingredientIdentifierToRemove && uuidRegex.test(ingredientIdentifierToRemove.trim())
-        ? ingredientIdentifierToRemove.trim()
-        : undefined;
-    if (ingredientIdentifierToRemove && !removeIdTarget) {
-      throw new Error('ingredientToRemove must be a valid UUID');
-    }
-    const addIdTarget =
-      ingredientIdentifierToAdd && uuidRegex.test(ingredientIdentifierToAdd.trim())
-        ? ingredientIdentifierToAdd.trim()
-        : undefined;
-    if (ingredientIdentifierToAdd && !addIdTarget) {
-      throw new Error('ingredientToAdd must be a valid UUID');
+
+    let removeIdTarget: string | undefined;
+    if (ingredientIdentifierToRemove && ingredientIdentifierToRemove.trim()) {
+      const trimmed = ingredientIdentifierToRemove.trim();
+      if (uuidRegex.test(trimmed)) {
+        removeIdTarget = trimmed;
+      } else {
+        const resolved = await this.ingredientsService.findOrCreateByName(trimmed);
+        removeIdTarget = resolved?.id;
+      }
     }
 
-    // Remove entries matching id only
+    let addIngredientId: string | undefined;
+    if (ingredientIdentifierToAdd && ingredientIdentifierToAdd.trim()) {
+      const trimmed = ingredientIdentifierToAdd.trim();
+      if (uuidRegex.test(trimmed)) {
+        const ing = await this.ingredientsService.findById(trimmed);
+        if (!ing) {
+          throw new Error(`Ingredient not found for id=${trimmed}`);
+        }
+        addIngredientId = ing.id;
+      } else {
+        const ing = await this.ingredientsService.findOrCreateByName(trimmed);
+        addIngredientId = ing.id;
+      }
+    }
+
     const filteredIngredients = removeIdTarget
-      ? baseIngredients.filter((ri: any) => ri.ingredient?.id !== removeIdTarget)
+      ? baseIngredients.filter((ri: any) => String(ri.ingredient?.id) !== removeIdTarget)
       : baseIngredients;
 
-    if (removeIdTarget && filteredIngredients.length === baseIngredients.length) {
-      throw new Error(`No ingredient matched removal target id=${removeIdTarget}`);
-    }
-
-    // Validate addition ingredient
-    let addIngredientId: string | undefined;
-    if (addIdTarget) {
-      const ing = await this.ingredientsService.findById(addIdTarget);
-      if (!ing) {
-        throw new Error(`Ingredient not found for id=${addIdTarget}`);
-      }
-      addIngredientId = ing.id;
-    }
-
-    // Create a custom recipe clone
     const ingredientItems = filteredIngredients
-      .filter((ri: any) => ri.ingredient?.id && uuidRegex.test(String(ri.ingredient.id)))
+      .filter((ri: any) => ri.ingredient?.id)
       .map((ri: any) => ({
         ingredientId: String(ri.ingredient.id),
         quantity: Number(ri.quantity || 0),

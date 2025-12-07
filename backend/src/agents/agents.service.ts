@@ -2,73 +2,14 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
-import { ExplanationRequestDto, ExplanationResponseDto } from './dto/explanation.dto';
-import { NutritionAdviceRequestDto, NutritionAdviceResponseDto } from './dto/nutrition-advice.dto';
+import {
+  DayMealSchema,
+  PlanDaySchema,
+  WeeklyPlanSchema,
+  LlmDayMeal,
+  LlmPlanDay,
+} from './schemas/plan-generation.schema';
 import { reviewInstructionSchema, ReviewInstruction } from './schemas/review-instruction.schema';
-import { ChooseIngredientDto } from './dto/choose-ingredient.dto';
-import { calculateTargets } from '../plans/utils/profile-targets';
-
-const DayMealIngredientSchema = z.object({
-  ingredient_name: z.string(),
-  quantity: z.preprocess((v) => {
-    if (v === '' || v === null || v === undefined) return 0;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  }, z.number()),
-  unit: z.string(),
-});
-
-const DayMealSchema = z.object({
-  meal_slot: z.string(),
-  name: z.string(),
-  difficulty: z.string().optional(),
-  instructions: z.union([z.string(), z.array(z.string())]),
-  ingredients: z.array(DayMealIngredientSchema),
-  target_kcal: z.number().optional(),
-  target_protein: z.number().optional(),
-  compliance_notes: z.string().optional(),
-});
-
-const PlanDaySchema = z.object({
-  day_index: z.number(),
-  meals: z.array(DayMealSchema),
-});
-
-const WeeklyPlanSchema = z.object({
-  week_start_date: z.string(),
-  days: z.array(PlanDaySchema),
-});
-
-const RecipeStubSchema = z.object({
-  name: z.string(),
-  meal_slot: z.string(),
-  meal_type: z.string().optional(),
-  difficulty: z.string().optional(),
-  base_cost_gbp: z.number().optional(),
-  instructions: z.any().optional(),
-  ingredients: z.array(
-    z.object({
-      ingredient_name: z.string(),
-      quantity: z.number(),
-      unit: z.string().optional(),
-    }),
-  ),
-});
-
-const DayWithRecipesSchema = z.object({
-  day_index: z.number(),
-  meals: z.array(
-    z.object({
-      meal_slot: z.string(),
-      recipe: RecipeStubSchema,
-    }),
-  ),
-});
-
-export type LlmDayMeal = z.infer<typeof DayMealSchema>;
-export type LlmPlanDay = z.infer<typeof PlanDaySchema>;
-type WeeklyPlan = z.infer<typeof WeeklyPlanSchema>;
-type DayWithRecipes = z.infer<typeof DayWithRecipesSchema>;
 
 type WeekState = {
   week_start_date: string;
@@ -94,37 +35,374 @@ export class AgentsService {
     this.logger.log(`[${kind}] ${message}`);
   }
 
-  async reviewAction(payload: {
+  async interpretReviewAction(payload: {
     userId?: string;
     weeklyPlanId?: string;
-    actionContext?: any;
-    reasonText?: string;
-    text?: string;
+    actionContext: any;
+    note?: string;
     profileSnippet?: any;
-    currentPlanSummary?: unknown;
-    currentPlanSnippet?: unknown; // legacy shape
-  }): Promise<ReviewInstruction> {
+  currentPlanSummary?: any;
+}): Promise<ReviewInstruction> {
+    const hasNote = typeof payload.note === 'string' && payload.note.trim().length > 0;
+    const hasExplicitTarget =
+      !!payload.actionContext?.planMealId ||
+      !!payload.actionContext?.planDayId ||
+      (Array.isArray(payload.actionContext?.planDayIds) && payload.actionContext.planDayIds.length > 0);
+
+    const requestBody = {
+      userId: payload.userId,
+      weeklyPlanId: payload.weeklyPlanId,
+      actionContext: payload.actionContext,
+      note: payload.note,
+      profileSnippet: payload.profileSnippet,
+      currentPlanSummary: payload.currentPlanSummary,
+      meta: {
+        hasNote,
+        hasExplicitTarget,
+      },
+    };
+
+    // DEBUG: see what we actually send
+    this.logger.debug(`[review] requestBody=${JSON.stringify(requestBody).substring(0, 2000)}...`);
+
     const prompt: { role: 'system' | 'user'; content: string }[] = [
       {
         role: 'system',
         content:
-          'You are Review Agent. Map the user action + context to structured JSON ReviewInstruction. Return ONLY JSON.',
+          'You are Review Orchestrator.\n' +
+          '\n' +
+          'GOAL:\n' +
+          '- Map a user plan-change request into exactly ONE JSON instruction.\n' +
+          '- You receive: actionContext (where user clicked), note (what they typed), and profile/plan info.\n' +
+          '\n' +
+          'FORMAT RULES:\n' +
+          '- Reply MUST be a single valid JSON object matching ReviewInstruction.\n' +
+          '- No markdown, no backticks, no extra text, no comments.\n' +
+          '\n' +
+          'ACTIONS:\n' +
+          '- regenerate_week, regenerate_day, regenerate_meal\n' +
+          '- swap_meal (pick a different recipe for this meal)\n' +
+          '- swap_ingredient (replace one ingredient with another)\n' +
+          '- remove_ingredient (remove one ingredient)\n' +
+          '- adjust_recipe (more complex recipe edits)\n' +
+          '- adjust_macros, set_meal_type, avoid_ingredient_future\n' +
+          '- lock_meal, lock_day, set_fixed_breakfast\n' +
+          '- no_change_clarify, no_detectable_action\n' +
+          '\n' +
+          'FIELDS CONSTRAINTS:\n' +
+          '- "notes" MUST be a single string if present (not an array).\n' +
+          '- "modifiers" MUST be a flat object, e.g. { "ingredientToRemove": "x", "ingredientToAdd": "y" }.\n' +
+          '- Do NOT use nested "adjustment" arrays or nested objects for simple ingredient swaps.\n' +
+          '- If the user wants to remake a recipe with different macros or quantities, use:\n' +
+          '  { "action": "adjust_recipe", "targetLevel": "meal", "targetIds": { "planMealId": ... }, "notes": "...explanation..." }\n' +
+          '  and leave "modifiers" empty, so the backend can do a context-aware adjust.\n' +
+          '\n' +
+          'MAPPING HINTS:\n' +
+          '- If user note is like "remove X", "remove X add Y", "swap X for Y", PREFER action="swap_ingredient".\n' +
+          '  - For swap_ingredient, set targetLevel="meal".\n' +
+          '  - Put the meal ID into targetIds.planMealId.\n' +
+          '  - Use modifiers.ingredientToRemove and modifiers.ingredientToAdd.\n' +
+          '- Use action="adjust_recipe" ONLY when the user wants deeper edits (change cooking method, rewrite instructions, or multi-step changes) that cannot be expressed as a simple ingredient swap.\n' +
+          '\n' +
+          'TARGET RULES:\n' +
+          '- Use targetLevel = "week", "day", "meal", or "recipe".\n' +
+          '- Never invent IDs; only use IDs from actionContext or weeklyPlanId.\n' +
+          '- For multiple days, use targetIds.planDayIds.\n' +
+          '\n' +
+          'SAFETY RULE:\n' +
+          '- If meta.hasNote==true OR meta.hasExplicitTarget==true, you MUST NOT return action="no_detectable_action".\n' +
+          '- Prefer a best-effort action instead.\n',
+      },
+      {
+        role: 'user',
+        content: JSON.stringify(requestBody),
+      },
+    ];
+
+    const maxRetries = 3;
+    let raw: any;
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      try {
+        raw = await this.callModel(this.reviewModel, prompt, 'review');
+        this.logAgent('review', `model=${this.reviewModel}`);
+        break;
+      } catch (err) {
+        this.logger.warn(
+          `[review] interpretReviewAction attempt=${attempt + 1} failed err=${(err as any)?.message || err}`,
+        );
+        if (attempt >= maxRetries) {
+          throw err;
+        }
+      }
+    }
+
+    // DEBUG: see model raw JSON
+    this.logger.debug(`[review] rawResponse=${JSON.stringify(raw).substring(0, 2000)}...`);
+
+    // Normalise fields before validation
+    const normalizedInput: any = { ...raw };
+    if (normalizedInput.targetIds && normalizedInput.targetIds.planWeekId && !normalizedInput.targetIds.weeklyPlanId) {
+      normalizedInput.targetIds.weeklyPlanId = normalizedInput.targetIds.planWeekId;
+      delete normalizedInput.targetIds.planWeekId;
+    }
+    if (normalizedInput.targetIds && normalizedInput.targetIds.planMealId === null) {
+      delete normalizedInput.targetIds.planMealId;
+    }
+    if (normalizedInput.targetIds && normalizedInput.targetIds.planDayIds === null) {
+      delete normalizedInput.targetIds.planDayIds;
+    }
+
+    const parsedRaw = reviewInstructionSchema.parse(normalizedInput);
+
+    // Normalize notes to a single string
+    const normalized: ReviewInstruction = {
+      ...parsedRaw,
+      targetIds: parsedRaw.targetIds || (raw as any)?.targetIds || (raw as any)?.targets || undefined,
+      notes: Array.isArray(parsedRaw.notes)
+        ? parsedRaw.notes.length
+          ? parsedRaw.notes.join(' ')
+          : undefined
+        : parsedRaw.notes,
+    };
+    this.logger.debug(`[review] parsedInstruction=${JSON.stringify(normalized).substring(0, 2000)}...`);
+
+    return normalized;
+  }
+
+  async generateRecipe(payload: {
+    note?: string;
+    meal_slot?: string;
+    meal_type?: string;
+    difficulty?: string;
+    budget_per_meal?: number;
+  }) {
+    const toNum = (v: any) => {
+      if (v === null || v === undefined || v === '') return 0;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    const schema = z.object({
+      name: z.string().optional(),
+      meal_slot: z.string().optional(),
+      meal_type: z.string().nullable().optional(),
+      difficulty: z.string().optional(),
+      base_cost_gbp: z.preprocess(toNum, z.number().optional()),
+      instructions: z.any().optional(),
+      ingredients: z
+        .array(
+          z.object({
+            ingredient_name: z.string(),
+            quantity: z.preprocess(toNum, z.number()),
+            unit: z.string().nullable().optional(),
+          }),
+        )
+        .optional(),
+    });
+    const prompt: { role: 'system' | 'user'; content: string }[] = [
+      {
+        role: 'system',
+        content:
+          'You are Recipe Generator. Return ONLY JSON with {name, meal_slot, meal_type?, difficulty?, base_cost_gbp?, instructions, ingredients:[{ingredient_name, quantity, unit}]}. ' +
+          'All ingredient quantities MUST be in grams ("g"). Set unit="g" for every ingredient. Use concise instructions. Do not invent IDs.',
+      },
+      { role: 'user', content: JSON.stringify(payload) },
+    ];
+    const maxRetries = 3;
+    let lastErr: any;
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      try {
+        const raw = await this.callModel(this.reviewModel, prompt, 'review');
+        this.logger.log(
+          `[review] generateRecipe raw=${JSON.stringify(raw)} input=${JSON.stringify(payload)} attempt=${attempt + 1}`,
+        );
+        return schema.parse(raw);
+      } catch (err) {
+        lastErr = err;
+        this.logger.error(
+          `[review] generateRecipe parse_failed attempt=${attempt + 1} err=${(err as any)?.message || err}`,
+        );
+      }
+    }
+    throw lastErr;
+  }
+
+  async generateIngredientEstimate(payload: {
+    name: string;
+    locale?: 'uk' | 'us';
+  }) {
+    const toNum = (v: any) => {
+      if (v === null || v === undefined || v === '') return 0;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    const schema = z.object({
+      name: z.string(),
+      category: z.string().optional(),
+      kcal_per_100g: z.preprocess(toNum, z.number()),
+      protein_per_100g: z.preprocess(toNum, z.number()),
+      carbs_per_100g: z.preprocess(toNum, z.number()),
+      fat_per_100g: z.preprocess(toNum, z.number()),
+      estimated_price_per_100g_gbp: z.preprocess(toNum, z.number().optional()),
+      allergen_keys: z.array(z.string()).optional(),
+    });
+
+    const prompt: { role: 'system' | 'user'; content: string }[] = [
+      {
+        role: 'system',
+        content:
+          'You are Ingredient Estimator.\n' +
+          '\n' +
+          'GOAL:\n' +
+          '- Given a grocery ingredient name, you must estimate its typical nutrition per 100g and an approximate retail price per 100g in GBP.\n' +
+          '\n' +
+          'STRICT FORMAT:\n' +
+          '- Reply ONLY with JSON, no markdown, no backticks, no comments.\n' +
+          '- JSON shape:\n' +
+          '  {\n' +
+          '    "name": string,              // normalised or cleaned name\n' +
+          '    "category": string?,         // e.g. "Fats and Oils", "Vegetables", "Meat", "Carbohydrates"\n' +
+          '    "kcal_per_100g": number,\n' +
+          '    "protein_per_100g": number,\n' +
+          '    "carbs_per_100g": number,\n' +
+          '    "fat_per_100g": number,\n' +
+          '    "estimated_price_per_100g_gbp": number, // approximate typical UK supermarket price per 100g in GBP\n' +
+          '    "allergen_keys": string[]?   // lowercase keys like ["gluten","nuts","soy","milk","egg","fish","shellfish","sesame","mustard","celery","sulphites","lupin","peanuts"]\n' +
+          '  }\n' +
+          '\n' +
+          'RULES:\n' +
+          '- All macros MUST be for 100g of the raw product.\n' +
+          '- Use realistic typical values (you may approximate from common nutrition databases / packaging).\n' +
+          '- Never return all zeros unless it is literally plain water or a negligible seasoning (like salt, pepper, herbs).\n' +
+          '- For oils and pure fats, kcal_per_100g should be ~850–900 kcal and fat_per_100g ~90–100g.\n' +
+          '- For lean meats like chicken breast, protein_per_100g is typically 25–35g.\n' +
+          '- For sugars or syrups, carbs_per_100g is usually 70–100g.\n' +
+          '- For flours, grains, and breads, carbs_per_100g is often 50–80g and protein 5–15g.\n' +
+          '- Price should reflect a rough UK supermarket price (cheap supermarket own-brand, not luxury organic). If unsure, give a reasonable mid-range estimate.\n' +
+          '- If the ingredient is a compound product (e.g. “sweet chilli sauce”), estimate based on a typical commercial product in that category.\n' +
+          '\n' +
+          'IMPORTANT:\n' +
+          '- locale="uk" means use UK-style macro assumptions and GBP pricing.\n' +
+          '- Do NOT include any explanation outside the JSON.',
       },
       {
         role: 'user',
         content: JSON.stringify({
-          userId: payload.userId,
-          weeklyPlanId: payload.weeklyPlanId,
-          actionContext: payload.actionContext,
-          reasonText: payload.reasonText || payload.text,
-          profileSnippet: payload.profileSnippet,
-          currentPlanSummary: payload.currentPlanSummary || payload.currentPlanSnippet,
+          name: payload.name,
+          locale: payload.locale || 'uk',
         }),
       },
     ];
-    const raw = await this.callModel(this.reviewModel, prompt, 'review');
-    this.logAgent('review', `model=${this.reviewModel}`);
-    return reviewInstructionSchema.parse(raw);
+
+    const maxRetries = 2;
+    let lastErr: any;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      try {
+        const raw = await this.callModel(this.nutritionModel, prompt, 'nutrition');
+        this.logger.log(
+          `[nutrition] generateIngredientEstimate raw=${JSON.stringify(raw).substring(
+            0,
+            800,
+          )} input=${JSON.stringify(payload)} attempt=${attempt + 1}`,
+        );
+        const parsed = schema.parse(raw);
+        return parsed;
+      } catch (err) {
+        lastErr = err;
+        this.logger.error(
+          `[nutrition] generateIngredientEstimate parse_failed attempt=${
+            attempt + 1
+          } err=${(err as any)?.message || err}`,
+        );
+      }
+    }
+
+    throw lastErr;
+  }
+
+  async adjustRecipeWithContext(payload: {
+    note: string;
+    originalRecipe: {
+      name: string;
+      meal_slot: string;
+      meal_type?: string | null;
+      difficulty?: string | null;
+      instructions?: string | string[] | null;
+      ingredients: { ingredient_name: string; quantity: number; unit: string }[];
+    };
+    profileSnippet?: {
+      goal?: string;
+      dietType?: string;
+      weeklyBudgetGbp?: number;
+    };
+  }) {
+    const toNum = (v: any) => {
+      if (v === null || v === undefined || v === '') return 0;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    const schema = z.object({
+      name: z.string().optional(),
+      meal_slot: z.string().optional(),
+      meal_type: z.string().nullable().optional(),
+      difficulty: z.string().optional(),
+      base_cost_gbp: z.preprocess(toNum, z.number().optional()),
+      instructions: z.any().optional(),
+      ingredients: z
+        .array(
+          z.object({
+            ingredient_name: z.string(),
+            quantity: z.preprocess(toNum, z.number()),
+            unit: z.string().nullable().optional(),
+          }),
+        )
+        .optional(),
+    });
+
+    const prompt: { role: 'system' | 'user'; content: string }[] = [
+      {
+        role: 'system',
+        content:
+          'You are Recipe Adjustor.\n' +
+          '- You receive an EXISTING recipe and a user note.\n' +
+          '- Your job is to RETURN A MODIFIED VERSION of THAT SAME RECIPE.\n' +
+          '- Keep the core idea and style unless the note explicitly asks for a completely different dish.\n' +
+          '- Prefer minimal changes: tweak ingredients, quantities, or instructions just enough to satisfy the note.\n' +
+          '- Preserve reasonable macros and budget; do not drastically increase cost or calories without reason.\n' +
+          '- Respond ONLY with JSON: {name, meal_slot, meal_type?, difficulty?, base_cost_gbp?, instructions, ingredients:[{ingredient_name, quantity, unit}]}. ' +
+          'All ingredient quantities MUST be in grams ("g"). Set unit="g" for every ingredient.',
+      },
+      {
+        role: 'user',
+        content: JSON.stringify(payload),
+      },
+    ];
+
+    const maxRetries = 3;
+    let lastErr: any;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      try {
+        const raw = await this.callModel(this.reviewModel, prompt, 'review');
+        this.logger.log(
+          `[review] adjustRecipeWithContext raw=${JSON.stringify(raw).substring(
+            0,
+            1000,
+          )} attempt=${attempt + 1}`,
+        );
+        return schema.parse(raw);
+      } catch (err) {
+        lastErr = err;
+        this.logger.error(
+          `[review] adjustRecipeWithContext parse_failed attempt=${attempt + 1} err=${(err as any)?.message || err}`,
+        );
+      }
+    }
+
+    throw lastErr;
   }
 
   async generateDayPlanWithCoachLLM(payload: {
@@ -137,6 +415,7 @@ export class AgentsService {
     };
     meal_slots: string[];
     maxRetries?: number;
+    note?: string;
   }): Promise<LlmPlanDay> {
     const perMealBudget =
       payload.week_state.weekly_budget_gbp && payload.meal_slots.length
@@ -179,7 +458,7 @@ export class AgentsService {
         '- Favor ingredients the user is likely to like; avoid disliked items if provided.\n' +
         '- Honor weekly_budget_gbp and per-meal budget hints; small overruns are OK but stay close.\n' +
         '- Align with user goal (lose/maintain/gain weight) by keeping total day kcal near the daily target and providing good protein coverage.\n' +
-        '- If you must deviate from diet/allergy/budget/goal, explain briefly in compliance_notes per meal.\n' +
+        '- If a note is provided, incorporate those user instructions and preferences explicitly.\n' +
         '- You may roughly allocate daily_kcal and daily_protein across meals and record that in target_kcal and target_protein per meal.\n' +
         '- Use simple, realistic ingredients available in a typical UK supermarket.\n' +
         '- Avoid very niche or branded ingredients.\n' +
@@ -208,11 +487,12 @@ export class AgentsService {
         diet_type: payload.profile?.diet_type,
         allergy_keys: payload.profile?.allergy_keys,
         goal: payload.profile?.goal,
+        note: payload.note,
       }),
     },
   ];
 
-    const retries = payload.maxRetries ?? 2;
+    const retries = payload.maxRetries ?? 3;
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt <= retries; attempt += 1) {
@@ -224,37 +504,54 @@ export class AgentsService {
         );
 
         const rawMeals = Array.isArray((raw as any)?.meals) ? (raw as any).meals : [];
+        const requestedSlots = Array.isArray(payload.meal_slots)
+          ? payload.meal_slots.map((s) => (typeof s === 'string' ? s.trim().toLowerCase() : '')).filter(Boolean)
+          : [];
+        const normalizeMealSlot = (slot: any, fallback: string) => {
+          const val = typeof slot === 'string' ? slot.trim().toLowerCase() : '';
+          if (['breakfast', 'lunch', 'dinner', 'snack'].includes(val)) return val;
+          if (val === 'meal') return fallback || 'meal';
+          return fallback || 'meal';
+        };
+
         const normalizedMeals = rawMeals
           .filter((m: any) => m && typeof m === 'object' && !Array.isArray(m))
-          .map((m: any) => ({
-            meal_slot:
-              typeof m.meal_slot === 'string'
-                ? m.meal_slot.trim().toLowerCase() || 'meal'
-                : 'meal',
-            name: m.name,
-            difficulty:
-              typeof m.difficulty === 'string'
-                ? m.difficulty
-                : m.difficulty !== undefined && m.difficulty !== null
-                  ? String(m.difficulty)
-                  : 'easy',
-            instructions:
-              Array.isArray(m.instructions) || typeof m.instructions === 'string'
-                ? m.instructions
-                : undefined,
-            ingredients: Array.isArray(m.ingredients)
-              ? m.ingredients
-                  .filter((ing: any) => ing && typeof ing === 'object')
-                  .map((ing: any) => ({
-                    ingredient_name: ing.ingredient_name,
-                    quantity: ing.quantity,
-                    unit: 'g',
-                  }))
-              : [],
-            target_kcal: m.target_kcal,
-            target_protein: m.target_protein,
-            compliance_notes: m.compliance_notes,
-          }));
+          .map((m: any, idx: number) => {
+            const fallbackSlot = requestedSlots[idx] || requestedSlots[0] || 'dinner';
+            return {
+              meal_slot: normalizeMealSlot(m.meal_slot, fallbackSlot),
+              name: m.name,
+              difficulty:
+                typeof m.difficulty === 'string'
+                  ? m.difficulty.trim() || 'easy'
+                  : m.difficulty !== undefined && m.difficulty !== null
+                    ? String(m.difficulty)
+                    : 'easy',
+              instructions:
+                Array.isArray(m.instructions) || typeof m.instructions === 'string'
+                  ? m.instructions
+                  : undefined,
+              ingredients: Array.isArray(m.ingredients)
+                ? m.ingredients
+                    .filter((ing: any) => ing && typeof ing === 'object')
+                    .map((ing: any) => ({
+                      ingredient_name: ing.ingredient_name,
+                      quantity: ing.quantity,
+                      unit: 'g',
+                    }))
+                : [],
+              target_kcal: m.target_kcal,
+              target_protein: m.target_protein,
+              compliance_notes:
+                typeof m.compliance_notes === 'string'
+                  ? m.compliance_notes
+                  : Array.isArray(m.compliance_notes)
+                    ? m.compliance_notes.length
+                      ? m.compliance_notes.join(' ')
+                      : undefined
+                    : undefined,
+            };
+          });
 
         const candidate = {
           day_index: (raw as any)?.day_index ?? payload.day_index,
@@ -268,15 +565,17 @@ export class AgentsService {
           (meal: any) => (meal.ingredients || []).every((ing: any) => (ing.unit || '').toLowerCase() === 'g'),
         );
         const slotsOk =
-          Array.isArray(payload.meal_slots) &&
-          payload.meal_slots.every((slot) => normalizedMeals.some((m: any) => m.meal_slot === slot));
-        const parsedOk = parsed.success && parsed.data.meals.length > 0;
+          Array.isArray(requestedSlots) &&
+          requestedSlots.length > 0 &&
+          requestedSlots.every((slot) => normalizedMeals.some((m: any) => m.meal_slot === slot));
+        const parsedOk = parsed.success && normalizedMeals.length > 0;
+
         if (parsedOk && unitsOk && slotsOk) {
-          return parsed.data;
+          return { ...parsed.data, meals: normalizedMeals };
         }
 
         this.logger.warn(
-          `[coach] day_index=${payload.day_index} attempt=${attempt + 1} invalid or empty meals (parsedOk=${parsedOk} unitsOk=${unitsOk} slotsOk=${slotsOk})`,
+          `[coach] day_index=${payload.day_index} attempt=${attempt + 1} invalid or incomplete meals (parsedOk=${parsedOk} unitsOk=${unitsOk} slotsOk=${slotsOk})`,
         );
         if (!parsed.success) {
           lastError = new Error(JSON.stringify(parsed.error.issues));
@@ -358,178 +657,5 @@ export class AgentsService {
             ? this.explainModel
             : this.nutritionModel;
     return { baseUrl, apiKey, model };
-  }
-
-  async explain(request: ExplanationRequestDto): Promise<ExplanationResponseDto> {
-    const prompt: { role: 'system' | 'user'; content: string }[] = [
-      {
-        role: 'system',
-        content:
-          'You are Explanation Agent. Given a question and context (plan/profile/reasons), reply ONLY with JSON {explanation: string, evidence: string[]}. Be concise, no prose.',
-      },
-      {
-        role: 'user',
-        content: JSON.stringify(request),
-      },
-    ];
-    const raw = await this.callModel(this.explainModel, prompt, 'explain');
-    const schema = z.object({
-      explanation: z.string(),
-      evidence: z.array(z.string()).default([]),
-    });
-    const parsed = schema.parse(raw);
-    return parsed;
-  }
-
-  async nutritionAdvice(request: NutritionAdviceRequestDto): Promise<NutritionAdviceResponseDto> {
-    const prompt: { role: 'system' | 'user'; content: string }[] = [
-      {
-        role: 'system',
-        content:
-          'You are Nutrition Advisor. Provide 3-6 concise suggestions in JSON {advice:[{title, detail, category?}]}. Focus on diet improvements, hydration, or timing. No prose.',
-      },
-      { role: 'user', content: JSON.stringify(request) },
-    ];
-    const raw = await this.callModel(this.nutritionModel, prompt, 'nutrition');
-    const schema = z.object({
-      advice: z.array(
-        z.object({
-          title: z.string(),
-          detail: z.string(),
-          category: z.string().optional(),
-        }),
-      ),
-    });
-    return schema.parse(raw);
-  }
-
-  async chooseIngredient(payload: ChooseIngredientDto): Promise<{ ingredient_id: string }> {
-    const candidateIds = new Set(payload.candidates.map((c) => c.id));
-    const prompt: { role: 'system' | 'user'; content: string }[] = [
-      {
-        role: 'system',
-        content:
-          'You are Ingredient Selector. Choose the most likely ingredient from the provided candidates. Return ONLY JSON {ingredient_id}. Do not invent new ids.',
-      },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          reasonText: payload.reasonText,
-          candidates: payload.candidates,
-        }),
-      },
-    ];
-    const schema = z.object({ ingredient_id: z.string() });
-    const raw = await this.callModel(this.reviewModel, prompt, 'review');
-    const parsed = schema.parse(raw);
-    if (!candidateIds.has(parsed.ingredient_id)) {
-      throw new Error('LLM returned ingredient_id not in provided candidates');
-    }
-    return parsed;
-  }
-
-  async chooseRecipe(payload: {
-    reasonText?: string;
-    candidates: {
-      id: string;
-      name: string;
-      meal_slot?: string;
-      meal_type?: string;
-      base_cost_gbp?: number | null;
-      base_kcal?: number | null;
-      base_protein?: number | null;
-      base_carbs?: number | null;
-      base_fat?: number | null;
-    }[];
-  }): Promise<{ recipe_id: string }> {
-    const candidateIds = new Set(payload.candidates.map((c) => c.id));
-    const prompt: { role: 'system' | 'user'; content: string }[] = [
-      {
-        role: 'system',
-        content:
-          'You are Recipe Selector. Choose ONE recipe_id from provided candidates. Return ONLY JSON {recipe_id}. Use note/reason if provided. Do not invent ids.',
-      },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          reasonText: payload.reasonText,
-          candidates: payload.candidates,
-        }),
-      },
-    ];
-    const schema = z.object({ recipe_id: z.string() });
-    const raw = await this.callModel(this.reviewModel, prompt, 'review');
-    const parsed = schema.parse(raw);
-    if (!candidateIds.has(parsed.recipe_id)) {
-      throw new Error('LLM returned recipe_id not in provided candidates');
-    }
-    return parsed;
-  }
-
-  async adjustRecipe(payload: { note: string; current: any }) {
-    const schema = z.object({
-      new_name: z.string().optional(),
-      instructions: z.string().optional(),
-      ingredients: z.array(
-        z.object({
-          ingredient_id: z.string().optional(),
-          ingredient_name: z.string().optional(),
-          quantity: z.number(),
-          unit: z.string(),
-        }),
-      ),
-    });
-    const prompt: { role: 'system' | 'user'; content: string }[] = [
-      {
-        role: 'system',
-        content:
-          'You are Recipe Adjuster. Given current recipe and user note, respond ONLY with JSON {new_name?, instructions?, ingredients:[{ingredient_id?, ingredient_name?, quantity, unit}]}. Use ingredient_id when provided; do not invent ids.',
-      },
-      { role: 'user', content: JSON.stringify(payload) },
-    ];
-    const raw = await this.callModel(this.reviewModel, prompt, 'review');
-    return schema.parse(raw);
-  }
-
-  async generateRecipe(payload: {
-    note?: string;
-    meal_slot?: string;
-    meal_type?: string;
-    difficulty?: string;
-    budget_per_meal?: number;
-  }) {
-    const toNum = (v: any) => {
-      if (v === null || v === undefined || v === '') return 0;
-      const n = Number(v);
-      return Number.isFinite(n) ? n : 0;
-    };
-
-    const schema = z.object({
-      name: z.string().optional(),
-      meal_slot: z.string().optional(),
-      meal_type: z.string().nullable().optional(),
-      difficulty: z.string().optional(),
-      base_cost_gbp: z.preprocess(toNum, z.number().optional()),
-      instructions: z.any().optional(),
-      ingredients: z
-        .array(
-          z.object({
-            ingredient_name: z.string(),
-            quantity: z.preprocess(toNum, z.number()),
-            unit: z.string().nullable().optional(),
-          }),
-        )
-        .optional(),
-    });
-    const prompt: { role: 'system' | 'user'; content: string }[] = [
-      {
-        role: 'system',
-        content:
-          'You are Recipe Generator. Return ONLY JSON with {name, meal_slot, meal_type?, difficulty?, base_cost_gbp?, instructions, ingredients:[{ingredient_name, quantity, unit}]}. Use concise instructions. Do not invent IDs.',
-      },
-      { role: 'user', content: JSON.stringify(payload) },
-    ];
-    const raw = await this.callModel(this.reviewModel, prompt, 'review');
-    return schema.parse(raw);
   }
 }

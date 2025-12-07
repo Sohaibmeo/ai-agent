@@ -8,7 +8,7 @@ import { usePlansList } from '../hooks/usePlansList';
 import { useProfile } from '../hooks/useProfile';
 import { DEMO_USER_ID } from '../lib/config';
 import { SwapDialog } from '../components/plans/SwapDialog';
-import { activatePlan, fetchActivePlan, setMealRecipe, setPlanStatus } from '../api/plans';
+import { activatePlan, aiPlanSwap, fetchActivePlan, setMealRecipe, setPlanStatus } from '../api/plans';
 import { notify } from '../lib/toast';
 
 const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -134,17 +134,21 @@ export function PlansPage() {
     setSwapMealSlot(undefined);
   };
 
+  const refreshActivePlan = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['plan', 'active', DEMO_USER_ID] });
+    await queryClient.fetchQuery({
+      queryKey: ['plan', 'active', DEMO_USER_ID],
+      queryFn: () => fetchActivePlan(DEMO_USER_ID),
+    });
+  };
+
   const handleSwapSelect = async (recipeId: string) => {
     if (!swapMealId) return;
     try {
       await setMealRecipe({ planMealId: swapMealId, newRecipeId: recipeId });
       notify.success('Meal swapped');
       closeSwap();
-      queryClient.invalidateQueries({ queryKey: ['plan', 'active', DEMO_USER_ID] });
-      await queryClient.fetchQuery({
-        queryKey: ['plan', 'active', DEMO_USER_ID],
-        queryFn: () => fetchActivePlan(DEMO_USER_ID),
-      });
+      await refreshActivePlan();
     } catch (e) {
       notify.error('Could not swap meal');
     }
@@ -260,7 +264,27 @@ export function PlansPage() {
             />
             <div className="mt-1 text-[11px] text-slate-500">AI will use this along with your profile defaults.</div>
             <div className="mt-3 flex justify-end">
-              <button className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800">
+              <button
+                className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+                disabled={!plan?.id || selectedDayIds.length === 0}
+                onClick={async () => {
+                  if (!plan?.id) return;
+                  try {
+                    await aiPlanSwap({
+                      type: 'swap-with-days-selected',
+                      userId: DEMO_USER_ID,
+                      weeklyPlanId: plan.id,
+                      planDayIds: selectedDayIds,
+                      note: note.trim() || undefined,
+                      context: { source: 'plans-page' },
+                    });
+                    notify.success('Request sent');
+                    await refreshActivePlan();
+                  } catch (e) {
+                    notify.error('Could not send request');
+                  }
+                }}
+              >
                 Generate Changes
               </button>
             </div>
@@ -492,7 +516,15 @@ export function PlansPage() {
         </div>
       )}
 
-      <SwapDialog open={Boolean(swapMealId)} mealSlot={swapMealSlot} planMealId={swapMealId} onClose={closeSwap} onSelect={handleSwapSelect} />
+      <SwapDialog
+        open={Boolean(swapMealId)}
+        mealSlot={swapMealSlot}
+        planMealId={swapMealId}
+        weeklyPlanId={plan?.id || null}
+        onClose={closeSwap}
+        onSelect={handleSwapSelect}
+        onPlanUpdated={refreshActivePlan}
+      />
 
       {isAdvancedOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => { resetAdvanced(); setIsAdvancedOpen(false); }}>

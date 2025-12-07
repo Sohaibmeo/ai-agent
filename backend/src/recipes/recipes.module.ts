@@ -13,7 +13,7 @@ import { AgentsModule } from '../agents/agents.module';
     TypeOrmModule.forFeature([Recipe, RecipeIngredient, Ingredient]),
     TypeOrmModule.forFeature([UserRecipeScore]),
     UsersModule,
-    IngredientsModule,
+    forwardRef(() => IngredientsModule),
     forwardRef(() => PreferencesModule),
     forwardRef(() => AgentsModule),
   ],

@@ -4,9 +4,9 @@ import { GeneratePlanDto } from './dto/generate-plan.dto';
 import { SetMealRecipeDto } from './dto/set-meal-recipe.dto';
 import { ActivatePlanDto } from './dto/set-plan-status.dto';
 import { UserIdParamDto } from './dto/user-id-param.dto';
-import { PlanActionDto } from './dto/plan-action.dto';
 import { SetPlanStatusDto } from './dto/set-plan-status.dto';
 import { SaveCustomRecipeDto } from './dto/save-custom-recipe.dto';
+import { AiPlanSwapDto } from './dto/ai-plan-swap.dto';
 
 @Controller('plans')
 export class PlansController {
@@ -42,16 +42,6 @@ export class PlansController {
     return this.plansService.setMealRecipe(body.planMealId, body.newRecipeId);
   }
 
-  @Post('meal/:planMealId/ai-adjust')
-  aiAdjust(@Param('planMealId') planMealId: string, @Body() body: { userId: string; note: string }) {
-    return this.plansService.aiAdjustMeal(planMealId, body.userId, body.note);
-  }
-
-  @Post('auto-swap')
-  autoSwap(@Body() body: { planMealId: string; userId: string; note?: string }) {
-    return this.plansService.autoSwapMeal(body.planMealId, body.userId, body.note);
-  }
-
   @Post('activate')
   activate(@Body() body: ActivatePlanDto) {
     return this.plansService.setStatus(body.planId, 'active');
@@ -67,17 +57,18 @@ export class PlansController {
     return this.plansService.saveCustomRecipe(body.planMealId, body.newName, body.ingredientItems);
   }
 
+  @Post('ai-plan-swap')
+  aiPlanSwap(@Body() body: AiPlanSwapDto) {
+    // For debugging:
+    // console.log('[ai-plan-swap] request', JSON.stringify(body));
+    if (body?.weeklyPlanId && body.userId) {
+      return this.plansService.reviewAndApplyFromAiSwap(body);
+    }
+    return { ok: true, received: body, warning: 'weeklyPlanId and userId are required' };
+  }
+
   @Get(':id')
   getById(@Param('id') id: string) {
     return this.plansService.findById(id);
-  }
-
-  @Post(':weeklyPlanId/actions')
-  applyAction(@Param('weeklyPlanId') weeklyPlanId: string, @Body() body: PlanActionDto) {
-    return this.plansService.applyAction(weeklyPlanId, {
-      actionContext: body.actionContext,
-      reasonText: body.reasonText,
-      userId: body.userId,
-    });
   }
 }

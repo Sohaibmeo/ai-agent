@@ -2,17 +2,27 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRecipeCandidates } from '../../hooks/useRecipeCandidates';
 import { DEMO_USER_ID } from '../../lib/config';
 import { notify } from '../../lib/toast';
-import { autoSwapMeal } from '../../api/plans';
+import { aiPlanSwap } from '../../api/plans';
 
 interface SwapDialogProps {
   open: boolean;
   mealSlot?: string;
   planMealId?: string | null;
+  weeklyPlanId?: string | null;
   onClose: () => void;
   onSelect: (recipeId: string) => void;
+  onPlanUpdated?: () => Promise<void> | void;
 }
 
-export function SwapDialog({ open, mealSlot, planMealId, onClose, onSelect }: SwapDialogProps) {
+export function SwapDialog({
+  open,
+  mealSlot,
+  planMealId,
+  weeklyPlanId,
+  onClose,
+  onSelect,
+  onPlanUpdated,
+}: SwapDialogProps) {
   const { data: candidates, isLoading, isError, refetch } = useRecipeCandidates(mealSlot, DEMO_USER_ID);
   const [search, setSearch] = useState('');
   const [autoMode, setAutoMode] = useState<'prompt' | 'question' | null>(null);
@@ -49,25 +59,28 @@ export function SwapDialog({ open, mealSlot, planMealId, onClose, onSelect }: Sw
   if (!open) return null;
 
   const autoPick = async () => {
-    if (!planMealId) {
-      const choice = filtered[0] || candidates?.[0];
-      if (choice) {
-        onSelect(choice.id);
-        onClose();
-        notify.success('Auto-selected a replacement');
-      }
+    if (!weeklyPlanId) {
+      notify.error('Missing plan id for swap');
       return;
     }
     try {
       setIsAutoPicking(true);
-      const res = await autoSwapMeal({ planMealId, userId: DEMO_USER_ID, note: autoNote || undefined });
-      const chosenId = res.chosenRecipeId;
-      notify.success('Auto-selected a replacement');
+      const payload = {
+        type: autoNote.trim() ? 'auto-swap-with-context' : 'auto-swap-no-text',
+        userId: DEMO_USER_ID,
+        weeklyPlanId,
+        planMealId,
+        note: autoNote.trim() || undefined,
+        context: { source: 'swap-dialog', mealSlot },
+      };
+      await aiPlanSwap(payload);
+      notify.success('Request sent');
       onClose();
-      // Trigger parent refresh via onSelect for consistency
-      if (chosenId) onSelect(chosenId);
+      if (onPlanUpdated) {
+        await onPlanUpdated();
+      }
     } catch (e) {
-      notify.error('Could not auto-select a meal');
+      notify.error('Could not send request');
     } finally {
       setIsAutoPicking(false);
     }

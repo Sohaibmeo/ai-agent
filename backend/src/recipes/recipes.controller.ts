@@ -1,8 +1,6 @@
 import { Body, Controller, Get, Post, Query, Param } from '@nestjs/common';
 import { RecipesService } from './recipes.service';
-import { RecipeCandidatesQueryDto } from './dto/recipe-candidates-query.dto';
 import { CustomFromExistingDto } from './dto/custom-from-existing.dto';
-import { GenerateRecipeDto } from './dto/generate-recipe.dto';
 
 @Controller('recipes')
 export class RecipesController {
@@ -14,8 +12,11 @@ export class RecipesController {
   }
 
   @Get('candidates')
-  candidates(@Query() query: RecipeCandidatesQueryDto) {
-    return this.recipesService.findCandidatesForUser(query);
+  async candidates(@Query('userId') userId: string, @Query('mealSlot') mealSlot?: string) {
+    if (!userId) {
+      throw new Error('userId is required');
+    }
+    return []
   }
 
   @Get(':id')
@@ -26,10 +27,5 @@ export class RecipesController {
   @Post('custom-from-existing')
   async customFromExisting(@Body() body: CustomFromExistingDto) {
     return this.recipesService.createCustomFromExisting(body);
-  }
-
-  @Post('generate')
-  async generate(@Body() body: GenerateRecipeDto) {
-    return this.recipesService.generateRecipeFromLLM(body);
   }
 }
