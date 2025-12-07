@@ -203,7 +203,8 @@ export class AgentsService {
       {
         role: 'system',
         content:
-          'You are Recipe Generator. Return ONLY JSON with {name, meal_slot, meal_type?, difficulty?, base_cost_gbp?, instructions, ingredients:[{ingredient_name, quantity, unit}]}. Use concise instructions. Do not invent IDs.',
+          'You are Recipe Generator. Return ONLY JSON with {name, meal_slot, meal_type?, difficulty?, base_cost_gbp?, instructions, ingredients:[{ingredient_name, quantity, unit}]}. ' +
+          'All ingredient quantities MUST be in grams ("g"). Set unit="g" for every ingredient. Use concise instructions. Do not invent IDs.',
       },
       { role: 'user', content: JSON.stringify(payload) },
     ];
@@ -276,7 +277,8 @@ export class AgentsService {
           '- Keep the core idea and style unless the note explicitly asks for a completely different dish.\n' +
           '- Prefer minimal changes: tweak ingredients, quantities, or instructions just enough to satisfy the note.\n' +
           '- Preserve reasonable macros and budget; do not drastically increase cost or calories without reason.\n' +
-          '- Respond ONLY with JSON: {name, meal_slot, meal_type?, difficulty?, base_cost_gbp?, instructions, ingredients:[{ingredient_name, quantity, unit}]}.',
+          '- Respond ONLY with JSON: {name, meal_slot, meal_type?, difficulty?, base_cost_gbp?, instructions, ingredients:[{ingredient_name, quantity, unit}]}. ' +
+          'All ingredient quantities MUST be in grams ("g"). Set unit="g" for every ingredient.',
       },
       {
         role: 'user',

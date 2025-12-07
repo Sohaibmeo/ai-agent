@@ -924,7 +924,7 @@ export class PlansService {
         return {
           ingredientId: ent.id,
           quantity: Number(ing.quantity ?? 0),
-          unit: ing.unit || 'g',
+          unit: 'g',
         };
       }),
     );
@@ -1208,7 +1208,7 @@ export class PlansService {
       ingredients: (draft.ingredients || []).map((ing: any) => ({
         ingredient_name: ing.ingredient_name,
         quantity: Number(ing.quantity || 0),
-        unit: ing.unit || 'g',
+        unit: 'g',
       })),
       source: 'llm',
       isSearchable: false,
