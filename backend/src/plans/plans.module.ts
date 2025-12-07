@@ -18,7 +18,7 @@ import { IngredientsModule } from '../ingredients/ingredients.module';
     ShoppingListModule,
     forwardRef(() => PreferencesModule),
     forwardRef(() => AgentsModule),
-    IngredientsModule,
+    forwardRef(() => IngredientsModule),
   ],
   providers: [PlansService],
   controllers: [PlansController],

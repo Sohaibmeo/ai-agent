@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Ingredient } from '../database/entities';
+import { AgentsService } from '../agents/agents.service';
 import { NormalizeForMatch, ComputeNameSimilarity, Singularize } from '../ingredients/helper/normalize';
 
 @Injectable()
@@ -11,6 +12,7 @@ export class IngredientsService implements OnModuleInit {
   constructor(
     @InjectRepository(Ingredient)
     private readonly ingredientRepo: Repository<Ingredient>,
+    private readonly agentsService: AgentsService,
   ) { }
 
   async onModuleInit() {
@@ -170,7 +172,7 @@ async findOrCreateByName(name: string): Promise<Ingredient> {
     }
   }
 
-  const THRESHOLD = 0.55; // can be tuned
+  const THRESHOLD = 0.52; // can be tuned
 
   if (best && bestScore >= THRESHOLD) {
     this.logger.log(
@@ -181,28 +183,89 @@ async findOrCreateByName(name: string): Promise<Ingredient> {
     return best;
   }
 
-  // --- 6) No good match found → create draft ingredient --------------
+  // --- 6) No good match found → call LLM ingredient estimator --------
 
-  const draft: Partial<Ingredient> = {
+  this.logger.log(
+    `No good fuzzy match for ingredient "${trimmed}" (bestScore=${bestScore.toFixed(
+      2,
+    )}). Calling LLM ingredient estimator...`,
+  );
+
+  let llmEstimate:
+    | {
+        name: string;
+        category?: string;
+        kcal_per_100g: number;
+        protein_per_100g: number;
+        carbs_per_100g: number;
+        fat_per_100g: number;
+        estimated_price_per_100g_gbp?: number;
+        allergen_keys?: string[];
+      }
+    | null = null;
+
+  try {
+    llmEstimate = await this.agentsService.generateIngredientEstimate({
+      name: trimmed,
+      locale: 'uk',
+    });
+  } catch (err) {
+    this.logger.error(
+      `LLM ingredient estimate failed for "${trimmed}": ${(err as Error).message}`,
+    );
+  }
+
+  if (llmEstimate) {
+    const draft: Partial<Ingredient> = {
+      name: trimmed,
+      similarity_name: normalized,
+      category: llmEstimate.category,
+      unit_type: 'per_100g',
+      kcal_per_unit: llmEstimate.kcal_per_100g,
+      protein_per_unit: llmEstimate.protein_per_100g,
+      carbs_per_unit: llmEstimate.carbs_per_100g,
+      fat_per_unit: llmEstimate.fat_per_100g,
+      estimated_price_per_unit_gbp:
+        llmEstimate.estimated_price_per_100g_gbp ?? undefined,
+      allergen_keys: llmEstimate.allergen_keys || [],
+    };
+
+    ingredient = this.ingredientRepo.create(draft);
+    await this.ingredientRepo.save(ingredient);
+
+    this.logger.log(
+      `Created new ingredient via LLM: "${trimmed}" ` +
+        `(kcal=${draft.kcal_per_unit}, protein=${draft.protein_per_unit}, ` +
+        `carbs=${draft.carbs_per_unit}, fat=${draft.fat_per_unit}, ` +
+        `price=${draft.estimated_price_per_unit_gbp})`,
+    );
+
+    return ingredient;
+  }
+
+  // --- 7) LLM also failed → safe generic fallback --------------------
+
+  // Generic “unknown ingredient” profile:
+  // - Not crazy high or low, avoids 0 values.
+  // - Think of it as a mid-density carb-ish food.
+  const fallbackDraft: Partial<Ingredient> = {
     name: trimmed,
     similarity_name: normalized,
     category: undefined,
     unit_type: 'per_100g',
-    kcal_per_unit: undefined,
-    protein_per_unit: undefined,
-    carbs_per_unit: undefined,
-    fat_per_unit: undefined,
-    estimated_price_per_unit_gbp: undefined,
+    kcal_per_unit: 150, // mid-range kcal
+    protein_per_unit: 5, // small protein
+    carbs_per_unit: 25, // moderate carbs
+    fat_per_unit: 3, // small fat
+    estimated_price_per_unit_gbp: 0.75, // mid-range price per 100g
     allergen_keys: [],
   };
 
-  ingredient = this.ingredientRepo.create(draft);
+  ingredient = this.ingredientRepo.create(fallbackDraft);
   await this.ingredientRepo.save(ingredient);
 
-  this.logger.log(
-    `Created new ingredient from LLM: "${trimmed}" (no good fuzzy match, bestScore=${bestScore.toFixed(
-      2,
-    )}, tokens=${JSON.stringify(searchTokens)})`,
+  this.logger.warn(
+    `LLM ingredient estimate unavailable for "${trimmed}". Created generic fallback ingredient with mid-range macros and price.`,
   );
 
   return ingredient;

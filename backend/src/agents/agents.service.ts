@@ -227,6 +227,101 @@ export class AgentsService {
     throw lastErr;
   }
 
+  async generateIngredientEstimate(payload: {
+    name: string;
+    locale?: 'uk' | 'us';
+  }) {
+    const toNum = (v: any) => {
+      if (v === null || v === undefined || v === '') return 0;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    const schema = z.object({
+      name: z.string(),
+      category: z.string().optional(),
+      kcal_per_100g: z.preprocess(toNum, z.number()),
+      protein_per_100g: z.preprocess(toNum, z.number()),
+      carbs_per_100g: z.preprocess(toNum, z.number()),
+      fat_per_100g: z.preprocess(toNum, z.number()),
+      estimated_price_per_100g_gbp: z.preprocess(toNum, z.number().optional()),
+      allergen_keys: z.array(z.string()).optional(),
+    });
+
+    const prompt: { role: 'system' | 'user'; content: string }[] = [
+      {
+        role: 'system',
+        content:
+          'You are Ingredient Estimator.\n' +
+          '\n' +
+          'GOAL:\n' +
+          '- Given a grocery ingredient name, you must estimate its typical nutrition per 100g and an approximate retail price per 100g in GBP.\n' +
+          '\n' +
+          'STRICT FORMAT:\n' +
+          '- Reply ONLY with JSON, no markdown, no backticks, no comments.\n' +
+          '- JSON shape:\n' +
+          '  {\n' +
+          '    "name": string,              // normalised or cleaned name\n' +
+          '    "category": string?,         // e.g. "Fats and Oils", "Vegetables", "Meat", "Carbohydrates"\n' +
+          '    "kcal_per_100g": number,\n' +
+          '    "protein_per_100g": number,\n' +
+          '    "carbs_per_100g": number,\n' +
+          '    "fat_per_100g": number,\n' +
+          '    "estimated_price_per_100g_gbp": number, // approximate typical UK supermarket price per 100g in GBP\n' +
+          '    "allergen_keys": string[]?   // lowercase keys like ["gluten","nuts","soy","milk","egg","fish","shellfish","sesame","mustard","celery","sulphites","lupin","peanuts"]\n' +
+          '  }\n' +
+          '\n' +
+          'RULES:\n' +
+          '- All macros MUST be for 100g of the raw product.\n' +
+          '- Use realistic typical values (you may approximate from common nutrition databases / packaging).\n' +
+          '- Never return all zeros unless it is literally plain water or a negligible seasoning (like salt, pepper, herbs).\n' +
+          '- For oils and pure fats, kcal_per_100g should be ~850–900 kcal and fat_per_100g ~90–100g.\n' +
+          '- For lean meats like chicken breast, protein_per_100g is typically 25–35g.\n' +
+          '- For sugars or syrups, carbs_per_100g is usually 70–100g.\n' +
+          '- For flours, grains, and breads, carbs_per_100g is often 50–80g and protein 5–15g.\n' +
+          '- Price should reflect a rough UK supermarket price (cheap supermarket own-brand, not luxury organic). If unsure, give a reasonable mid-range estimate.\n' +
+          '- If the ingredient is a compound product (e.g. “sweet chilli sauce”), estimate based on a typical commercial product in that category.\n' +
+          '\n' +
+          'IMPORTANT:\n' +
+          '- locale="uk" means use UK-style macro assumptions and GBP pricing.\n' +
+          '- Do NOT include any explanation outside the JSON.',
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          name: payload.name,
+          locale: payload.locale || 'uk',
+        }),
+      },
+    ];
+
+    const maxRetries = 2;
+    let lastErr: any;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      try {
+        const raw = await this.callModel(this.nutritionModel, prompt, 'nutrition');
+        this.logger.log(
+          `[nutrition] generateIngredientEstimate raw=${JSON.stringify(raw).substring(
+            0,
+            800,
+          )} input=${JSON.stringify(payload)} attempt=${attempt + 1}`,
+        );
+        const parsed = schema.parse(raw);
+        return parsed;
+      } catch (err) {
+        lastErr = err;
+        this.logger.error(
+          `[nutrition] generateIngredientEstimate parse_failed attempt=${
+            attempt + 1
+          } err=${(err as any)?.message || err}`,
+        );
+      }
+    }
+
+    throw lastErr;
+  }
+
   async adjustRecipeWithContext(payload: {
     note: string;
     originalRecipe: {
