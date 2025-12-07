@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, ReactNode } from 'react';
 
-export type AgentRunKind = 'generate-week' | 'review-plan' | 'adjust-recipe';
+export type AgentRunKind = 'generate-week' | 'review-plan' | 'adjust-recipe' | 'generic-llm';
 
 export type AgentStepStatus = 'pending' | 'active' | 'done' | 'error';
 
@@ -49,25 +49,35 @@ export function AgentPipelineProvider({ children }: { children: ReactNode }) {
         ? [
             { id: 'prepare-profile', label: 'Preparing your profile & targets', status: 'active' },
             { id: 'generate-days', label: 'Generating daily meals with the coach', status: 'pending' },
-            { id: 'save-plan', label: 'Saving plan & recomputing totals', status: 'pending' },
+            { id: 'save-plan', label: 'Saving plan and recomputing totals', status: 'pending' },
             { id: 'shopping-list', label: 'Building shopping list', status: 'pending' },
           ]
-        : [
-            { id: 'interpret-request', label: 'Understanding your request', status: 'active' },
-            { id: 'plan-changes', label: 'Planning safe changes to your plan', status: 'pending' },
-            { id: 'apply-changes', label: 'Applying changes to your meals', status: 'pending' },
-            { id: 'recompute', label: 'Recomputing nutrition & costs', status: 'pending' },
-          ];
+        : kind === 'generic-llm'
+          ? [
+              { id: 'sending', label: 'Sending request', status: 'active' },
+              { id: 'thinking', label: 'LLM thinking', status: 'pending' },
+              { id: 'applying', label: 'Updating your plan', status: 'pending' },
+            ]
+          : [
+              { id: 'interpret-request', label: 'Understanding your request', status: 'active' },
+              { id: 'plan-changes', label: 'Planning safe changes to your plan', status: 'pending' },
+              { id: 'apply-changes', label: 'Applying changes to your meals', status: 'pending' },
+              { id: 'recompute', label: 'Recomputing nutrition and costs', status: 'pending' },
+            ];
 
     setState({
       isOpen: true,
       kind,
       title:
         opts.title ??
-        (kind === 'generate-week' ? 'Cooking up your weekly plan...' : 'Adjusting your plan with AI...'),
+        (kind === 'generate-week'
+          ? 'Cooking up your weekly plan...'
+          : kind === 'generic-llm'
+            ? 'Working with the AI agent...'
+            : 'Adjusting your plan with AI...'),
       subtitle:
         opts.subtitle ??
-        'This can take a little while. We’ll keep you updated as the agent moves through each step.',
+        'This can take a little while. We will keep you updated as the agent moves through each step.',
       steps: opts.steps ?? defaultSteps,
       canClose: false,
       errorMessage: undefined,

@@ -10,7 +10,7 @@ import { DEMO_USER_ID } from '../lib/config';
 import { SwapDialog } from '../components/plans/SwapDialog';
 import { activatePlan, aiPlanSwap, fetchActivePlan, setMealRecipe, setPlanStatus } from '../api/plans';
 import { notify } from '../lib/toast';
-import { useAgentPipeline } from '../hooks/useAgentPipeline';
+import { useLlmAction } from '../hooks/useLlmAction';
 
 const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const pillClass = 'rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 border border-slate-200';
@@ -21,7 +21,14 @@ export function PlansPage() {
   const { data: plan, isLoading, isError, refetchPlan, generatePlan, isGenerating } = useActivePlan(DEMO_USER_ID);
   const { data: plansList } = usePlansList();
   const { data: profile, saveProfile } = useProfile();
-  const { startRun, updateStep, endRun, setError } = useAgentPipeline();
+  const { runWithLlmLoader: runPlanGeneration } = useLlmAction({
+    title: 'Generating your weekly plan...',
+    subtitle: 'Your AI coach is planning meals around your macros and budget.',
+  });
+  const { runWithLlmLoader: runPlanAdjustment } = useLlmAction({
+    title: 'Adjusting your plan with AI...',
+    subtitle: 'We will plan safe changes for your meals while keeping targets in mind.',
+  });
   const days = useMemo(() => {
     const d = plan?.days || [];
     return [...d].sort((a, b) => a.day_index - b.day_index);
@@ -182,37 +189,24 @@ export function PlansPage() {
 
   const runAgentPlanGeneration = async () => {
     try {
-      startRun('generate-week', {
-        title: 'Generating your weekly plan...',
-        subtitle: 'The AI coach is planning meals around your macros, budget and preferences.',
+      await runPlanGeneration(async () => {
+        const result = await generatePlan({
+          useAgent: true,
+          useLlmRecipes: false,
+          sameMealsAllWeek,
+          weekStartDate: weekStart,
+          weeklyBudgetGbp: weeklyBudget ? Number(weeklyBudget) : undefined,
+          breakfast_enabled: slots.breakfast_enabled,
+          snack_enabled: slots.snack_enabled,
+          lunch_enabled: slots.lunch_enabled,
+          dinner_enabled: slots.dinner_enabled,
+          maxDifficulty: slots.max_difficulty,
+        });
+        notify.success('New plan generated');
+        return result;
       });
-
-      updateStep('prepare-profile', 'active');
-      notify.info('Generating plan...');
-
-      await generatePlan({
-        useAgent: true,
-        useLlmRecipes: false,
-        sameMealsAllWeek,
-        weekStartDate: weekStart,
-        weeklyBudgetGbp: weeklyBudget ? Number(weeklyBudget) : undefined,
-        breakfast_enabled: slots.breakfast_enabled,
-        snack_enabled: slots.snack_enabled,
-        lunch_enabled: slots.lunch_enabled,
-        dinner_enabled: slots.dinner_enabled,
-        maxDifficulty: slots.max_difficulty,
-      });
-
-      updateStep('prepare-profile', 'done');
-      updateStep('generate-days', 'done');
-      updateStep('save-plan', 'done');
-      updateStep('shopping-list', 'done');
-      notify.success('New plan generated');
-
-      setTimeout(() => endRun(), 500);
     } catch (e) {
       console.error(e);
-      setError('The agent could not generate your plan. Please try again in a moment.');
       notify.error('Could not generate plan');
     }
   };
@@ -290,32 +284,22 @@ export function PlansPage() {
                 onClick={async () => {
                   if (!plan?.id) return;
                   try {
-                    startRun('review-plan', {
-                      title: 'Adjusting your plan with AI...',
-                      subtitle: 'We will plan safe changes for the selected days and update your meals.',
+                    await runPlanAdjustment(async () => {
+                      const result = await aiPlanSwap({
+                        type: 'swap-with-days-selected',
+                        userId: DEMO_USER_ID,
+                        weeklyPlanId: plan.id,
+                        planDayIds: selectedDayIds,
+                        note: note.trim() || undefined,
+                        context: { source: 'plans-page' },
+                      });
+                      notify.success('Request sent');
+                      await refreshActivePlan();
+                      return result;
                     });
-                    updateStep('interpret-request', 'active');
-
-                    await aiPlanSwap({
-                      type: 'swap-with-days-selected',
-                      userId: DEMO_USER_ID,
-                      weeklyPlanId: plan.id,
-                      planDayIds: selectedDayIds,
-                      note: note.trim() || undefined,
-                      context: { source: 'plans-page' },
-                    });
-
-                    updateStep('interpret-request', 'done');
-                    updateStep('plan-changes', 'done');
-                    updateStep('apply-changes', 'done');
-                    updateStep('recompute', 'done');
-                    notify.success('Request sent');
-                    setTimeout(() => endRun(), 500);
-                    await refreshActivePlan();
                   } catch (e) {
                     console.error(e);
                     notify.error('Could not send request');
-                    setError('The AI review failed to apply changes. Please try again.');
                   }
                 }}
               >
