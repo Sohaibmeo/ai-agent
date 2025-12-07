@@ -11,9 +11,18 @@ interface SwapDialogProps {
   weeklyPlanId?: string | null;
   onClose: () => void;
   onSelect: (recipeId: string) => void;
+  onPlanUpdated?: () => Promise<void> | void;
 }
 
-export function SwapDialog({ open, mealSlot, planMealId, weeklyPlanId, onClose, onSelect }: SwapDialogProps) {
+export function SwapDialog({
+  open,
+  mealSlot,
+  planMealId,
+  weeklyPlanId,
+  onClose,
+  onSelect,
+  onPlanUpdated,
+}: SwapDialogProps) {
   const { data: candidates, isLoading, isError, refetch } = useRecipeCandidates(mealSlot, DEMO_USER_ID);
   const [search, setSearch] = useState('');
   const [autoMode, setAutoMode] = useState<'prompt' | 'question' | null>(null);
@@ -64,11 +73,12 @@ export function SwapDialog({ open, mealSlot, planMealId, weeklyPlanId, onClose, 
         note: autoNote.trim() || undefined,
         context: { source: 'swap-dialog', mealSlot },
       };
-      const res: any = await aiPlanSwap(payload);
-      const chosenId = res?.chosenRecipeId || filtered[0]?.id || candidates?.[0]?.id;
+      await aiPlanSwap(payload);
       notify.success('Request sent');
       onClose();
-      if (chosenId) onSelect(chosenId);
+      if (onPlanUpdated) {
+        await onPlanUpdated();
+      }
     } catch (e) {
       notify.error('Could not send request');
     } finally {

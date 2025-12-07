@@ -134,17 +134,21 @@ export function PlansPage() {
     setSwapMealSlot(undefined);
   };
 
+  const refreshActivePlan = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['plan', 'active', DEMO_USER_ID] });
+    await queryClient.fetchQuery({
+      queryKey: ['plan', 'active', DEMO_USER_ID],
+      queryFn: () => fetchActivePlan(DEMO_USER_ID),
+    });
+  };
+
   const handleSwapSelect = async (recipeId: string) => {
     if (!swapMealId) return;
     try {
       await setMealRecipe({ planMealId: swapMealId, newRecipeId: recipeId });
       notify.success('Meal swapped');
       closeSwap();
-      queryClient.invalidateQueries({ queryKey: ['plan', 'active', DEMO_USER_ID] });
-      await queryClient.fetchQuery({
-        queryKey: ['plan', 'active', DEMO_USER_ID],
-        queryFn: () => fetchActivePlan(DEMO_USER_ID),
-      });
+      await refreshActivePlan();
     } catch (e) {
       notify.error('Could not swap meal');
     }
@@ -275,6 +279,7 @@ export function PlansPage() {
                       context: { source: 'plans-page' },
                     });
                     notify.success('Request sent');
+                    await refreshActivePlan();
                   } catch (e) {
                     notify.error('Could not send request');
                   }
@@ -518,6 +523,7 @@ export function PlansPage() {
         weeklyPlanId={plan?.id || null}
         onClose={closeSwap}
         onSelect={handleSwapSelect}
+        onPlanUpdated={refreshActivePlan}
       />
 
       {isAdvancedOpen && (

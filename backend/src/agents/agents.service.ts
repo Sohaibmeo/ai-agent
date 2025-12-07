@@ -35,24 +35,26 @@ export class AgentsService {
   }
 
   async interpretPlanChange(payload: { note: string }) {
+    const allowedActions = [
+      'regenerate_week',
+      'regenerate_day',
+      'regenerate_meal',
+      'swap_meal',
+      'swap_ingredient',
+      'remove_ingredient',
+      'adjust_recipe',
+      'adjust_macros',
+      'set_meal_type',
+      'avoid_ingredient_future',
+      'lock_meal',
+      'lock_day',
+      'set_fixed_breakfast',
+      'no_change_clarify',
+      'no_detectable_action',
+    ] as const;
+
     const actionSchema = z.object({
-      action: z.enum([
-        'regenerate_week',
-        'regenerate_day',
-        'regenerate_meal',
-        'swap_meal',
-        'swap_ingredient',
-        'remove_ingredient',
-        'adjust_recipe',
-        'adjust_macros',
-        'set_meal_type',
-        'avoid_ingredient_future',
-        'lock_meal',
-        'lock_day',
-        'set_fixed_breakfast',
-        'no_change_clarify',
-        'no_detectable_action',
-      ]),
+      action: z.string(),
       targetLevel: z.enum(['week', 'day', 'meal', 'recipe']).optional(),
       avoidIngredients: z.array(z.string()).optional(),
       modifiers: z.record(z.string(), z.any()).optional(),
@@ -77,6 +79,62 @@ export class AgentsService {
       },
     ];
     const raw = await this.callModel(this.reviewModel, prompt, 'review');
+    this.logger.log(`[review] interpret raw=${JSON.stringify(raw)}`);
+    const parsed = schema.parse(raw);
+    const normalizedActions = (parsed.actions || []).map((act) => {
+      if (allowedActions.includes(act.action as any)) return act;
+      return { ...act, action: 'no_detectable_action', notes: `unrecognized_action:${act.action}` };
+    });
+    this.logger.log(
+      `[review] interpret normalized=${JSON.stringify(
+        normalizedActions,
+      )} from note="${payload.note || ''}"`,
+    );
+    return { actions: normalizedActions };
+  }
+
+  async generateRecipe(payload: {
+    note?: string;
+    meal_slot?: string;
+    meal_type?: string;
+    difficulty?: string;
+    budget_per_meal?: number;
+  }) {
+    const toNum = (v: any) => {
+      if (v === null || v === undefined || v === '') return 0;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    const schema = z.object({
+      name: z.string().optional(),
+      meal_slot: z.string().optional(),
+      meal_type: z.string().nullable().optional(),
+      difficulty: z.string().optional(),
+      base_cost_gbp: z.preprocess(toNum, z.number().optional()),
+      instructions: z.any().optional(),
+      ingredients: z
+        .array(
+          z.object({
+            ingredient_name: z.string(),
+            quantity: z.preprocess(toNum, z.number()),
+            unit: z.string().nullable().optional(),
+          }),
+        )
+        .optional(),
+    });
+    const prompt: { role: 'system' | 'user'; content: string }[] = [
+      {
+        role: 'system',
+        content:
+          'You are Recipe Generator. Return ONLY JSON with {name, meal_slot, meal_type?, difficulty?, base_cost_gbp?, instructions, ingredients:[{ingredient_name, quantity, unit}]}. Use concise instructions. Do not invent IDs.',
+      },
+      { role: 'user', content: JSON.stringify(payload) },
+    ];
+    const raw = await this.callModel(this.reviewModel, prompt, 'review');
+    this.logger.log(
+      `[review] generateRecipe raw=${JSON.stringify(raw)} input=${JSON.stringify(payload)}`,
+    );
     return schema.parse(raw);
   }
 
