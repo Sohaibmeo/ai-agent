@@ -119,30 +119,48 @@ export class AgentsService {
       },
     ];
 
-    const raw = await this.callModel(this.reviewModel, prompt, 'review');
-    this.logAgent('review', `model=${this.reviewModel}`);
+    const maxRetries = 3;
+    let raw: any;
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      try {
+        raw = await this.callModel(this.reviewModel, prompt, 'review');
+        this.logAgent('review', `model=${this.reviewModel}`);
+        break;
+      } catch (err) {
+        this.logger.warn(
+          `[review] interpretReviewAction attempt=${attempt + 1} failed err=${(err as any)?.message || err}`,
+        );
+        if (attempt >= maxRetries) {
+          throw err;
+        }
+      }
+    }
 
     // DEBUG: see model raw JSON
     this.logger.debug(`[review] rawResponse=${JSON.stringify(raw).substring(0, 2000)}...`);
 
     // Normalise fields before validation
-    const normalized: any = { ...raw };
-    if (Array.isArray(normalized.notes)) {
-      normalized.notes = normalized.notes.join(' ');
-    }
-    if (normalized.targetIds && normalized.targetIds.planWeekId && !normalized.targetIds.weeklyPlanId) {
-      normalized.targetIds.weeklyPlanId = normalized.targetIds.planWeekId;
-      delete normalized.targetIds.planWeekId;
+    const normalizedInput: any = { ...raw };
+    if (normalizedInput.targetIds && normalizedInput.targetIds.planWeekId && !normalizedInput.targetIds.weeklyPlanId) {
+      normalizedInput.targetIds.weeklyPlanId = normalizedInput.targetIds.planWeekId;
+      delete normalizedInput.targetIds.planWeekId;
     }
 
-    const parsedRaw = reviewInstructionSchema.parse(normalized);
-    const parsed: ReviewInstruction = {
+    const parsedRaw = reviewInstructionSchema.parse(normalizedInput);
+
+    // Normalize notes to a single string
+    const normalized: ReviewInstruction = {
       ...parsedRaw,
       targetIds: parsedRaw.targetIds || (raw as any)?.targetIds || (raw as any)?.targets || undefined,
+      notes: Array.isArray(parsedRaw.notes)
+        ? parsedRaw.notes.length
+          ? parsedRaw.notes.join(' ')
+          : undefined
+        : parsedRaw.notes,
     };
-    this.logger.debug(`[review] parsedInstruction=${JSON.stringify(parsed).substring(0, 2000)}...`);
+    this.logger.debug(`[review] parsedInstruction=${JSON.stringify(normalized).substring(0, 2000)}...`);
 
-    return parsed;
+    return normalized;
   }
 
   async generateRecipe(payload: {
@@ -183,7 +201,7 @@ export class AgentsService {
       },
       { role: 'user', content: JSON.stringify(payload) },
     ];
-    const maxRetries = 2;
+    const maxRetries = 3;
     let lastErr: any;
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
       try {
@@ -260,7 +278,7 @@ export class AgentsService {
       },
     ];
 
-    const maxRetries = 2;
+    const maxRetries = 3;
     let lastErr: any;
 
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
@@ -371,7 +389,7 @@ export class AgentsService {
     },
   ];
 
-    const retries = payload.maxRetries ?? 2;
+    const retries = payload.maxRetries ?? 3;
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt <= retries; attempt += 1) {
@@ -393,7 +411,7 @@ export class AgentsService {
             name: m.name,
             difficulty:
               typeof m.difficulty === 'string'
-                ? m.difficulty
+                ? m.difficulty.trim() || 'easy'
                 : m.difficulty !== undefined && m.difficulty !== null
                   ? String(m.difficulty)
                   : 'easy',
@@ -412,7 +430,14 @@ export class AgentsService {
               : [],
             target_kcal: m.target_kcal,
             target_protein: m.target_protein,
-            compliance_notes: m.compliance_notes,
+            compliance_notes:
+              typeof m.compliance_notes === 'string'
+                ? m.compliance_notes
+                : Array.isArray(m.compliance_notes)
+                  ? m.compliance_notes.length
+                    ? m.compliance_notes.join(' ')
+                    : undefined
+                  : undefined,
           }));
 
         const candidate = {

@@ -38,7 +38,7 @@ export const reviewInstructionSchema = z.object({
     )
     .optional(),
 
-  notes: z.string().optional(),
+  notes: z.union([z.string(), z.array(z.string())]).optional(),
 
   // NEW: optional structured hints for recipe-level changes
   recipeChange: z

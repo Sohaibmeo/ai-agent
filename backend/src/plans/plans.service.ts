@@ -640,6 +640,9 @@ export class PlansService {
     instruction: ReviewInstruction,
     note?: string,
   ) {
+    const instructionNote = Array.isArray(instruction.notes)
+      ? instruction.notes.join(' ')
+      : instruction.notes;
     const targetIdsStr = (() => {
       try {
         const s = JSON.stringify(instruction.targetIds ?? {});
@@ -686,7 +689,8 @@ export class PlansService {
 
       case 'swap_meal': {
         if (instruction.targetIds?.planMealId) {
-          await this.autoSwapMeal(instruction.targetIds.planMealId, userId, instruction.notes || note);
+          const effectiveNotes = instructionNote || note;
+          await this.autoSwapMeal(instruction.targetIds.planMealId, userId, effectiveNotes);
         }
         break;
       }
@@ -770,7 +774,9 @@ export class PlansService {
         } else {
           // Fallback: full AI adjust when no structured guidance
           this.logger.log(`[PlansService] [review] adjust_recipe via AI adjust meal=${mealId}`);
-          await this.aiAdjustMeal(mealId, userId, instruction.notes || note || '');
+          const effectiveNotes =
+            (Array.isArray(instruction.notes) ? instruction.notes.join(' ') : instruction.notes) || note || '';
+          await this.aiAdjustMeal(mealId, userId, effectiveNotes);
         }
         break;
       }
@@ -1215,6 +1221,13 @@ export class PlansService {
       meal_slots: mealSlots,
       note,
     });
+
+    if (!llmDay.meals || !llmDay.meals.length) {
+      this.logger.warn(
+        `[review] regenerateDay (coach) day=${planDayId} returned no meals from LLM, keeping existing meals`,
+      );
+      return;
+    }
 
     const existingMeals = day.meals || [];
     const mealsBySlot: Record<string, PlanMeal> = {};
