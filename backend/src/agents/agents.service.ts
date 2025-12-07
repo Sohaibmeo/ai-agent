@@ -455,7 +455,12 @@ export class AgentsService {
           Array.isArray(payload.meal_slots) &&
           payload.meal_slots.every((slot) => normalizedMeals.some((m: any) => m.meal_slot === slot));
         const parsedOk = parsed.success && parsed.data.meals.length > 0;
-        if (parsedOk && unitsOk && slotsOk) {
+        if (parsedOk && unitsOk) {
+          if (!slotsOk) {
+            this.logger.warn(
+              `[coach] day_index=${payload.day_index} attempt=${attempt + 1} slotsOk=false but parsedOk+unitsOk=true; accepting partial slots`,
+            );
+          }
           return parsed.data;
         }
 
