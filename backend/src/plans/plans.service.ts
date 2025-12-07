@@ -454,54 +454,57 @@ export class PlansService {
 
   private buildReviewActionContext(payload: AiPlanSwapDto): ReviewActionContext {
     const hasText = !!payload.note;
+    let ctx: ReviewActionContext;
 
     // 1) Multiple days selected => bulk days edit
     if (payload.planDayIds && payload.planDayIds.length > 1) {
-      return {
+      ctx = {
         type: 'bulk_edit_days',
         weeklyPlanId: payload.weeklyPlanId,
         planDayIds: payload.planDayIds,
         hasText,
+        rawType: payload.type,
       };
-    }
-
-    // 2) Single day selected
-    if (payload.planDayIds && payload.planDayIds.length === 1) {
-      return {
+    } else if (payload.planDayIds && payload.planDayIds.length === 1) {
+      ctx = {
         type: 'edit_day',
         weeklyPlanId: payload.weeklyPlanId,
         planDayIds: payload.planDayIds,
         hasText,
+        rawType: payload.type,
       };
-    }
-
-    // 3) Meal-level actions
-    if (payload.planMealId) {
-      // Auto swap with no text
+    } else if (payload.planMealId) {
       if (payload.type === 'meal_swap_auto' && !payload.note) {
-        return {
+        ctx = {
           type: 'swap_meal_auto',
           weeklyPlanId: payload.weeklyPlanId,
           planMealId: payload.planMealId,
           hasText,
+          rawType: payload.type,
+        };
+      } else {
+        ctx = {
+          type: 'meal_text_edit',
+          weeklyPlanId: payload.weeklyPlanId,
+          planMealId: payload.planMealId,
+          hasText,
+          rawType: payload.type,
         };
       }
-
-      // Any described meal change (swap dialog + text, or recipe detail edit)
-      return {
-        type: 'meal_text_edit',
+    } else {
+      ctx = {
+        type: 'plan_level_freeform',
         weeklyPlanId: payload.weeklyPlanId,
-        planMealId: payload.planMealId,
         hasText,
+        rawType: payload.type,
       };
     }
 
-    // 4) Fallback: whole-plan free-form note
-    return {
-      type: 'plan_level_freeform',
-      weeklyPlanId: payload.weeklyPlanId,
-      hasText,
-    };
+    this.logger.debug(
+      `[PlansService] buildReviewActionContext type=${ctx.type} ctx=${JSON.stringify(ctx).substring(0, 1000)}...`,
+    );
+
+    return ctx;
   }
 
   async reviewAndApplyFromAiSwap(payload: AiPlanSwapDto) {
@@ -555,9 +558,13 @@ export class PlansService {
         !!actionContext.planMealId ||
         (Array.isArray(actionContext.planDayIds) && actionContext.planDayIds.length > 0);
 
+      this.logger.warn(
+        `[PlansService] LLM returned ${reviewInstruction.action} hasNote=${hasNote} hasExplicitTarget=${hasExplicitTarget} type=${actionContext.type}`,
+      );
+
       if (hasNote || hasExplicitTarget) {
         this.logger.warn(
-          `[PlansService] Overriding LLM no_detectable_action for type=${actionContext.type}`,
+          `[PlansService] Overriding ${reviewInstruction.action} with deterministic fallback`,
         );
 
         // Simple deterministic fallback based on actionContext.type
@@ -633,6 +640,10 @@ export class PlansService {
     instruction: ReviewInstruction,
     note?: string,
   ) {
+    this.logger.debug(
+      `[PlansService] executeReviewInstruction action=${instruction.action} targetLevel=${instruction.targetLevel} targetIds=${JSON.stringify(instruction.targetIds).substring(0, 500)}...`,
+    );
+
     switch (instruction.action) {
       case 'regenerate_week': {
         await this.regenerateWholeWeek(userId, plan.id, note);
@@ -672,18 +683,44 @@ export class PlansService {
         break;
       }
 
-      case 'swap_ingredient':
-      case 'remove_ingredient': {
-        if (instruction.targetIds?.planMealId) {
-          const mods = instruction.modifiers as Record<string, any> | undefined;
-          const ingredientToRemove = mods?.ingredientToRemove;
-          const ingredientToAdd = mods?.ingredientToAdd;
-          await this.swapIngredient(
-            instruction.targetIds.planMealId,
-            ingredientToRemove,
-            instruction.action === 'remove_ingredient' ? null : ingredientToAdd,
-          );
+      case 'swap_ingredient': {
+        const mealId = instruction.targetIds?.planMealId;
+        if (!mealId) {
+          this.logger.warn('[PlansService] swap_ingredient missing planMealId, skipping');
+          break;
         }
+
+        const ingredientToRemove =
+          (instruction.modifiers as any)?.ingredientToRemove || (instruction.modifiers as any)?.remove;
+        const ingredientToAdd =
+          (instruction.modifiers as any)?.ingredientToAdd || (instruction.modifiers as any)?.add;
+
+        this.logger.log(
+          `[PlansService] [review] swap_ingredient meal=${mealId} remove=${ingredientToRemove} add=${ingredientToAdd}`,
+        );
+
+        await this.applySimpleIngredientSwapByName(mealId, {
+          ingredientToRemove,
+          ingredientToAdd,
+        });
+        break;
+      }
+
+      case 'remove_ingredient': {
+        const mealId = instruction.targetIds?.planMealId;
+        if (!mealId) {
+          this.logger.warn('[PlansService] remove_ingredient missing planMealId, skipping');
+          break;
+        }
+
+        const ingredientToRemove =
+          (instruction.modifiers as any)?.ingredientToRemove || (instruction.modifiers as any)?.remove;
+        this.logger.log(
+          `[PlansService] [review] remove_ingredient meal=${mealId} remove=${ingredientToRemove}`,
+        );
+        await this.applySimpleIngredientSwapByName(mealId, {
+          ingredientToRemove,
+        });
         break;
       }
 
@@ -694,10 +731,38 @@ export class PlansService {
         break;
       }
 
-      case 'adjust_recipe':
-      case 'ai_adjust_recipe': {
-        if (instruction.targetIds?.planMealId) {
-          await this.aiAdjustMeal(instruction.targetIds.planMealId, userId, instruction.notes || note || '');
+      case 'adjust_recipe': {
+        const mealId = instruction.targetIds?.planMealId;
+        if (!mealId) {
+          this.logger.warn('[PlansService] adjust_recipe missing planMealId, skipping');
+          break;
+        }
+
+        const removeName =
+          (instruction.modifiers as any)?.ingredientToRemove || (instruction.modifiers as any)?.remove;
+        const addName =
+          (instruction.modifiers as any)?.ingredientToAdd || (instruction.modifiers as any)?.add;
+        const swapSpec = instruction.recipeChange?.ingredientSwap;
+
+        this.logger.debug(
+          `[PlansService] [review] adjust_recipe meal=${mealId} removeName=${removeName} addName=${addName} swapSpec=${swapSpec}`,
+        );
+
+        // Simple deterministic ingredient edits when we have structured hints
+        if (removeName || addName || swapSpec) {
+          this.logger.log(
+            `[PlansService] [review] adjust_recipe -> simple ingredient edit meal=${mealId}`,
+          );
+
+          await this.applySimpleIngredientSwapByName(mealId, {
+            ingredientToRemove: removeName,
+            ingredientToAdd: addName,
+            rawSwapString: swapSpec,
+          });
+        } else {
+          // Fallback: full AI adjust when no structured guidance
+          this.logger.log(`[PlansService] [review] adjust_recipe via AI adjust meal=${mealId}`);
+          await this.aiAdjustMeal(mealId, userId, instruction.notes || note || '');
         }
         break;
       }
@@ -715,6 +780,9 @@ export class PlansService {
     // For most actions, we want to recompute & rebuild shopping list
     await this.recomputeAggregates(plan.id);
     await this.shoppingListService.rebuildForPlan(plan.id);
+    this.logger.log(
+      `[PlansService] executeReviewInstruction done action=${instruction.action} plan=${plan.id}`,
+    );
   }
 
   private async autoSwapMeal(planMealId: string, userId: string, note?: string) {
@@ -738,6 +806,170 @@ export class PlansService {
 
   private async aiAdjustMeal(planMealId: string, userId: string, note: string) {
     await this.regenerateMeal(planMealId, { userId, note });
+  }
+
+  // small helper: parse "remove:x;add:y"
+  private parseSwapString(raw: string): { removeName?: string; addName?: string } {
+    if (!raw) return {};
+    const parts = raw.split(';').map((p) => p.trim());
+    let removeName: string | undefined;
+    let addName: string | undefined;
+
+    for (const part of parts) {
+      const [key, value] = part.split(':').map((s) => s.trim());
+      if (!key || !value) continue;
+      if (key.toLowerCase() === 'remove') removeName = value;
+      if (key.toLowerCase() === 'add') addName = value;
+    }
+
+    return { removeName, addName };
+  }
+
+  private async applySimpleIngredientSwapByName(
+    planMealId: string,
+    swapSpec: {
+      ingredientToRemove?: string;
+      ingredientToAdd?: string;
+      rawSwapString?: string;
+    },
+  ) {
+    this.logger.log(
+      `[PlansService] [review] applySimpleIngredientSwapByName meal=${planMealId} swapSpec=${JSON.stringify(
+        swapSpec,
+      )}`,
+    );
+
+    const meal = await this.planMealRepo.findOne({
+      where: { id: planMealId },
+      relations: [
+        'planDay',
+        'planDay.weeklyPlan',
+        'planDay.weeklyPlan.user',
+        'recipe',
+        'recipe.ingredients',
+        'recipe.ingredients.ingredient',
+      ],
+    });
+
+    if (!meal?.recipe) {
+      this.logger.warn(
+        `[PlansService] [review] applySimpleIngredientSwapByName meal=${planMealId} missing recipe`,
+      );
+      throw new Error('Plan meal or recipe not found for ingredient swap');
+    }
+
+    const userId = (meal.planDay.weeklyPlan as any)?.user?.id;
+
+    const parsed = this.parseSwapString(swapSpec.rawSwapString || '');
+    const removeName = swapSpec.ingredientToRemove || parsed.removeName;
+    const addName = swapSpec.ingredientToAdd || parsed.addName;
+
+    this.logger.debug(
+      `[PlansService] [review] swap parsed remove=${removeName} add=${addName}`,
+    );
+
+    const currentItems = meal.recipe.ingredients || [];
+
+    let filteredItems = currentItems;
+    let removed: (typeof currentItems)[number] | undefined;
+
+    if (removeName) {
+      const removeLower = removeName.toLowerCase();
+      filteredItems = currentItems.filter((ri) => {
+        const name = ri.ingredient?.name?.toLowerCase() || '';
+        const match = name.includes(removeLower);
+        if (match) {
+          removed = ri;
+          this.logger.debug(
+            `[PlansService] [review] removing ingredient name=${ri.ingredient?.name} qty=${ri.quantity}${ri.unit}`,
+          );
+        }
+        return !match;
+      });
+    }
+
+    if (addName) {
+      const quantity = removed?.quantity ?? 100;
+      const unit = removed?.unit ?? 'g';
+
+      this.logger.debug(
+        `[PlansService] [review] adding ingredient name=${addName} qty=${quantity}${unit}`,
+      );
+
+      const ingredientEntity = await this.ingredientsService.findOrCreateByName(addName);
+
+      filteredItems = [
+        ...filteredItems,
+        {
+          ingredient: ingredientEntity as any,
+          quantity,
+          unit,
+        } as any,
+      ];
+    }
+
+    const ingredientItems = await Promise.all(
+      filteredItems.map(async (ri) => {
+        let ingredientId = (ri as any).ingredient?.id;
+        const ingredientName = (ri as any).ingredient?.name;
+
+        if (!ingredientId && ingredientName) {
+          const ent = await this.ingredientsService.findOrCreateByName(ingredientName);
+          ingredientId = ent.id;
+        }
+
+        if (!ingredientId) {
+          return null;
+        }
+
+        return {
+          ingredientId,
+          quantity: Number((ri as any).quantity ?? 0),
+          unit: (ri as any).unit || 'g',
+        };
+      }),
+    );
+
+    const cleanedIngredientItems = (ingredientItems || []).filter(Boolean) as {
+      ingredientId: string;
+      quantity: number;
+      unit: string;
+    }[];
+
+    this.logger.debug(
+      `[PlansService] [review] ingredientItems for custom recipe: ${JSON.stringify(cleanedIngredientItems).substring(0, 1000)}...`,
+    );
+
+    const customRecipe = await this.recipesService.createCustomFromExisting({
+      baseRecipeId: meal.recipe.id,
+      newName: meal.recipe.name,
+      mealSlot: meal.meal_slot,
+      difficulty: meal.recipe.difficulty,
+      ingredientItems: cleanedIngredientItems,
+      createdByUserId: userId,
+      source: 'user',
+      isSearchable: true,
+    });
+
+    this.logger.log(
+      `[PlansService] [review] created custom recipe id=${customRecipe.id} from base=${meal.recipe.id}`,
+    );
+
+    meal.recipe = customRecipe as any;
+    meal.meal_kcal = customRecipe.base_kcal;
+    meal.meal_protein = customRecipe.base_protein;
+    meal.meal_carbs = customRecipe.base_carbs;
+    meal.meal_fat = customRecipe.base_fat;
+    meal.meal_cost_gbp = customRecipe.base_cost_gbp;
+
+    await this.planMealRepo.save(meal);
+
+    await this.recomputeAggregates(meal.planDay.weeklyPlan.id);
+    await this.shoppingListService.rebuildForPlan(meal.planDay.weeklyPlan.id);
+
+    this.logger.log(
+      `[PlansService] [review] applySimpleIngredientSwapByName done meal=${planMealId} recipe=${customRecipe.id}`,
+    );
   }
 
   private async logAction(entry: {

@@ -63,7 +63,7 @@ export class AgentsService {
     };
 
     // DEBUG: see what we actually send
-    this.logger.debug(`[review] requestBody=${JSON.stringify(requestBody).substring(0, 1000)}...`);
+    this.logger.debug(`[review] requestBody=${JSON.stringify(requestBody).substring(0, 2000)}...`);
 
     const prompt: { role: 'system' | 'user'; content: string }[] = [
       {
@@ -73,44 +73,37 @@ export class AgentsService {
           '\n' +
           'GOAL:\n' +
           '- Map a user plan-change request into exactly ONE JSON instruction.\n' +
-          '- You receive: actionContext (where the user clicked), user note (text), and some profile/plan info.\n' +
+          '- You receive: actionContext (where user clicked), note (what they typed), and profile/plan info.\n' +
           '\n' +
-          'RESPONSE FORMAT RULES:\n' +
-          '- Your ENTIRE reply MUST be a single valid JSON object.\n' +
-          '- Do NOT wrap JSON in markdown, backticks, or extra text.\n' +
-          '- Do NOT add comments or explanations.\n' +
+          'FORMAT RULES:\n' +
+          '- Reply MUST be a single valid JSON object matching ReviewInstruction.\n' +
+          '- No markdown, no backticks, no extra text, no comments.\n' +
           '\n' +
           'ACTIONS:\n' +
-          '- regenerate_week: change the whole week.\n' +
-          '- regenerate_day: change one or more days.\n' +
-          '- regenerate_meal: change a single meal.\n' +
-          '- swap_meal: pick a different recipe for this meal.\n' +
-          '- swap_ingredient: replace one ingredient with another.\n' +
-          '- remove_ingredient: remove an ingredient from the recipe.\n' +
-          '- adjust_recipe: small changes to recipe ingredients / instructions.\n' +
-          '- adjust_macros: tweak kcal/protein/carbs/fats via portion or swaps.\n' +
-          '- set_meal_type: change between solid vs drinkable meal.\n' +
-          '- avoid_ingredient_future: remember that user dislikes an ingredient.\n' +
-          '- lock_meal, lock_day: freeze this part of the plan for future changes.\n' +
-          '- set_fixed_breakfast: set default breakfast (e.g. protein shake).\n' +
-          '- no_change_clarify: only if user request is ambiguous and you need a follow-up question.\n' +
-          '- no_detectable_action: only if there is truly no change being requested.\n' +
-          '\n' +
-          'IMPORTANT CONSTRAINTS:\n' +
-          '- If meta.hasNote is true OR meta.hasExplicitTarget is true, you MUST NOT return "no_detectable_action".\n' +
-          '- "no_detectable_action" is ONLY allowed when meta.hasNote=false AND meta.hasExplicitTarget=false.\n' +
-          '- Prefer a best-effort action instead of "no_detectable_action".\n' +
-          '\n' +
-          'TARGETING RULES:\n' +
-          '- Use targetLevel = "week" / "day" / "meal" / "recipe".\n' +
-          '- NEVER invent IDs. Only use IDs from actionContext or weeklyPlanId.\n' +
-          '- For multiple days, use targetIds.planDayIds.\n' +
+          '- regenerate_week, regenerate_day, regenerate_meal\n' +
+          '- swap_meal (pick a different recipe for this meal)\n' +
+          '- swap_ingredient (replace one ingredient with another)\n' +
+          '- remove_ingredient (remove one ingredient)\n' +
+          '- adjust_recipe (more complex recipe edits)\n' +
+          '- adjust_macros, set_meal_type, avoid_ingredient_future\n' +
+          '- lock_meal, lock_day, set_fixed_breakfast\n' +
+          '- no_change_clarify, no_detectable_action\n' +
           '\n' +
           'MAPPING HINTS:\n' +
-          '- If actionContext.type == "bulk_edit_days" => usually regenerate_day with planDayIds.\n' +
-          '- If actionContext.type == "edit_day" => regenerate_day with a single planDayId.\n' +
-          '- If actionContext.type == "meal_text_edit" => swap_meal or adjust_recipe or adjust_macros for that planMealId.\n' +
-          '- If actionContext.type == "plan_level_freeform" => regenerate_week or regenerate_day depending on note.\n',
+          '- If user note is like "remove X", "remove X add Y", "swap X for Y", PREFER action="swap_ingredient".\n' +
+          '  - For swap_ingredient, set targetLevel="meal".\n' +
+          '  - Put the meal ID into targetIds.planMealId.\n' +
+          '  - Use modifiers.ingredientToRemove and modifiers.ingredientToAdd.\n' +
+          '- Use action="adjust_recipe" ONLY when the user wants deeper edits (change cooking method, rewrite instructions, or multi-step changes) that cannot be expressed as a simple ingredient swap.\n' +
+          '\n' +
+          'TARGET RULES:\n' +
+          '- Use targetLevel = "week", "day", "meal", or "recipe".\n' +
+          '- Never invent IDs; only use IDs from actionContext or weeklyPlanId.\n' +
+          '- For multiple days, use targetIds.planDayIds.\n' +
+          '\n' +
+          'SAFETY RULE:\n' +
+          '- If meta.hasNote==true OR meta.hasExplicitTarget==true, you MUST NOT return action="no_detectable_action".\n' +
+          '- Prefer a best-effort action instead.\n',
       },
       {
         role: 'user',
@@ -122,9 +115,12 @@ export class AgentsService {
     this.logAgent('review', `model=${this.reviewModel}`);
 
     // DEBUG: see model raw JSON
-    this.logger.debug(`[review] rawResponse=${JSON.stringify(raw).substring(0, 1000)}...`);
+    this.logger.debug(`[review] rawResponse=${JSON.stringify(raw).substring(0, 2000)}...`);
 
-    return reviewInstructionSchema.parse(raw);
+    const parsed = reviewInstructionSchema.parse(raw);
+    this.logger.debug(`[review] parsedInstruction=${JSON.stringify(parsed).substring(0, 2000)}...`);
+
+    return parsed;
   }
 
   async generateRecipe(payload: {
