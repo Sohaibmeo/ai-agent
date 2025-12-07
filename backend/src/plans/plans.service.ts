@@ -75,6 +75,7 @@ export class PlansService {
     status: 'running' | 'done' | 'error',
     meta?: Record<string, any>,
     progressHint?: number,
+    detail?: string,
   ) {
     const now = new Date().toISOString();
     if (status === 'running') {
@@ -92,6 +93,7 @@ export class PlansService {
         finishedAt: status === 'done' || status === 'error' ? now : step.finishedAt,
         meta: { ...(step.meta || {}), ...(meta || {}) },
         progressHint: progressHint ?? step.progressHint,
+        detail: detail ?? step.detail,
       };
     });
     if (status === 'running') {
@@ -372,6 +374,7 @@ export class PlansService {
         'running',
         { currentDay: 1, totalDays, mealSlots },
         32,
+        'Preparing first day',
       );
     }
 
@@ -379,8 +382,28 @@ export class PlansService {
     let totalMeals = 0;
     const dayProgressStart = 32;
     const dayProgressEnd = 74;
+    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
     for (let dayIdx = 0; dayIdx < totalDays; dayIdx += 1) {
+      const dayName = dayNames[dayIdx] || `Day ${dayIdx + 1}`;
+      const startProgress =
+        dayProgressStart +
+        Math.round((dayIdx / totalDays) * (dayProgressEnd - dayProgressStart));
+      const nextProgress =
+        dayProgressStart +
+        Math.round(((dayIdx + 1) / totalDays) * (dayProgressEnd - dayProgressStart));
+
+      if (pipeline) {
+        this.markPipelineStep(
+          pipeline,
+          'generate-days',
+          'running',
+          { currentDay: dayIdx + 1, totalDays, dayName, stage: 'day-start' },
+          startProgress,
+          `Starting ${dayName}`,
+        );
+      }
+
       const savedDay = await this.createPlanDay(savedPlan, dayIdx);
       this.logger.log(`generateWeek day=${dayIdx} start useAgent=${useAgent}`);
       let currentDayKcal = 0;
@@ -397,6 +420,22 @@ export class PlansService {
             currentDayCost += Number(meal.meal_cost_gbp || 0);
           }
           totalMeals += cloned.length;
+          if (pipeline) {
+            this.markPipelineStep(
+              pipeline,
+              'generate-days',
+              'running',
+              {
+                currentDay: dayIdx + 1,
+                totalDays,
+                dayName,
+                stage: 'ingredients',
+                mealsCreated: totalMeals,
+              },
+              startProgress + Math.round((nextProgress - startProgress) * 0.4),
+              `${dayName}: ingredient checks`,
+            );
+          }
         } else {
           const requiredSlots = mealSlots.length ? mealSlots : ['meal'];
           const dayPlan = await this.agentsService.generateDayPlanWithCoachLLM({
@@ -460,6 +499,27 @@ export class PlansService {
             currentDayCost += Number(meal.meal_cost_gbp || 0);
             totalMeals += 1;
           }
+          if (pipeline) {
+            this.markPipelineStep(
+              pipeline,
+              'generate-days',
+              'running',
+              {
+                currentDay: dayIdx + 1,
+                totalDays,
+                dayName,
+                stage: 'ingredients',
+                mealsCreated: totalMeals,
+                dailyMacros: {
+                  kcal: currentDayKcal,
+                  protein: currentDayProtein,
+                  cost: currentDayCost,
+                },
+              },
+              startProgress + Math.round((nextProgress - startProgress) * 0.6),
+              `${dayName}: ingredient recognition & pricing`,
+            );
+          }
         }
       } else {
         // Existing candidate-based generation logic (not shown here)
@@ -467,9 +527,6 @@ export class PlansService {
 
       dayEntities.push(savedDay);
       if (pipeline) {
-        const progressStep =
-          dayProgressStart +
-          Math.round(((dayIdx + 1) / totalDays) * (dayProgressEnd - dayProgressStart));
         this.markPipelineStep(
           pipeline,
           'generate-days',
@@ -478,13 +535,16 @@ export class PlansService {
             currentDay: dayIdx + 1,
             totalDays,
             mealsCreated: totalMeals,
+            dayName,
+            stage: 'day-complete',
             dailyMacros: {
               kcal: currentDayKcal,
               protein: currentDayProtein,
               cost: currentDayCost,
             },
           },
-          progressStep,
+          nextProgress,
+          `${dayName} ready`,
         );
       }
     }
