@@ -57,7 +57,12 @@ export class AgentsService {
       action: z.string(),
       targetLevel: z.enum(['week', 'day', 'meal', 'recipe']).optional(),
       avoidIngredients: z.array(z.string()).optional(),
-      modifiers: z.record(z.string(), z.any()).optional(),
+      modifiers: z
+        .union([
+          z.record(z.string(), z.any()),
+          z.array(z.string()).transform((arr) => ({ flags: arr })),
+        ])
+        .optional(),
       notes: z.string().optional(),
     });
     const schema = z.object({
@@ -82,8 +87,14 @@ export class AgentsService {
     this.logger.log(`[review] interpret raw=${JSON.stringify(raw)}`);
     const parsed = schema.parse(raw);
     const normalizedActions = (parsed.actions || []).map((act) => {
-      if (allowedActions.includes(act.action as any)) return act;
-      return { ...act, action: 'no_detectable_action', notes: `unrecognized_action:${act.action}` };
+      const cleanedModifiers: Record<string, any> | undefined = Array.isArray((act as any)?.modifiers)
+        ? { flags: act.modifiers }
+        : act.modifiers && typeof act.modifiers === 'object'
+          ? act.modifiers
+          : undefined;
+      const normalized = { ...act, modifiers: cleanedModifiers };
+      if (allowedActions.includes(act.action as any)) return normalized;
+      return { ...normalized, action: 'no_detectable_action', notes: `unrecognized_action:${act.action}` };
     });
     this.logger.log(
       `[review] interpret normalized=${JSON.stringify(
