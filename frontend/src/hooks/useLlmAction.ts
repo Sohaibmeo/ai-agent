@@ -17,6 +17,7 @@ export const useLlmAction = (opts?: LlmActionOptions) => {
   const kind: AgentRunKind = opts?.kind ?? 'generic-llm';
 
   const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+  const beat = 750;
 
   const runWithLlmLoader = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T> => {
@@ -37,15 +38,6 @@ export const useLlmAction = (opts?: LlmActionOptions) => {
         const runner = fn();
 
         const driveGeneric = async () => {
-          const detailCycle = ['Warming up the model', 'Thinking', 'Drafting changes'];
-          let tick = 0;
-          const interval = setInterval(() => {
-            tick += 1;
-            const hint = Math.min(96, 18 + tick * 6);
-            const detail = detailCycle[tick % detailCycle.length];
-            updateStep('thinking', 'active', detail, undefined, hint);
-          }, 900);
-
           await sleep(140);
           updateStep('sending', 'done', undefined, undefined, 18);
           updateStep('thinking', 'active', undefined, undefined, 36);
@@ -55,87 +47,55 @@ export const useLlmAction = (opts?: LlmActionOptions) => {
           await sleep(160);
           updateStep('applying', 'done', undefined, undefined, 92);
           updateStep('finishing', 'done', undefined, undefined, 100);
-          clearInterval(interval);
           return result;
         };
 
         const driveGenerateWeek = async () => {
-          const dayCycle = [
-            'Balancing protein targets',
-            'Picking budget-friendly options',
-            'Shuffling breakfast and snacks',
-            'Writing quick instructions',
-            'Checking macros for today',
-          ];
-          let tick = 0;
-          const interval = setInterval(() => {
-            tick += 1;
-            const hint = Math.min(86, 52 + tick * 4);
-            const detail = dayCycle[tick % dayCycle.length];
-            updateStep('generate-days', 'active', detail, undefined, hint);
-          }, 1000);
-
           updateStep('prepare-profile', 'active', undefined, undefined, 6);
-          await sleep(140);
+          await sleep(beat);
           updateStep('prepare-profile', 'done', undefined, undefined, 12);
           updateStep('profile-guardrails', 'active', undefined, undefined, 20);
-          await sleep(140);
+          await sleep(beat);
           updateStep('profile-guardrails', 'done', undefined, undefined, 26);
           updateStep('draft-week', 'active', undefined, undefined, 32);
-          await sleep(180);
+          await sleep(beat);
           updateStep('draft-week', 'done', undefined, undefined, 42);
-          updateStep('generate-days', 'active', undefined, undefined, 52);
+          updateStep('generate-days', 'active', 'Cooking daily menus…', undefined, 52);
           const result = await runner;
           updateStep('generate-days', 'done', undefined, undefined, 76);
           updateStep('hydrate-recipes', 'active', undefined, undefined, 82);
-          await sleep(140);
+          await sleep(beat);
           updateStep('hydrate-recipes', 'done', undefined, undefined, 86);
           updateStep('save-plan', 'active', undefined, undefined, 90);
-          await sleep(100);
+          await sleep(beat);
           updateStep('save-plan', 'done', undefined, undefined, 94);
           updateStep('shopping-list', 'active', undefined, undefined, 97);
-          await sleep(100);
+          await sleep(beat);
           updateStep('shopping-list', 'done', undefined, undefined, 99);
           updateStep('finishing', 'done', undefined, undefined, 100);
-          clearInterval(interval);
           return result;
         };
 
         const driveReview = async () => {
-          const detailCycle = [
-            'Re-reading your note',
-            'Checking budget and macros',
-            'Mapping safe changes',
-            'Preparing updates',
-          ];
-          let tick = 0;
-          const interval = setInterval(() => {
-            tick += 1;
-            const hint = Math.min(92, 36 + tick * 6);
-            const detail = detailCycle[tick % detailCycle.length];
-            updateStep('plan-changes', 'active', detail, undefined, hint);
-          }, 900);
-
           updateStep('interpret-request', 'active', undefined, undefined, 8);
-          await sleep(140);
+          await sleep(beat);
           updateStep('interpret-request', 'done', undefined, undefined, 16);
           updateStep('plan-guardrails', 'active', undefined, undefined, 26);
-          await sleep(140);
+          await sleep(beat);
           updateStep('plan-guardrails', 'done', undefined, undefined, 32);
-          updateStep('plan-changes', 'active', undefined, undefined, 44);
+          updateStep('plan-changes', 'active', 'Planning safe changes…', undefined, 44);
           const result = await runner;
           updateStep('plan-changes', 'done', undefined, undefined, 54);
           updateStep('apply-changes', 'active', undefined, undefined, 64);
-          await sleep(140);
+          await sleep(beat);
           updateStep('apply-changes', 'done', undefined, undefined, 74);
           updateStep('recompute', 'active', undefined, undefined, 82);
-          await sleep(110);
+          await sleep(beat);
           updateStep('recompute', 'done', undefined, undefined, 90);
           updateStep('shopping-refresh', 'active', undefined, undefined, 95);
-          await sleep(90);
+          await sleep(beat);
           updateStep('shopping-refresh', 'done', undefined, undefined, 98);
           updateStep('finishing', 'done', undefined, undefined, 100);
-          clearInterval(interval);
           return result;
         };
 

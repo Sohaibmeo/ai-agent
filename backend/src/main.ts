@@ -3,11 +3,13 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import * as dotenv from 'dotenv';
+import { WsAdapter } from '@nestjs/platform-ws';
 
 dotenv.config();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { cors: true });
+  app.useWebSocketAdapter(new WsAdapter(app));
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

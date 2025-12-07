@@ -13,6 +13,8 @@ import { AgentsService } from '../agents/agents.service';
 import { AiPlanSwapDto } from './dto/ai-plan-swap.dto';
 import { ReviewInstruction } from '../agents/schemas/review-instruction.schema';
 import type { AgentPipelineSummary, PipelineStep } from '../agents/pipeline.types';
+import { PipelineGateway } from './pipeline.gateway';
+import { randomUUID } from 'crypto';
 
 // Shape used between PlansService and AgentsService review interpreter.
 export interface ReviewActionContext {
@@ -45,6 +47,7 @@ export class PlansService {
     private readonly preferencesService: PreferencesService,
     private readonly ingredientsService: IngredientsService,
     private readonly agentsService: AgentsService,
+    private readonly pipelineGateway: PipelineGateway,
   ) { }
 
   private initPipeline(
@@ -56,6 +59,7 @@ export class PlansService {
       steps: steps.map((s) => ({ ...s, status: 'pending' as const })),
       startedAt: new Date().toISOString(),
       progress: 0,
+      pipelineId: randomUUID(),
     };
   }
 
@@ -102,6 +106,7 @@ export class PlansService {
         ? ((stepIndex + 1) / pipeline.steps.length) * 100
         : undefined;
     this.bumpPipelineProgress(pipeline, progressHint ?? impliedProgress ?? 0);
+    this.pipelineGateway.broadcastPipeline(pipeline);
   }
 
   findAll() {
@@ -530,6 +535,7 @@ export class PlansService {
         100,
       );
       pipeline.finishedAt = new Date().toISOString();
+      this.pipelineGateway.broadcastPipeline(pipeline);
       (result as any).agent_pipeline_summary = pipeline;
     }
     this.logger.log(`generateWeek done id=${savedPlan.id}`);
@@ -770,6 +776,7 @@ export class PlansService {
       this.markPipelineStep(pipeline, 'shopping-refresh', 'done', { planId: plan.id }, 92);
       this.markPipelineStep(pipeline, 'finishing', 'done', { planId: plan.id }, 100);
       pipeline.finishedAt = new Date().toISOString();
+      this.pipelineGateway.broadcastPipeline(pipeline);
       const updated = await this.findById(plan.id);
       if (updated) {
         (updated as any).agent_pipeline_summary = pipeline;
@@ -935,6 +942,7 @@ export class PlansService {
     this.markPipelineStep(pipeline, 'shopping-refresh', 'done', { planId: plan.id }, 92);
     this.markPipelineStep(pipeline, 'finishing', 'done', { planId: plan.id }, 100);
     pipeline.finishedAt = new Date().toISOString();
+    this.pipelineGateway.broadcastPipeline(pipeline);
 
     const updatedPlan = await this.findById(plan.id);
     if (updatedPlan) {

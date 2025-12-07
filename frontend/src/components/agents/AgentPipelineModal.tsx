@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentPipelineStep } from '../../hooks/useAgentPipeline';
 import { useAgentPipeline } from '../../hooks/useAgentPipeline';
 
-const MIN_STEP_MS = 750;
+const MIN_STEP_MS = 1000;
 
 const statusText = (step?: AgentPipelineStep | null, fallback?: string) => {
   if (!step) return fallback ?? 'Getting ready...';
@@ -130,9 +130,9 @@ export function AgentPipelineModal() {
         <header className="relative flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-400/60 bg-slate-900/90 shadow-emerald-500/20 shadow-lg">
-              <div className="relative h-8 w-8">
-                <div className="absolute inset-1 rounded-full border-2 border-emerald-400/80 border-t-transparent animate-spin" />
-              </div>
+              <span className="text-2xl" aria-hidden="true">
+                🍲
+              </span>
             </div>
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-300/90">

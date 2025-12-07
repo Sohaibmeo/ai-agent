@@ -18,4 +18,5 @@ export interface AgentPipelineSummary {
   finishedAt?: string;
   progress: number;
   currentStepId?: string;
+  pipelineId: string;
 }

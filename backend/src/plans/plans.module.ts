@@ -9,6 +9,7 @@ import { ShoppingListModule } from '../shopping-list/shopping-list.module';
 import { PreferencesModule } from '../preferences/preferences.module';
 import { AgentsModule } from '../agents/agents.module';
 import { IngredientsModule } from '../ingredients/ingredients.module';
+import { PipelineGateway } from './pipeline.gateway';
 
 @Module({
   imports: [
@@ -20,8 +21,8 @@ import { IngredientsModule } from '../ingredients/ingredients.module';
     forwardRef(() => AgentsModule),
     forwardRef(() => IngredientsModule),
   ],
-  providers: [PlansService],
+  providers: [PlansService, PipelineGateway],
   controllers: [PlansController],
-  exports: [PlansService],
+  exports: [PlansService, PipelineGateway],
 })
 export class PlansModule {}
