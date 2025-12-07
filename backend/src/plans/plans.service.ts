@@ -10,6 +10,20 @@ import { PreferencesService } from '../preferences/preferences.service';
 import { Logger } from '@nestjs/common';
 import { IngredientsService } from '../ingredients/ingredients.service';
 import { AgentsService } from '../agents/agents.service';
+import { AiPlanSwapDto } from './dto/ai-plan-swap.dto';
+import { ReviewInstruction } from '../agents/schemas/review-instruction.schema';
+
+// Shape used between PlansService and AgentsService review interpreter.
+export interface ReviewActionContext {
+  type: string; // e.g. "bulk_edit_days", "edit_day", "swap_meal_auto", "meal_text_edit", "ingredient_text_edit"
+  weeklyPlanId: string;
+  planDayIds?: string[];
+  planMealId?: string;
+  recipeId?: string;
+  hint?: string;
+  hasText?: boolean;
+  rawType?: string; // original frontend type (payload.type)
+}
 
 @Injectable()
 export class PlansService {
@@ -438,7 +452,127 @@ export class PlansService {
     });
   }
 
-  // Orchestrator for LLM-driven week regeneration; currently interprets note and routes by type.
+  private buildReviewActionContext(payload: AiPlanSwapDto): ReviewActionContext {
+    const hasText = !!payload.note;
+
+    // 1) Multiple days selected => bulk days edit
+    if (payload.planDayIds && payload.planDayIds.length > 1) {
+      return {
+        type: 'bulk_edit_days',
+        weeklyPlanId: payload.weeklyPlanId,
+        planDayIds: payload.planDayIds,
+        hint: 'user_selected_multiple_days',
+        hasText,
+        rawType: payload.type,
+      };
+    }
+
+    // 2) Single day selected
+    if (payload.planDayIds && payload.planDayIds.length === 1) {
+      return {
+        type: 'edit_day',
+        weeklyPlanId: payload.weeklyPlanId,
+        planDayIds: payload.planDayIds,
+        hint: 'single_day_edit',
+        hasText,
+        rawType: payload.type,
+      };
+    }
+
+    // 3) Meal-level actions
+    if (payload.planMealId) {
+      // Auto swap with no text
+      if (payload.type === 'meal_swap_auto' && !payload.note) {
+        return {
+          type: 'swap_meal_auto',
+          weeklyPlanId: payload.weeklyPlanId,
+          planMealId: payload.planMealId,
+          hint: 'auto_swap_without_text',
+          hasText,
+          rawType: payload.type,
+        };
+      }
+
+      // Any described meal change (swap dialog + text, or recipe detail edit)
+      return {
+        type: 'meal_text_edit',
+        weeklyPlanId: payload.weeklyPlanId,
+        planMealId: payload.planMealId,
+        hint: 'user_described_meal_change',
+        hasText,
+        rawType: payload.type,
+      };
+    }
+
+    // 4) Fallback: whole-plan free-form note
+    return {
+      type: 'plan_level_freeform',
+      weeklyPlanId: payload.weeklyPlanId,
+      hint: 'no_explicit_ids',
+      hasText,
+      rawType: payload.type,
+    };
+  }
+
+  async reviewAndApplyFromAiSwap(payload: AiPlanSwapDto) {
+    const plan = await this.weeklyPlanRepo.findOne({
+      where: { id: payload.weeklyPlanId },
+      relations: ['user', 'days', 'days.meals', 'days.meals.recipe'],
+    });
+    if (!plan) {
+      throw new NotFoundException('Weekly plan not found');
+    }
+
+    const userId = payload.userId || (plan.user as any)?.id;
+    if (!userId) {
+      throw new Error('userId is required on plan or payload');
+    }
+
+    const profile = await this.usersService.getProfile(userId);
+
+    // 1) Build normalized actionContext from the DTO
+    const actionContext = this.buildReviewActionContext(payload);
+
+    // 2) Simple fast-path: pure auto swap with no text => no LLM
+    if (actionContext.type === 'swap_meal_auto' && actionContext.planMealId) {
+      await this.autoSwapMeal(actionContext.planMealId, userId, payload.note);
+      await this.recomputeAggregates(plan.id);
+      await this.shoppingListService.rebuildForPlan(plan.id);
+      return this.findById(plan.id);
+    }
+
+    // 3) LLM interpreter: map actionContext + note -> JSON instruction
+    const reviewInstruction: ReviewInstruction = await this.agentsService.interpretReviewAction({
+      userId,
+      weeklyPlanId: plan.id,
+      actionContext,
+      note: payload.note,
+      profileSnippet: {
+        goal: profile.goal,
+        dietType: profile.diet_type,
+        weeklyBudgetGbp: profile.weekly_budget_gbp,
+      },
+      currentPlanSummary: undefined, // TODO: plug in a real summary later if needed
+    });
+
+    // 4) Execute the instruction (calls generators / swappers / recipe adjustors)
+    await this.executeReviewInstruction(userId, plan, reviewInstruction, payload.note);
+
+    await this.logAction({
+      weeklyPlanId: plan.id,
+      userId,
+      action: reviewInstruction.action,
+      metadata: {
+        targetLevel: reviewInstruction.targetLevel,
+        targetIds: reviewInstruction.targetIds,
+      },
+      success: true,
+    });
+
+    return this.findById(plan.id);
+  }
+
+  // Legacy entry point kept for compatibility with older callers.
   async regenerateWeek(payload: {
     userId: string;
     weeklyPlanId?: string;
@@ -449,114 +583,123 @@ export class PlansService {
     note?: string;
     context?: Record<string, any>;
   }) {
-    const planId = payload.weeklyPlanId;
-    if (!planId) {
+    if (!payload.weeklyPlanId) {
       throw new NotFoundException('weeklyPlanId is required');
     }
-    this.logger.log(`[review] regenerateWeek start payload=${JSON.stringify(payload)}`);
-    const plan = await this.weeklyPlanRepo.findOne({ where: { id: planId } });
-    if (!plan) {
-      throw new NotFoundException('Weekly plan not found');
-    }
+    return this.reviewAndApplyFromAiSwap(payload as AiPlanSwapDto);
+  }
 
-    const fallbackActions =
-      payload.type === 'swap-inside-recipe'
-        ? [{ action: 'adjust_recipe', targetLevel: 'meal' }]
-        : payload.type === 'auto-swap-no-text' || payload.type === 'auto-swap-with-context'
-          ? [{ action: 'regenerate_meal', targetLevel: 'meal' }]
-          : payload.planDayIds?.length
-            ? [{ action: 'regenerate_day', targetLevel: 'day' }]
-            : [{ action: 'regenerate_week', targetLevel: 'week' }];
-
-    const interpreted =
-      payload.note && payload.note.trim()
-        ? await this.agentsService.interpretPlanChange({ note: payload.note })
-        : { actions: fallbackActions };
-    this.logger.log(`[review] interpreted=${JSON.stringify(interpreted)} fallback=${JSON.stringify(fallbackActions)}`);
-    const firstAction = Array.isArray((interpreted as any)?.actions)
-      ? (interpreted as any).actions[0]
-      : null;
-
-    let targetLevel: 'week' | 'day' | 'meal' | 'recipe' = (firstAction?.targetLevel as any) || 'week';
-    const targetIds: Record<string, string | string[] | undefined> = { weeklyPlanId: planId };
-    if (payload.planDayIds?.length) {
-      targetLevel = 'day';
-      targetIds.planDayIds = payload.planDayIds;
-    }
-    if (payload.planMealId) {
-      targetLevel = 'meal';
-      targetIds.planMealId = payload.planMealId;
-    }
-    if (payload.recipeId) {
-      targetLevel = 'recipe';
-      targetIds.recipeId = payload.recipeId;
-    }
-
-    for (const act of (interpreted as any).actions || []) {
-      this.logger.log(`[review] exec action=${act?.action} targetLevel=${targetLevel} ids=${JSON.stringify(targetIds)} mods=${JSON.stringify(act?.modifiers || {})}`);
-      const action = act?.action;
-      switch (action) {
-        case 'regenerate_meal':
-        case 'swap_meal':
-        case 'adjust_recipe':
-        case 'adjust_macros':
-        case 'set_meal_type':
-          if (payload.planMealId) {
-            await this.regenerateMeal(payload.planMealId, {
-              userId: payload.userId,
-              note: payload.note,
-              preferMealType: act?.modifiers?.prefer_meal_type,
-            });
-          }
-          break;
-        case 'regenerate_day':
-          if (payload.planDayIds?.length) {
-            for (const dayId of payload.planDayIds) {
-              await this.regenerateDay(payload.userId, dayId, payload.note);
-            }
-          }
-          break;
-        case 'regenerate_week':
-          await this.regenerateWholeWeek(payload.userId, planId, payload.note);
-          break;
-        case 'swap_ingredient':
-        case 'remove_ingredient':
-          if (payload.planMealId) {
-            const removeTarget =
-              act?.modifiers?.ingredientToRemove ||
-              (Array.isArray(act?.avoidIngredients) ? act.avoidIngredients[0] : undefined);
-            const addTarget = act?.modifiers?.ingredientToAdd;
-            await this.swapIngredient(payload.planMealId, removeTarget, action === 'swap_ingredient' ? addTarget : null);
-          }
-          break;
-        case 'avoid_ingredient_future':
-          if (Array.isArray(act?.avoidIngredients)) {
-            for (const ing of act.avoidIngredients) {
-              const resolved = await this.ingredientsService.findOrCreateByName(ing);
-              if (resolved?.id) {
-                await this.preferencesService.setAvoidIngredient(payload.userId, resolved.id);
-              }
-            }
-          }
-          break;
-        case 'lock_meal':
-        case 'lock_day':
-        case 'set_fixed_breakfast':
-        case 'no_change_clarify':
-        case 'no_detectable_action':
-        default:
-          // No-op for now
-          break;
+  private async executeReviewInstruction(
+    userId: string,
+    plan: WeeklyPlan,
+    instruction: ReviewInstruction,
+    note?: string,
+  ) {
+    switch (instruction.action) {
+      case 'regenerate_week': {
+        await this.regenerateWholeWeek(userId, plan.id, note);
+        break;
       }
+
+      case 'regenerate_day': {
+        const ids =
+          instruction.targetIds?.planDayIds && instruction.targetIds.planDayIds.length
+            ? instruction.targetIds.planDayIds
+            : instruction.targetIds?.planDayId
+              ? [instruction.targetIds.planDayId]
+              : [];
+
+        for (const dayId of ids) {
+          await this.regenerateSingleDay(dayId, userId, note);
+        }
+        break;
+      }
+
+      case 'regenerate_meal': {
+        if (instruction.targetIds?.planMealId) {
+          await this.regenerateSingleMeal(
+            instruction.targetIds.planMealId,
+            userId,
+            instruction.modifiers,
+            note,
+          );
+        }
+        break;
+      }
+
+      case 'swap_meal': {
+        if (instruction.targetIds?.planMealId) {
+          await this.autoSwapMeal(instruction.targetIds.planMealId, userId, instruction.notes || note);
+        }
+        break;
+      }
+
+      case 'swap_ingredient':
+      case 'remove_ingredient': {
+        if (instruction.targetIds?.planMealId) {
+          const mods = instruction.modifiers as Record<string, any> | undefined;
+          const ingredientToRemove = mods?.ingredientToRemove;
+          const ingredientToAdd = mods?.ingredientToAdd;
+          await this.swapIngredient(
+            instruction.targetIds.planMealId,
+            ingredientToRemove,
+            instruction.action === 'remove_ingredient' ? null : ingredientToAdd,
+          );
+        }
+        break;
+      }
+
+      case 'avoid_ingredient_future': {
+        if (instruction.targetIds?.ingredientId) {
+          await this.preferencesService.setAvoidIngredient(userId, instruction.targetIds.ingredientId);
+        }
+        break;
+      }
+
+      case 'adjust_recipe':
+      case 'ai_adjust_recipe': {
+        if (instruction.targetIds?.planMealId) {
+          await this.aiAdjustMeal(instruction.targetIds.planMealId, userId, instruction.notes || note || '');
+        }
+        break;
+      }
+
+      case 'no_change_clarify':
+      case 'no_detectable_action': {
+        this.logger.warn(`Review instruction=${instruction.action}, no changes applied.`);
+        break;
+      }
+
+      default:
+        this.logger.warn(`Unhandled review instruction action: ${instruction.action}`);
     }
 
-    await this.recomputeAggregates(planId);
-    await this.shoppingListService.rebuildForPlan(planId);
+    // For most actions, we want to recompute & rebuild shopping list
+    await this.recomputeAggregates(plan.id);
+    await this.shoppingListService.rebuildForPlan(plan.id);
+  }
 
-    return this.weeklyPlanRepo.findOne({
-      where: { id: planId },
-      relations: ['days', 'days.meals', 'days.meals.recipe'],
-    });
+  private async autoSwapMeal(planMealId: string, userId: string, note?: string) {
+    await this.regenerateMeal(planMealId, { userId, note });
+  }
+
+  private async regenerateSingleDay(planDayId: string, userId: string, note?: string) {
+    await this.regenerateDay(userId, planDayId, note);
+  }
+
+  private async regenerateSingleMeal(
+    planMealId: string,
+    userId: string,
+    modifiers?: Record<string, any>,
+    note?: string,
+  ) {
+    const preferMealType =
+      (modifiers as any)?.prefer_meal_type || (modifiers as any)?.preferMealType || undefined;
+    await this.regenerateMeal(planMealId, { userId, preferMealType, note });
+  }
+
+  private async aiAdjustMeal(planMealId: string, userId: string, note: string) {
+    await this.regenerateMeal(planMealId, { userId, note });
   }
 
   private async logAction(entry: {

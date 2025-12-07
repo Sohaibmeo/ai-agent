@@ -9,6 +9,7 @@ import {
   LlmDayMeal,
   LlmPlanDay,
 } from './schemas/plan-generation.schema';
+import { reviewInstructionSchema, ReviewInstruction } from './schemas/review-instruction.schema';
 
 type WeekState = {
   week_start_date: string;
@@ -34,96 +35,39 @@ export class AgentsService {
     this.logger.log(`[${kind}] ${message}`);
   }
 
-  async interpretPlanChange(payload: { note: string }) {
-    const allowedActions = [
-      'regenerate_week',
-      'regenerate_day',
-      'regenerate_meal',
-      'swap_meal',
-      'swap_ingredient',
-      'remove_ingredient',
-      'adjust_recipe',
-      'adjust_macros',
-      'set_meal_type',
-      'avoid_ingredient_future',
-      'lock_meal',
-      'lock_day',
-      'set_fixed_breakfast',
-      'no_change_clarify',
-      'no_detectable_action',
-    ] as const;
-
-    const unwrapActionShape = (item: any) => {
-      if (item && typeof item === 'object' && !Array.isArray(item) && !item.action) {
-        const keys = Object.keys(item);
-        if (keys.length === 1 && allowedActions.includes(keys[0] as any)) {
-          return { action: keys[0], ...(item as any)[keys[0]] };
-        }
-      }
-      return item;
-    };
-
-    const actionSchema = z.object({
-      action: z.string(),
-      targetLevel: z.union([z.enum(['week', 'day', 'meal', 'recipe']), z.string(), z.null()]).optional(),
-      avoidIngredients: z.union([z.array(z.string()), z.null()]).optional(),
-      modifiers: z
-        .union([
-          z.record(z.string(), z.any()),
-          z.array(z.string()).transform((arr) => ({ flags: arr })),
-          z.null(),
-        ])
-        .optional(),
-      notes: z
-        .union([z.string(), z.array(z.string()).transform((arr) => arr.join('; '))])
-        .optional(),
-    });
-    const schema = z.object({
-      actions: z.array(actionSchema).nonempty(),
-    });
+  async interpretReviewAction(payload: {
+    userId?: string;
+    weeklyPlanId?: string;
+    actionContext: any;
+    note?: string;
+    profileSnippet?: any;
+    currentPlanSummary?: any;
+  }): Promise<ReviewInstruction> {
     const prompt: { role: 'system' | 'user'; content: string }[] = [
       {
         role: 'system',
         content:
-          'You are Review Orchestrator. Given a user note, map it to ONE action from the provided list and return ONLY JSON.\n' +
-          'Allowed actions: regenerate_week, regenerate_day, regenerate_meal, swap_meal, swap_ingredient, remove_ingredient, adjust_recipe, adjust_macros, set_meal_type, avoid_ingredient_future, no_detectable_action.\n' +
-          'Additional actions you may emit: lock_meal, lock_day, set_fixed_breakfast, no_change_clarify.\n' +
-          'Use modifiers for macro tweaks (higher_protein, lower_carbs), meal type hints (prefer_meal_type="solid|drinkable"), or constraints (fixed_breakfast="protein shake").\n' +
-          'Return JSON: { actions: [ {action, targetLevel?, avoidIngredients?, modifiers?, notes?}, ... ] }. Do not invent IDs.',
+          'You are Review Orchestrator.\n' +
+          'Map a user plan-change request into exactly ONE JSON instruction.\n' +
+          'Your entire reply MUST be a single JSON object matching the ReviewInstruction schema.\n' +
+          'Do NOT wrap in markdown or add explanations.\n',
       },
       {
         role: 'user',
-        content: JSON.stringify(payload),
+        content: JSON.stringify({
+          userId: payload.userId,
+          weeklyPlanId: payload.weeklyPlanId,
+          actionContext: payload.actionContext,
+          note: payload.note,
+          profileSnippet: payload.profileSnippet,
+          currentPlanSummary: payload.currentPlanSummary,
+        }),
       },
     ];
+
     const raw = await this.callModel(this.reviewModel, prompt, 'review');
-    this.logger.log(`[review] interpret raw=${JSON.stringify(raw)}`);
-    const normalizedRaw =
-      raw && Array.isArray((raw as any).actions)
-        ? { ...raw, actions: (raw as any).actions.map(unwrapActionShape) }
-        : raw;
-    const parsed = schema.parse(normalizedRaw);
-    const normalizedActions = (parsed.actions || []).map((act) => {
-      const cleanedModifiers: Record<string, any> | undefined = Array.isArray((act as any)?.modifiers)
-        ? { flags: act.modifiers }
-        : act.modifiers && typeof act.modifiers === 'object'
-          ? act.modifiers
-          : undefined;
-      const rawTarget = (act as any)?.targetLevel;
-      const cleanedTargetLevel =
-        rawTarget && rawTarget !== null && ['week', 'day', 'meal', 'recipe'].includes(rawTarget)
-          ? rawTarget
-          : undefined;
-      const normalized = { ...act, modifiers: cleanedModifiers, targetLevel: cleanedTargetLevel };
-      if (allowedActions.includes(act.action as any)) return normalized;
-      return { ...normalized, action: 'no_detectable_action', notes: `unrecognized_action:${act.action}` };
-    });
-    this.logger.log(
-      `[review] interpret normalized=${JSON.stringify(
-        normalizedActions,
-      )} from note="${payload.note || ''}"`,
-    );
-    return { actions: normalizedActions };
+    this.logAgent('review', `model=${this.reviewModel}`);
+    return reviewInstructionSchema.parse(raw);
   }
 
   async generateRecipe(payload: {

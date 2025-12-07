@@ -6,6 +6,7 @@ import { ActivatePlanDto } from './dto/set-plan-status.dto';
 import { UserIdParamDto } from './dto/user-id-param.dto';
 import { SetPlanStatusDto } from './dto/set-plan-status.dto';
 import { SaveCustomRecipeDto } from './dto/save-custom-recipe.dto';
+import { AiPlanSwapDto } from './dto/ai-plan-swap.dto';
 
 @Controller('plans')
 export class PlansController {
@@ -57,20 +58,11 @@ export class PlansController {
   }
 
   @Post('ai-plan-swap')
-  aiPlanSwap(@Body() body: any) {
-    // eslint-disable-next-line no-console
-    console.log('[ai-plan-swap] request', JSON.stringify(body));
+  aiPlanSwap(@Body() body: AiPlanSwapDto) {
+    // For debugging:
+    // console.log('[ai-plan-swap] request', JSON.stringify(body));
     if (body?.weeklyPlanId && body.userId) {
-      return this.plansService.regenerateWeek({
-        userId: body.userId,
-        weeklyPlanId: body.weeklyPlanId,
-        planDayIds: body.planDayIds,
-        planMealId: body.planMealId,
-        recipeId: body.recipeId,
-        type: body.type,
-        note: body.note,
-        context: body.context,
-      });
+      return this.plansService.reviewAndApplyFromAiSwap(body);
     }
     return { ok: true, received: body, warning: 'weeklyPlanId and userId are required' };
   }
