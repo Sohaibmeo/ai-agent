@@ -89,6 +89,14 @@ export class AgentsService {
           '- lock_meal, lock_day, set_fixed_breakfast\n' +
           '- no_change_clarify, no_detectable_action\n' +
           '\n' +
+          'FIELDS CONSTRAINTS:\n' +
+          '- "notes" MUST be a single string if present (not an array).\n' +
+          '- "modifiers" MUST be a flat object, e.g. { "ingredientToRemove": "x", "ingredientToAdd": "y" }.\n' +
+          '- Do NOT use nested "adjustment" arrays or nested objects for simple ingredient swaps.\n' +
+          '- If the user wants to remake a recipe with different macros or quantities, use:\n' +
+          '  { "action": "adjust_recipe", "targetLevel": "meal", "targetIds": { "planMealId": ... }, "notes": "...explanation..." }\n' +
+          '  and leave "modifiers" empty, so the backend can do a context-aware adjust.\n' +
+          '\n' +
           'MAPPING HINTS:\n' +
           '- If user note is like "remove X", "remove X add Y", "swap X for Y", PREFER action="swap_ingredient".\n' +
           '  - For swap_ingredient, set targetLevel="meal".\n' +
@@ -117,7 +125,17 @@ export class AgentsService {
     // DEBUG: see model raw JSON
     this.logger.debug(`[review] rawResponse=${JSON.stringify(raw).substring(0, 2000)}...`);
 
-    const parsedRaw = reviewInstructionSchema.parse(raw);
+    // Normalise fields before validation
+    const normalized: any = { ...raw };
+    if (Array.isArray(normalized.notes)) {
+      normalized.notes = normalized.notes.join(' ');
+    }
+    if (normalized.targetIds && normalized.targetIds.planWeekId && !normalized.targetIds.weeklyPlanId) {
+      normalized.targetIds.weeklyPlanId = normalized.targetIds.planWeekId;
+      delete normalized.targetIds.planWeekId;
+    }
+
+    const parsedRaw = reviewInstructionSchema.parse(normalized);
     const parsed: ReviewInstruction = {
       ...parsedRaw,
       targetIds: parsedRaw.targetIds || (raw as any)?.targetIds || (raw as any)?.targets || undefined,
