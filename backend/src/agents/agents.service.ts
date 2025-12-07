@@ -145,6 +145,12 @@ export class AgentsService {
       normalizedInput.targetIds.weeklyPlanId = normalizedInput.targetIds.planWeekId;
       delete normalizedInput.targetIds.planWeekId;
     }
+    if (normalizedInput.targetIds && normalizedInput.targetIds.planMealId === null) {
+      delete normalizedInput.targetIds.planMealId;
+    }
+    if (normalizedInput.targetIds && normalizedInput.targetIds.planDayIds === null) {
+      delete normalizedInput.targetIds.planDayIds;
+    }
 
     const parsedRaw = reviewInstructionSchema.parse(normalizedInput);
 
@@ -401,44 +407,54 @@ export class AgentsService {
         );
 
         const rawMeals = Array.isArray((raw as any)?.meals) ? (raw as any).meals : [];
+        const requestedSlots = Array.isArray(payload.meal_slots)
+          ? payload.meal_slots.map((s) => (typeof s === 'string' ? s.trim().toLowerCase() : '')).filter(Boolean)
+          : [];
+        const normalizeMealSlot = (slot: any, fallback: string) => {
+          const val = typeof slot === 'string' ? slot.trim().toLowerCase() : '';
+          if (['breakfast', 'lunch', 'dinner', 'snack'].includes(val)) return val;
+          if (val === 'meal') return fallback || 'meal';
+          return fallback || 'meal';
+        };
+
         const normalizedMeals = rawMeals
           .filter((m: any) => m && typeof m === 'object' && !Array.isArray(m))
-          .map((m: any) => ({
-            meal_slot:
-              typeof m.meal_slot === 'string'
-                ? m.meal_slot.trim().toLowerCase() || 'meal'
-                : 'meal',
-            name: m.name,
-            difficulty:
-              typeof m.difficulty === 'string'
-                ? m.difficulty.trim() || 'easy'
-                : m.difficulty !== undefined && m.difficulty !== null
-                  ? String(m.difficulty)
-                  : 'easy',
-            instructions:
-              Array.isArray(m.instructions) || typeof m.instructions === 'string'
-                ? m.instructions
-                : undefined,
-            ingredients: Array.isArray(m.ingredients)
-              ? m.ingredients
-                  .filter((ing: any) => ing && typeof ing === 'object')
-                  .map((ing: any) => ({
-                    ingredient_name: ing.ingredient_name,
-                    quantity: ing.quantity,
-                    unit: 'g',
-                  }))
-              : [],
-            target_kcal: m.target_kcal,
-            target_protein: m.target_protein,
-            compliance_notes:
-              typeof m.compliance_notes === 'string'
-                ? m.compliance_notes
-                : Array.isArray(m.compliance_notes)
-                  ? m.compliance_notes.length
-                    ? m.compliance_notes.join(' ')
-                    : undefined
+          .map((m: any, idx: number) => {
+            const fallbackSlot = requestedSlots[idx] || requestedSlots[0] || 'dinner';
+            return {
+              meal_slot: normalizeMealSlot(m.meal_slot, fallbackSlot),
+              name: m.name,
+              difficulty:
+                typeof m.difficulty === 'string'
+                  ? m.difficulty.trim() || 'easy'
+                  : m.difficulty !== undefined && m.difficulty !== null
+                    ? String(m.difficulty)
+                    : 'easy',
+              instructions:
+                Array.isArray(m.instructions) || typeof m.instructions === 'string'
+                  ? m.instructions
                   : undefined,
-          }));
+              ingredients: Array.isArray(m.ingredients)
+                ? m.ingredients
+                    .filter((ing: any) => ing && typeof ing === 'object')
+                    .map((ing: any) => ({
+                      ingredient_name: ing.ingredient_name,
+                      quantity: ing.quantity,
+                      unit: 'g',
+                    }))
+                : [],
+              target_kcal: m.target_kcal,
+              target_protein: m.target_protein,
+              compliance_notes:
+                typeof m.compliance_notes === 'string'
+                  ? m.compliance_notes
+                  : Array.isArray(m.compliance_notes)
+                    ? m.compliance_notes.length
+                      ? m.compliance_notes.join(' ')
+                      : undefined
+                    : undefined,
+            };
+          });
 
         const candidate = {
           day_index: (raw as any)?.day_index ?? payload.day_index,
@@ -452,20 +468,17 @@ export class AgentsService {
           (meal: any) => (meal.ingredients || []).every((ing: any) => (ing.unit || '').toLowerCase() === 'g'),
         );
         const slotsOk =
-          Array.isArray(payload.meal_slots) &&
-          payload.meal_slots.every((slot) => normalizedMeals.some((m: any) => m.meal_slot === slot));
-        const parsedOk = parsed.success && parsed.data.meals.length > 0;
-        if (parsedOk && unitsOk) {
-          if (!slotsOk) {
-            this.logger.warn(
-              `[coach] day_index=${payload.day_index} attempt=${attempt + 1} slotsOk=false but parsedOk+unitsOk=true; accepting partial slots`,
-            );
-          }
-          return parsed.data;
+          Array.isArray(requestedSlots) &&
+          requestedSlots.length > 0 &&
+          requestedSlots.every((slot) => normalizedMeals.some((m: any) => m.meal_slot === slot));
+        const parsedOk = parsed.success && normalizedMeals.length > 0;
+
+        if (parsedOk && unitsOk && slotsOk) {
+          return { ...parsed.data, meals: normalizedMeals };
         }
 
         this.logger.warn(
-          `[coach] day_index=${payload.day_index} attempt=${attempt + 1} invalid or empty meals (parsedOk=${parsedOk} unitsOk=${unitsOk} slotsOk=${slotsOk})`,
+          `[coach] day_index=${payload.day_index} attempt=${attempt + 1} invalid or incomplete meals (parsedOk=${parsedOk} unitsOk=${unitsOk} slotsOk=${slotsOk})`,
         );
         if (!parsed.success) {
           lastError = new Error(JSON.stringify(parsed.error.issues));

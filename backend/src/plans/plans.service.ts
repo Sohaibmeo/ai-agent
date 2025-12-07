@@ -600,6 +600,31 @@ export class PlansService {
       }
     }
 
+    // EXTRA SAFETY: if LLM gave a meal-level action but the planMealId is actually a dayId,
+    // coerce it into a regenerate_day instruction for that day.
+    if (reviewInstruction.targetLevel === 'meal' && reviewInstruction.targetIds?.planMealId) {
+      const candidateId = reviewInstruction.targetIds.planMealId;
+
+      const mealExists = (plan.days || []).some((d) =>
+        (d.meals || []).some((m) => m.id === candidateId),
+      );
+      const dayMatch = (plan.days || []).find((d) => d.id === candidateId);
+
+      if (!mealExists && dayMatch) {
+        this.logger.warn(
+          `[PlansService] review: target planMealId=${candidateId} not found; looks like a dayId. Coercing action=${reviewInstruction.action} to regenerate_day for that day.`,
+        );
+
+        reviewInstruction = {
+          action: 'regenerate_day',
+          targetLevel: 'day',
+          targetIds: { planDayId: dayMatch.id },
+          notes: (reviewInstruction as any).notes,
+          modifiers: (reviewInstruction as any).modifiers,
+        } as ReviewInstruction;
+      }
+    }
+
     // 4) Execute the instruction (calls generators / swappers / recipe adjustors)
     await this.executeReviewInstruction(userId, plan, reviewInstruction, payload.note);
 
@@ -745,6 +770,24 @@ export class PlansService {
 
       case 'adjust_recipe': {
         const mealId = instruction.targetIds?.planMealId;
+        // Day-level adjustment fallback: regenerate specified day(s)
+        if (!mealId && (instruction.targetIds?.planDayIds?.length || instruction.targetIds?.planDayId)) {
+          const dayIds =
+            instruction.targetIds?.planDayIds && instruction.targetIds.planDayIds.length
+              ? instruction.targetIds.planDayIds
+              : instruction.targetIds?.planDayId
+                ? [instruction.targetIds.planDayId]
+                : [];
+
+          this.logger.log(
+            `[PlansService] [review] adjust_recipe with day target -> regenerate_day days=${dayIds.join(',')}`,
+          );
+          for (const dayId of dayIds) {
+            await this.regenerateSingleDay(dayId, userId, instructionNote || note);
+          }
+          break;
+        }
+
         if (!mealId) {
           this.logger.warn('[PlansService] adjust_recipe missing planMealId, skipping');
           break;
