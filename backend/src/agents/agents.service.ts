@@ -117,7 +117,11 @@ export class AgentsService {
     // DEBUG: see model raw JSON
     this.logger.debug(`[review] rawResponse=${JSON.stringify(raw).substring(0, 2000)}...`);
 
-    const parsed = reviewInstructionSchema.parse(raw);
+    const parsedRaw = reviewInstructionSchema.parse(raw);
+    const parsed: ReviewInstruction = {
+      ...parsedRaw,
+      targetIds: parsedRaw.targetIds || (raw as any)?.targetIds || (raw as any)?.targets || undefined,
+    };
     this.logger.debug(`[review] parsedInstruction=${JSON.stringify(parsed).substring(0, 2000)}...`);
 
     return parsed;
@@ -177,6 +181,88 @@ export class AgentsService {
         );
       }
     }
+    throw lastErr;
+  }
+
+  async adjustRecipeWithContext(payload: {
+    note: string;
+    originalRecipe: {
+      name: string;
+      meal_slot: string;
+      meal_type?: string | null;
+      difficulty?: string | null;
+      instructions?: string | string[] | null;
+      ingredients: { ingredient_name: string; quantity: number; unit: string }[];
+    };
+    profileSnippet?: {
+      goal?: string;
+      dietType?: string;
+      weeklyBudgetGbp?: number;
+    };
+  }) {
+    const toNum = (v: any) => {
+      if (v === null || v === undefined || v === '') return 0;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    const schema = z.object({
+      name: z.string().optional(),
+      meal_slot: z.string().optional(),
+      meal_type: z.string().nullable().optional(),
+      difficulty: z.string().optional(),
+      base_cost_gbp: z.preprocess(toNum, z.number().optional()),
+      instructions: z.any().optional(),
+      ingredients: z
+        .array(
+          z.object({
+            ingredient_name: z.string(),
+            quantity: z.preprocess(toNum, z.number()),
+            unit: z.string().nullable().optional(),
+          }),
+        )
+        .optional(),
+    });
+
+    const prompt: { role: 'system' | 'user'; content: string }[] = [
+      {
+        role: 'system',
+        content:
+          'You are Recipe Adjustor.\n' +
+          '- You receive an EXISTING recipe and a user note.\n' +
+          '- Your job is to RETURN A MODIFIED VERSION of THAT SAME RECIPE.\n' +
+          '- Keep the core idea and style unless the note explicitly asks for a completely different dish.\n' +
+          '- Prefer minimal changes: tweak ingredients, quantities, or instructions just enough to satisfy the note.\n' +
+          '- Preserve reasonable macros and budget; do not drastically increase cost or calories without reason.\n' +
+          '- Respond ONLY with JSON: {name, meal_slot, meal_type?, difficulty?, base_cost_gbp?, instructions, ingredients:[{ingredient_name, quantity, unit}]}.',
+      },
+      {
+        role: 'user',
+        content: JSON.stringify(payload),
+      },
+    ];
+
+    const maxRetries = 2;
+    let lastErr: any;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      try {
+        const raw = await this.callModel(this.reviewModel, prompt, 'review');
+        this.logger.log(
+          `[review] adjustRecipeWithContext raw=${JSON.stringify(raw).substring(
+            0,
+            1000,
+          )} attempt=${attempt + 1}`,
+        );
+        return schema.parse(raw);
+      } catch (err) {
+        lastErr = err;
+        this.logger.error(
+          `[review] adjustRecipeWithContext parse_failed attempt=${attempt + 1} err=${(err as any)?.message || err}`,
+        );
+      }
+    }
+
     throw lastErr;
   }
 

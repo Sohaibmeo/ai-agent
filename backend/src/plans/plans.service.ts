@@ -640,8 +640,16 @@ export class PlansService {
     instruction: ReviewInstruction,
     note?: string,
   ) {
+    const targetIdsStr = (() => {
+      try {
+        const s = JSON.stringify(instruction.targetIds ?? {});
+        return typeof s === 'string' ? s.substring(0, 500) : '';
+      } catch (_e) {
+        return '';
+      }
+    })();
     this.logger.debug(
-      `[PlansService] executeReviewInstruction action=${instruction.action} targetLevel=${instruction.targetLevel} targetIds=${JSON.stringify(instruction.targetIds).substring(0, 500)}...`,
+      `[PlansService] executeReviewInstruction action=${instruction.action} targetLevel=${instruction.targetLevel} targetIds=${targetIdsStr}...`,
     );
 
     switch (instruction.action) {
@@ -805,7 +813,111 @@ export class PlansService {
   }
 
   private async aiAdjustMeal(planMealId: string, userId: string, note: string) {
-    await this.regenerateMeal(planMealId, { userId, note });
+    const meal = await this.planMealRepo.findOne({
+      where: { id: planMealId },
+      relations: [
+        'planDay',
+        'planDay.weeklyPlan',
+        'planDay.weeklyPlan.user',
+        'recipe',
+        'recipe.ingredients',
+        'recipe.ingredients.ingredient',
+      ],
+    });
+
+    if (!meal?.recipe) {
+      this.logger.warn(`[PlansService] [review] aiAdjustMeal meal=${planMealId} missing recipe`);
+      throw new NotFoundException('Plan meal or recipe not found for AI adjust');
+    }
+
+    const profileUserId = userId || (meal.planDay.weeklyPlan as any)?.user?.id;
+    const profile = profileUserId ? await this.usersService.getProfile(profileUserId) : null;
+
+    const originalRecipe = {
+      name: meal.recipe.name,
+      meal_slot: meal.meal_slot,
+      meal_type: (meal as any).meal_type || 'solid',
+      difficulty: meal.recipe.difficulty,
+      instructions: meal.recipe.instructions,
+      ingredients: (meal.recipe.ingredients || []).map((ri: any) => ({
+        ingredient_name: ri.ingredient?.name,
+        quantity: Number(ri.quantity || 0),
+        unit: ri.unit || 'g',
+      })),
+    };
+
+    this.logger.debug(
+      `[PlansService] [review] aiAdjustMeal originalRecipe=${JSON.stringify(originalRecipe).substring(0, 800)} note=${note}`,
+    );
+
+    const adjusted = await this.agentsService.adjustRecipeWithContext({
+      note,
+      originalRecipe,
+      profileSnippet: profile
+        ? {
+            goal: profile.goal,
+            dietType: profile.diet_type,
+            weeklyBudgetGbp: profile.weekly_budget_gbp,
+          }
+        : undefined,
+    });
+
+    this.logger.debug(
+      `[PlansService] [review] aiAdjustMeal adjustedDraft=${JSON.stringify(adjusted).substring(0, 800)}...`,
+    );
+
+    const ingredientItems = await Promise.all(
+      (adjusted.ingredients || originalRecipe.ingredients || []).map(async (ing: any) => {
+        const name = ing.ingredient_name || ing.name;
+        if (!name) return null;
+
+        const ent = await this.ingredientsService.findOrCreateByName(name);
+        return {
+          ingredientId: ent.id,
+          quantity: Number(ing.quantity ?? 0),
+          unit: ing.unit || 'g',
+        };
+      }),
+    );
+
+    const cleanedIngredientItems = (ingredientItems || []).filter(Boolean) as {
+      ingredientId: string;
+      quantity: number;
+      unit: string;
+    }[];
+
+    this.logger.debug(
+      `[PlansService] [review] aiAdjustMeal ingredientItems=${JSON.stringify(cleanedIngredientItems).substring(0, 800)}...`,
+    );
+
+    const customRecipe = await this.recipesService.createCustomFromExisting({
+      baseRecipeId: meal.recipe.id,
+      newName: adjusted.name || meal.recipe.name,
+      mealSlot: adjusted.meal_slot || meal.meal_slot,
+      difficulty: adjusted.difficulty || meal.recipe.difficulty,
+      ingredientItems: cleanedIngredientItems,
+      createdByUserId: profileUserId,
+      source: 'user',
+      isSearchable: true,
+    });
+
+    this.logger.log(
+      `[PlansService] [review] aiAdjustMeal created custom recipe id=${customRecipe.id} from base=${meal.recipe.id}`,
+    );
+
+    const portion = Number(meal.portion_multiplier || 1);
+    meal.recipe = customRecipe as any;
+    meal.meal_kcal = customRecipe.base_kcal ? Number(customRecipe.base_kcal) * portion : meal.meal_kcal;
+    meal.meal_protein = customRecipe.base_protein ? Number(customRecipe.base_protein) * portion : meal.meal_protein;
+    meal.meal_carbs = customRecipe.base_carbs ? Number(customRecipe.base_carbs) * portion : meal.meal_carbs;
+    meal.meal_fat = customRecipe.base_fat ? Number(customRecipe.base_fat) * portion : meal.meal_fat;
+    meal.meal_cost_gbp = customRecipe.base_cost_gbp ? Number(customRecipe.base_cost_gbp) * portion : meal.meal_cost_gbp;
+
+    await this.planMealRepo.save(meal);
+
+    this.logger.log(
+      `[PlansService] [review] aiAdjustMeal updated meal=${planMealId} recipe=${customRecipe.id} kcal=${meal.meal_kcal} protein=${meal.meal_protein}`,
+    );
   }
 
   // small helper: parse "remove:x;add:y"
