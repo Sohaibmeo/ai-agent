@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentPipelineStep } from '../../hooks/useAgentPipeline';
 import { useAgentPipeline } from '../../hooks/useAgentPipeline';
 
-const MIN_STEP_MS = 1000;
+const MIN_STEP_MS = 2000;
 
 const statusText = (step?: AgentPipelineStep | null, fallback?: string) => {
   if (!step) return fallback ?? 'Getting ready...';
@@ -73,7 +73,9 @@ export function AgentPipelineModal() {
   const { state, endRun } = useAgentPipeline();
   const [visibleStep, setVisibleStep] = useState<AgentPipelineStep | null>(null);
   const [exitingStep, setExitingStep] = useState<AgentPipelineStep | null>(null);
+  const [progressDisplay, setProgressDisplay] = useState<number>(0);
   const lastSwitchRef = useRef<number>(0);
+  const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const targetStep = useMemo(() => pickTargetStep(state.steps), [state.steps]);
 
@@ -103,6 +105,17 @@ export function AgentPipelineModal() {
     return () => window.clearTimeout(timer);
   }, [exitingStep]);
 
+  useEffect(() => {
+    if (!state.isOpen) {
+      setProgressDisplay(0);
+      if (progressTimerRef.current) {
+        clearInterval(progressTimerRef.current);
+        progressTimerRef.current = null;
+      }
+      return;
+    }
+  }, [state.isOpen]);
+
   const allDone = state.steps.length > 0 && state.steps.every((s) => s.status === 'done');
   const hasError = !!state.errorMessage;
   const showClose = state.canClose || allDone || hasError;
@@ -114,7 +127,27 @@ export function AgentPipelineModal() {
     const base = (done / state.steps.length) * 100 + (active ? 100 / (state.steps.length * 2) : 0);
     return Math.max(hint || 0, base);
   }, [state.steps, state.progress, visibleStep]);
-  const progress = Math.min(100, Math.max(state.progress, progressFallback));
+  const targetProgress = Math.min(100, Math.max(state.progress, progressFallback));
+
+  useEffect(() => {
+    if (!state.isOpen) return;
+    if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+    const stepSize = 0.5; // percent per tick
+    const intervalMs = 100;
+    progressTimerRef.current = setInterval(() => {
+      setProgressDisplay((prev) => {
+        const diff = targetProgress - prev;
+        if (Math.abs(diff) <= stepSize) {
+          return targetProgress;
+        }
+        const delta = diff > 0 ? stepSize : -stepSize;
+        return Math.max(0, Math.min(100, prev + delta));
+      });
+    }, intervalMs);
+    return () => {
+      if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+    };
+  }, [targetProgress, state.isOpen]);
 
   const subtitle = hasError ? state.errorMessage : state.subtitle;
   const isClosing = state.closing || allDone;
@@ -177,12 +210,12 @@ export function AgentPipelineModal() {
           <div className="flex-1">
             <div className="flex items-center justify-between text-xs text-slate-300">
               <span>{subtitle || 'Keeping you updated step by step...'}</span>
-              <span className="text-emerald-200 font-semibold">{Math.round(progress)}%</span>
+              <span className="text-emerald-200 font-semibold">{Math.round(progressDisplay)}%</span>
             </div>
             <div className="relative mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-800 progress-animated">
               <div
                 className="absolute left-0 top-0 h-full rounded-full bg-gradient-to-r from-emerald-400 via-emerald-300 to-emerald-500 transition-[width] duration-300 ease-out"
-                style={{ width: `${Math.min(100, Math.max(progress, 2))}%` }}
+                style={{ width: `${Math.min(100, Math.max(progressDisplay, 2))}%` }}
               />
             </div>
           </div>
