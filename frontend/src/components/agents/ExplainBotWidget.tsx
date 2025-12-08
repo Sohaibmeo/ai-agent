@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { explainChat } from '../../api/agents';
 import { notify } from '../../lib/toast';
 
@@ -46,7 +46,70 @@ export function ExplainBotWidget() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const renderInline = (text: string) => {
+    const parts: (string | ReactNode)[] = [];
+    const regex = /\*\*(.+?)\*\*/g;
+    let last = 0;
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > last) {
+        parts.push(text.slice(last, match.index));
+      }
+      parts.push(
+        <strong key={`${match.index}-${match[1]}`} className="font-semibold">
+          {match[1]}
+        </strong>,
+      );
+      last = regex.lastIndex;
+    }
+    if (last < text.length) parts.push(text.slice(last));
+    return parts;
+  };
+
+  const renderMessageContent = (text: string) => {
+    const blocks = text.trim().split(/\n\s*\n/).filter(Boolean);
+    const rendered = blocks.map((block, idx) => {
+      const lines = block.split('\n').map((l) => l.trim()).filter(Boolean);
+      const allBullets = lines.length > 1 && lines.every((l) => /^[-•]/.test(l));
+      const allNumbers = lines.length > 1 && lines.every((l) => /^\d+[.)]/.test(l));
+
+      if (allBullets) {
+        return (
+          <ul key={`b-${idx}`} className="ml-4 list-disc space-y-1">
+            {lines.map((l, i) => {
+              const content = l.replace(/^[-•]\s*/, '');
+              return <li key={`b-${idx}-l-${i}`}>{renderInline(content)}</li>;
+            })}
+          </ul>
+        );
+      }
+      if (allNumbers) {
+        return (
+          <ol key={`o-${idx}`} className="ml-4 list-decimal space-y-1">
+            {lines.map((l, i) => {
+              const content = l.replace(/^\d+[.)]\s*/, '');
+              return <li key={`o-${idx}-l-${i}`}>{renderInline(content)}</li>;
+            })}
+          </ol>
+        );
+      }
+
+      return (
+        <p key={`p-${idx}`} className="leading-snug">
+          {lines.map((line, i) => (
+            <span key={`p-${idx}-l-${i}`}>
+              {renderInline(line)}
+              {i < lines.length - 1 && <br />}
+            </span>
+          ))}
+        </p>
+      );
+    });
+    return rendered;
+  };
 
   useEffect(() => {
     if (open && scrollRef.current) {
@@ -113,7 +176,12 @@ export function ExplainBotWidget() {
         )}
 
         {open && (
-          <div className="mt-3 w-[360px] rounded-3xl border border-emerald-200 bg-white shadow-[0_20px_40px_rgba(0,0,0,0.18)]">
+          <div
+            className={`mt-3 rounded-3xl border border-emerald-200 bg-white shadow-[0_20px_40px_rgba(0,0,0,0.18)] ${
+              expanded ? 'fixed inset-4 left-1/2 right-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-4xl' : 'w-[360px]'
+            }`}
+            style={expanded ? { inset: '1.5rem', left: '50%', transform: 'translateX(-50%)' } : undefined}
+          >
             <div className="flex items-center justify-between rounded-t-3xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-4 py-3 text-white">
               <div className="flex items-center gap-2">
                 <ChefBotIcon />
@@ -122,14 +190,27 @@ export function ExplainBotWidget() {
                   <div className="text-sm font-semibold">ChefBot is listening</div>
                 </div>
               </div>
-              <button
-                className="rounded-full bg-white/15 px-2 py-1 text-xs font-semibold text-white hover:bg-white/25"
-                onClick={() => setOpen(false)}
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  className="rounded-full bg-white/15 px-2 py-1 text-xs font-semibold text-white hover:bg-white/25"
+                  onClick={() => setExpanded((v) => !v)}
+                >
+                  {expanded ? '▢' : '⬜'}
+                </button>
+                <button
+                  className="rounded-full bg-white/15 px-2 py-1 text-xs font-semibold text-white hover:bg-white/25"
+                  onClick={() => setOpen(false)}
+                >
+                  ✕
+                </button>
+              </div>
             </div>
-            <div className="flex max-h-[320px] flex-col gap-2 overflow-y-auto px-3 py-3" ref={scrollRef}>
+            <div
+              className={`flex flex-col gap-2 overflow-y-auto px-3 py-3 ${
+                expanded ? 'max-h-[70vh]' : 'max-h-[320px]'
+              }`}
+              ref={scrollRef}
+            >
               {messages.length === 0 && (
                 <div className="rounded-xl border border-dashed border-emerald-200 bg-emerald-50/60 px-3 py-3 text-xs text-slate-700">
                   {placeholder}
@@ -146,7 +227,7 @@ export function ExplainBotWidget() {
                         : 'bg-slate-100 text-slate-800'
                   }`}
                 >
-                  {m.text}
+                  {m.role === 'user' ? m.text : renderMessageContent(m.text)}
                 </div>
               ))}
               {sending && (
