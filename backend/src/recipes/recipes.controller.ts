@@ -54,4 +54,11 @@ export class RecipesController {
   async aiGenerateRecipe(@Body() body: { userId?: string; note?: string; mealSlot?: string; mealType?: string }) {
     return this.recipesService.generateRecipeWithAi(body);
   }
+
+  @Post('ai-generate-from-image')
+  async aiGenerateFromImage(
+    @Body() body: { userId?: string; imageBase64: string; note?: string; mealSlot?: string; mealType?: string },
+  ) {
+    return this.recipesService.generateRecipeFromImage(body);
+  }
 }

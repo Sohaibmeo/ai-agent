@@ -90,6 +90,15 @@ export class RecipesService {
     return full || created;
   }
 
+  async generateRecipeFromImage(body: { userId?: string; imageBase64: string; note?: string; mealSlot?: string; mealType?: string }) {
+    if (!body.imageBase64) {
+      throw new Error('Image is required');
+    }
+    const visionNote = await this.agentsService.describeImage({ imageBase64: body.imageBase64, note: body.note });
+    const combinedNote = body.note ? `${body.note}. Image notes: ${visionNote}` : `From image: ${visionNote}`;
+    return this.generateRecipeWithAi({ ...body, note: combinedNote });
+  }
+
   async adjustRecipeWithAi(recipeId: string, userId: string | undefined, note?: string) {
     const recipe = await this.findOneDetailed(recipeId);
     if (!recipe) {

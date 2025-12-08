@@ -68,3 +68,13 @@ export function adjustRecipeAi(id: string, payload: { userId?: string; note?: st
 export function generateRecipeAi(payload: { userId?: string; note?: string; mealSlot?: string; mealType?: string }) {
   return apiClient.post<RecipeWithIngredients>(`/recipes/ai-generate`, payload);
 }
+
+export function generateRecipeFromImage(payload: {
+  userId?: string;
+  imageBase64: string;
+  note?: string;
+  mealSlot?: string;
+  mealType?: string;
+}) {
+  return apiClient.post<RecipeWithIngredients>(`/recipes/ai-generate-from-image`, payload);
+}

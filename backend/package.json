@@ -36,6 +36,7 @@
   },
   "devDependencies": {
     "@nestjs/testing": "^11.1.9",
+    "@types/body-parser": "^1.19.6",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.10.1",
     "@types/supertest": "^6.0.3",

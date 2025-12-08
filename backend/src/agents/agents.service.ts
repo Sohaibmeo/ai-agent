@@ -29,6 +29,8 @@ export class AgentsService {
     process.env.LLM_MODEL_EXPLAIN || process.env.OPENAI_MODEL_EXPLAIN || this.coachModel;
   private nutritionModel =
     process.env.LLM_MODEL_NUTRITION || process.env.OPENAI_MODEL_NUTRITION || this.coachModel;
+  private visionModel =
+    process.env.LLM_MODEL_VISION || process.env.OPENAI_MODEL_VISION || this.coachModel;
   private llmBaseUrl = process.env.LLM_BASE_URL || '';
   private llmApiKey = process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
   private logAgent(kind: string, message: string) {
@@ -225,6 +227,33 @@ export class AgentsService {
       }
     }
     throw lastErr;
+  }
+
+  async describeImage(payload: { imageBase64: string; note?: string }) {
+    if (!payload.imageBase64) throw new Error('Image is required');
+    const prompt = [
+      new SystemMessage(
+        'You are a food vision model. Describe the dish in the photo: name, main ingredients, cooking method, cuisine, and rough portion size. Keep it concise.',
+      ),
+      new HumanMessage({
+        content: [
+          { type: 'text', text: payload.note || 'Describe this dish.' },
+          { type: 'image_url', image_url: `data:image/jpeg;base64,${payload.imageBase64}` },
+        ],
+      }),
+    ];
+
+    const llm = new ChatOpenAI({
+      modelName: this.visionModel,
+      temperature: 0,
+      configuration: { baseURL: this.llmBaseUrl },
+      apiKey: this.llmApiKey,
+    });
+
+    const res = await llm.invoke(prompt);
+    const text = (res as any)?.content || (res as any)?.text || '';
+    this.logger.log(`[vision] describeImage -> ${text?.toString().slice(0, 200)}`);
+    return text?.toString() || 'A dish photo';
   }
 
   async generateIngredientEstimate(payload: {

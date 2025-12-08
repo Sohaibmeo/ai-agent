@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { fetchRecipes } from '../api/recipes';
 import { DEMO_USER_ID } from '../lib/config';
 import { Card } from '../components/shared/Card';
-import { generateRecipeAi } from '../api/recipes';
+import { generateRecipeAi, generateRecipeFromImage } from '../api/recipes';
 import { useAgentPipeline } from '../hooks/useAgentPipeline';
 
 export function RecipesPage() {
@@ -15,7 +15,20 @@ export function RecipesPage() {
   const [aiNote, setAiNote] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [showAiForm, setShowAiForm] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const { startRun, updateStep, endRun, setError } = useAgentPipeline();
+
+  const fileToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result?.toString() || '';
+        const base64 = result.split(',')[1] || result;
+        resolve(base64);
+      };
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+    });
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchTerm), 400);
@@ -218,12 +231,64 @@ export function RecipesPage() {
                   <Card className="p-4 flex flex-col gap-3">
                     <div className="text-sm font-semibold text-slate-900">From an image</div>
                     <p className="text-xs text-slate-500">Upload a dish photo and let AI draft the recipe.</p>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="text-xs text-slate-600"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] || null;
+                        setImageFile(file);
+                      }}
+                      disabled={isGenerating}
+                    />
                     <button
-                      className="rounded-lg bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 cursor-not-allowed"
-                      title="Coming soon"
-                      disabled
+                      className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+                      onClick={async () => {
+                        if (!imageFile) return;
+                        try {
+                          setIsGenerating(true);
+                          const steps = [
+                            { id: 'upload', label: 'Reading image', status: 'active' as const, progressHint: 10 },
+                            { id: 'vision', label: 'Describing dish', status: 'pending' as const, progressHint: 40 },
+                            { id: 'draft-recipe', label: 'Drafting recipe with AI', status: 'pending' as const, progressHint: 70 },
+                            { id: 'finishing', label: 'Saving recipe', status: 'pending' as const, progressHint: 95 },
+                          ];
+                          startRun('generic-llm', {
+                            title: 'Creating your recipe from the photo...',
+                            subtitle: 'Analyzing the image and drafting the recipe.',
+                            steps,
+                          });
+                          updateStep('upload', 'done', undefined, undefined, 18);
+                          updateStep('vision', 'active', 'Describing the dish...', undefined, 36);
+                          const base64 = await fileToBase64(imageFile);
+                          updateStep('vision', 'done', undefined, undefined, 58);
+                          updateStep('draft-recipe', 'active', 'Drafting recipe...', undefined, 76);
+                          const created = await generateRecipeFromImage({
+                            userId: DEMO_USER_ID,
+                            imageBase64: base64,
+                          });
+                          updateStep('draft-recipe', 'done', undefined, undefined, 86);
+                          updateStep('finishing', 'active', 'Saving recipe...', undefined, 96);
+                          updateStep('finishing', 'done', undefined, undefined, 100);
+                          setTimeout(() => endRun(), 400);
+                          setShowCreateModal(false);
+                          setShowAiForm(false);
+                          setAiNote('');
+                          setImageFile(null);
+                          navigate(`/recipes/${created.id}`);
+                        } catch (e) {
+                          setError('Could not create recipe from image. Try again or use AI text.');
+                          setTimeout(() => endRun(), 600);
+                          setShowCreateModal(false);
+                          setShowAiForm(false);
+                          navigate('/recipes/new');
+                        } finally {
+                          setIsGenerating(false);
+                        }
+                      }}
+                      disabled={isGenerating || !imageFile}
                     >
-                      Coming soon
+                      {isGenerating ? 'Processing...' : 'Create from image'}
                     </button>
                   </Card>
                   <Card className="p-4 flex flex-col gap-3">
