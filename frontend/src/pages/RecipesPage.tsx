@@ -5,6 +5,7 @@ import { fetchRecipes } from '../api/recipes';
 import { DEMO_USER_ID } from '../lib/config';
 import { Card } from '../components/shared/Card';
 import { generateRecipeAi } from '../api/recipes';
+import { useLlmAction } from '../hooks/useLlmAction';
 
 export function RecipesPage() {
   const navigate = useNavigate();
@@ -14,6 +15,11 @@ export function RecipesPage() {
   const [aiNote, setAiNote] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [showAiForm, setShowAiForm] = useState(false);
+  const { runWithLlmLoader } = useLlmAction({
+    kind: 'generic-llm',
+    title: 'Creating your recipe with AI...',
+    subtitle: 'Drafting ingredients and steps based on your description.',
+  });
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchTerm), 400);
@@ -93,7 +99,15 @@ export function RecipesPage() {
       </div>
 
       {showCreateModal && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowCreateModal(false)}>
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => {
+            if (isGenerating) return;
+            setShowCreateModal(false);
+            setShowAiForm(false);
+            setAiNote('');
+          }}
+        >
           <div
             className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
@@ -107,7 +121,11 @@ export function RecipesPage() {
                     <div className="text-xs uppercase text-slate-500">Describe with AI</div>
                     <h2 className="text-lg font-semibold text-slate-900">Tell us about the recipe</h2>
                   </div>
-                  <button className="text-slate-500 hover:text-slate-800" onClick={() => setShowAiForm(false)}>
+                  <button
+                    className="text-slate-500 hover:text-slate-800 disabled:opacity-50"
+                    disabled={isGenerating}
+                    onClick={() => setShowAiForm(false)}
+                  >
                     ✕
                   </button>
                 </div>
@@ -120,31 +138,34 @@ export function RecipesPage() {
                   />
                   <div className="flex justify-end gap-2">
                     <button
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                      onClick={() => {
-                        setAiNote('');
-                        setShowAiForm(false);
-                      }}
-                    >
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                    disabled={isGenerating}
+                    onClick={() => {
+                      setAiNote('');
+                      setShowAiForm(false);
+                    }}
+                  >
                       Cancel
                     </button>
                     <button
-                      className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
-                      onClick={async () => {
-                        const note = aiNote.trim();
-                        if (!note) {
-                          setShowCreateModal(false);
+                    className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+                    onClick={async () => {
+                      const note = aiNote.trim();
+                      if (!note) {
+                        setShowCreateModal(false);
                           navigate('/recipes/new');
                           return;
-                        }
-                        try {
-                          setIsGenerating(true);
-                          const created = await generateRecipeAi({ userId: DEMO_USER_ID, note });
-                          setShowCreateModal(false);
-                          setShowAiForm(false);
-                          setAiNote('');
-                          navigate(`/recipes/${created.id}`);
-                        } catch (e) {
+                      }
+                      try {
+                        setIsGenerating(true);
+                        const created = await runWithLlmLoader(() =>
+                          generateRecipeAi({ userId: DEMO_USER_ID, note }),
+                        );
+                        setShowCreateModal(false);
+                        setShowAiForm(false);
+                        setAiNote('');
+                        navigate(`/recipes/${created.id}`);
+                      } catch (e) {
                           setShowCreateModal(false);
                           setShowAiForm(false);
                           navigate('/recipes/new');
@@ -166,7 +187,15 @@ export function RecipesPage() {
                     <div className="text-xs uppercase text-slate-500">New recipe</div>
                     <h2 className="text-lg font-semibold text-slate-900">How would you like to start?</h2>
                   </div>
-                  <button className="text-slate-500 hover:text-slate-800" onClick={() => setShowCreateModal(false)}>
+                  <button
+                    className="text-slate-500 hover:text-slate-800 disabled:opacity-50"
+                    disabled={isGenerating}
+                    onClick={() => {
+                      setShowCreateModal(false);
+                      setShowAiForm(false);
+                      setAiNote('');
+                    }}
+                  >
                     ✕
                   </button>
                 </div>
