@@ -177,31 +177,31 @@ export function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center px-4 py-8">
-      <div className="w-full max-w-3xl space-y-6">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 flex items-center justify-center px-4 py-8">
+      <div className="w-full max-w-5xl space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-emerald-700/80">Welcome, {user?.email}</p>
-            <h1 className="mt-1 text-2xl font-semibold text-slate-900">Let&apos;s tune ChefBot to your body</h1>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="text-sm uppercase tracking-[0.16em] text-emerald-700">Welcome, {user?.email}</p>
+            <h1 className="mt-1 text-3xl font-semibold text-slate-900">Let&apos;s tune ChefBot to your body</h1>
+            <p className="mt-1 text-sm text-slate-500">
               This takes under a minute. We&apos;ll use it to set your calories and protein targets.
             </p>
           </div>
           <div className="hidden sm:flex flex-col items-end gap-1">
             <div className="flex items-center gap-2 text-xs text-slate-500">
               <span>Step {step + 1} of 4</span>
-              <div className="h-1 w-24 rounded-full bg-slate-200 overflow-hidden">
+              <div className="h-1.5 w-28 rounded-full bg-slate-200 overflow-hidden">
                 <div className="h-full bg-emerald-500 transition-all" style={{ width: `${((step + 1) / 4) * 100}%` }} />
               </div>
             </div>
           </div>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white shadow-2xl p-5 md:p-6 grid md:grid-cols-[2fr,1.2fr] gap-6">
+        <div className="rounded-3xl border border-slate-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.08)] p-6 md:p-8 grid md:grid-cols-[1.6fr,1.1fr] gap-8">
           <div className="space-y-4">
             {step === 0 && (
               <div className="space-y-4">
-                <h2 className="text-sm font-semibold text-slate-900">Your basics</h2>
+                <h2 className="text-base font-semibold text-slate-900">Your basics</h2>
                 <p className="text-xs text-slate-500">We&apos;ll use this to estimate your maintenance calories.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2">
                   {[
@@ -210,8 +210,8 @@ export function OnboardingPage() {
                     { key: 'weight_kg', label: 'Weight', suffix: 'kg' },
                   ].map((field) => (
                     <div key={field.key}>
-                      <label className="block text-[11px] text-slate-500 mb-1">{field.label}</label>
-                      <div className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-2">
+                      <label className="block text-[12px] text-slate-600 mb-1">{field.label}</label>
+                      <div className="flex items-center rounded-2xl border border-slate-300 bg-slate-50 px-3 py-2 shadow-inner">
                         <input
                           type="number"
                           min={0}
@@ -222,7 +222,7 @@ export function OnboardingPage() {
                               [field.key]: e.target.value ? Number(e.target.value) : undefined,
                             }))
                           }
-                          className="w-full bg-transparent text-sm text-slate-900 outline-none"
+                          className="w-full bg-transparent text-base font-medium text-slate-900 outline-none"
                         />
                         <span className="ml-1 text-[11px] text-slate-500">{field.suffix}</span>
                       </div>

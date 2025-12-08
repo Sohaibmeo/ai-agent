@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useMemo } from 'react';
+import { useAuth } from '../../context/AuthContext';
 
 const navItems = [
   { key: 'profile', label: 'Profile', to: '/' },
@@ -10,8 +11,9 @@ const navItems = [
 
 export function Sidebar() {
   const items = useMemo(() => navItems, []);
+  const { user, logout } = useAuth();
   return (
-    <div className="flex min-h-screen flex-col justify-between p-4">
+    <div className="flex h-full flex-col justify-between p-4">
       <div>
         <div className="mb-6 flex items-center gap-2">
           <div className="h-9 w-9 rounded-lg bg-slate-900 text-white text-center leading-9 font-semibold">MP</div>
@@ -38,7 +40,17 @@ export function Sidebar() {
           ))}
         </nav>
       </div>
-      <div className="text-xs text-slate-500">V2 Demo</div>
+      <div className="space-y-3">
+        {user && (
+          <button
+            onClick={logout}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Log out
+          </button>
+        )}
+        <div className="text-xs text-slate-500">V2 Demo</div>
+      </div>
     </div>
   );
 }
