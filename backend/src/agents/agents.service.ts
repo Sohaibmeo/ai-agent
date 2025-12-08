@@ -37,6 +37,39 @@ export class AgentsService {
     this.logger.log(`[${kind}] ${message}`);
   }
 
+  async explain(message: string, context?: string) {
+    const client = this.createClient('explain');
+    const chat = new ChatOpenAI({
+      model: client.model,
+      apiKey: client.apiKey,
+      temperature: 0.4,
+      maxTokens: 800,
+      configuration: { baseURL: client.baseUrl },
+    });
+
+    const system = [
+      'You are ChefBot, a friendly cooking explainer.',
+      'Respond concisely, with clear bullets or short paragraphs.',
+      'Keep tone warm and practical. When relevant, call out safety notes.',
+    ].join(' ');
+
+    const prompt = [
+      new SystemMessage(system),
+      new HumanMessage(
+        JSON.stringify({
+          question: message,
+          context: context || undefined,
+        }),
+      ),
+    ];
+
+    const start = Date.now();
+    const res = await chat.invoke(prompt);
+    const content = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
+    this.logAgent('explain', `model=${client.model} latency_ms=${Date.now() - start}`);
+    return { reply: content };
+  }
+
   async interpretReviewAction(payload: {
     userId?: string;
     weeklyPlanId?: string;

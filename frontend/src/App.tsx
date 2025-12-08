@@ -9,6 +9,7 @@ import { RecipeDetailPage } from './pages/RecipeDetailPage';
 import { RecipesPage } from './pages/RecipesPage';
 import { AgentPipelineProvider } from './hooks/useAgentPipeline';
 import { AgentPipelineModal } from './components/agents/AgentPipelineModal';
+import { ExplainBotWidget } from './components/agents/ExplainBotWidget';
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
           </Routes>
         </AppShell>
         <AgentPipelineModal />
+        <ExplainBotWidget />
         <Toaster position="top-right" toastOptions={{ className: 'text-sm' }} />
       </AgentPipelineProvider>
     </div>

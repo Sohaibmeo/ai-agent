@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Body, Controller, Get, Post, BadRequestException } from '@nestjs/common';
 import { AgentsService } from './agents.service';
 
 @Controller('agents')
@@ -8,5 +8,13 @@ export class AgentsController {
   @Get('health')
   list() {
     return "OK";
+  }
+
+  @Post('explain')
+  async explain(@Body() body: { message?: string; context?: string }) {
+    if (!body?.message) {
+      throw new BadRequestException('message is required');
+    }
+    return this.agentsService.explain(body.message, body.context);
   }
 }
