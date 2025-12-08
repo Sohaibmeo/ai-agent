@@ -120,7 +120,14 @@ export class AgentsService {
       try {
         const profile = await this.usersService.getProfile(userId);
         const targets = calculateTargets(profile || {});
-        targetCtx = `Targets: maintenance ${targets.maintenanceCalories} kcal, daily goal ${targets.dailyCalories} kcal, delta ${targets.calorieDelta >= 0 ? '+' : ''}${targets.calorieDelta} kcal, protein target ${targets.dailyProtein}g.`;
+        const delta = targets.calorieDelta;
+        const deltaText =
+          delta === 0
+            ? 'at maintenance'
+            : delta > 0
+              ? `~${delta} kcal above maintenance (surplus)`
+              : `~${Math.abs(delta)} kcal below maintenance (deficit)`;
+        targetCtx = `Targets: maintenance ${targets.maintenanceCalories} kcal/day, goal ${targets.dailyCalories} kcal/day (${deltaText}), protein target ${targets.dailyProtein}g/day.`;
       } catch (err) {
         this.logger.warn(`[explain] could not load profile/targets for user ${userId}: ${(err as Error).message}`);
       }

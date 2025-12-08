@@ -98,6 +98,16 @@ export function ExplainBotWidget() {
         );
       }
 
+      // Headings like ### or ##
+      if (lines.length === 1 && /^#{1,6}\s+/.test(lines[0])) {
+        const content = lines[0].replace(/^#{1,6}\s+/, '');
+        return (
+          <p key={`h-${idx}`} className="font-semibold text-slate-900">
+            {renderInline(content)}
+          </p>
+        );
+      }
+
       return (
         <p key={`p-${idx}`} className="leading-snug">
           {lines.map((line, i) => (
@@ -222,12 +232,12 @@ export function ExplainBotWidget() {
               {messages.map((m) => (
                 <div
                   key={m.id}
-                  className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-snug shadow ${
+                  className={`max-w-[95%] md:max-w-[80%] rounded-2xl px-3 py-2 text-sm leading-relaxed shadow ${
                     m.role === 'user'
                       ? 'ml-auto bg-emerald-600 text-white shadow-emerald-500/30'
                       : m.role === 'error'
                         ? 'bg-red-50 text-red-700 border border-red-200'
-                        : 'bg-slate-100 text-slate-800'
+                        : 'bg-emerald-50/80 text-slate-900 border border-emerald-100 shadow-emerald-200/40'
                   }`}
                 >
                   {m.role === 'user' ? m.text : renderMessageContent(m.text)}
