@@ -10,6 +10,8 @@ import { ShoppingListModule } from './shopping-list/shopping-list.module';
 import { AgentsModule } from './agents/agents.module';
 import { PreferencesModule } from './preferences/preferences.module';
 import { AppDataSource } from '../ormconfig';
+import { AuthModule } from './auth/auth.module';
+import { ProfileModule } from './profile/profile.module';
 
 @Module({
   imports: [
@@ -23,6 +25,8 @@ import { AppDataSource } from '../ormconfig';
     ShoppingListModule,
     AgentsModule,
     PreferencesModule,
+    AuthModule,
+    ProfileModule,
   ],
 })
 export class AppModule {}

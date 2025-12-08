@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DEMO_USER_ID } from '../lib/config';
-import { fetchProfile, updateProfile } from '../api/profile';
+import { fetchProfile, updateProfileById } from '../api/profile';
 import type { UserProfile } from '../api/types';
 
 export function useProfile(userId: string = DEMO_USER_ID) {
@@ -12,7 +12,7 @@ export function useProfile(userId: string = DEMO_USER_ID) {
   });
 
   const mutation = useMutation({
-    mutationFn: (payload: Partial<UserProfile>) => updateProfile(userId, payload),
+    mutationFn: (payload: Partial<UserProfile>) => updateProfileById(userId, payload),
     onSuccess: (data) => {
       queryClient.setQueryData(['profile', userId], data);
     },
