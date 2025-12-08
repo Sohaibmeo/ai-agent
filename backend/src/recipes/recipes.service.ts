@@ -75,7 +75,20 @@ export class RecipesService {
     });
   }
 
-  async listCandidates(userId: string, mealSlot?: string, search?: string) {
+  async listCandidates(
+    userId: string,
+    opts: {
+      mealSlot?: string;
+      search?: string;
+      maxDifficulty?: string;
+      mealType?: 'solid' | 'drinkable';
+      weeklyBudgetGbp?: number;
+      mealsPerDay?: number;
+      estimatedDayCost?: number;
+      includeNonSearchable?: boolean;
+    } = {},
+  ) {
+    const { mealSlot, search, maxDifficulty } = opts;
     const qb = this.recipeRepo
       .createQueryBuilder('recipe')
       .leftJoinAndSelect('recipe.ingredients', 'ingredients')
@@ -83,14 +96,22 @@ export class RecipesService {
       .orderBy('recipe.name', 'ASC')
       .limit(50);
 
-    // include all sources (catalog/user/llm) and ignore is_searchable for now
+    // include all sources (catalog/user/llm); is_searchable ignored per previous behavior
     qb.where('(recipe.createdByUser = :uid OR recipe.createdByUser IS NULL)', { uid: userId });
     this.applySearchFilter(qb, search);
+    if (maxDifficulty) {
+      qb.andWhere('recipe.difficulty IN (:...diff)', { diff: this.allowedDifficulties(maxDifficulty) });
+    }
     // Only restrict by slot when the user is not actively searching; searching should surface anything.
     if (!search && mealSlot) {
       qb.andWhere('(recipe.meal_slot = :mealSlot OR recipe.meal_slot IS NULL)', { mealSlot });
     }
     return qb.getMany();
+  }
+
+  // Compatibility helper for legacy calls/tests
+  async findCandidatesForUser(opts: { userId: string; mealSlot?: string; search?: string }) {
+    return this.listCandidates(opts.userId, { mealSlot: opts.mealSlot, search: opts.search });
   }
 
   async generateRecipeWithAi(body: { userId?: string; note?: string; mealSlot?: string; mealType?: string }) {

@@ -2,9 +2,6 @@ import { IsOptional, IsString, IsUUID, IsNumber } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class GenerateRecipeDto {
-  @IsUUID()
-  userId!: string;
-
   @IsOptional()
   @IsString()
   note?: string;

@@ -13,7 +13,6 @@ import {
 import { InjectEntityManager } from '@nestjs/typeorm';
 import { EntityManager } from 'typeorm';
 import * as nodemailer from 'nodemailer';
-import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class ShoppingListService {
@@ -29,7 +28,6 @@ export class ShoppingListService {
     @InjectRepository(WeeklyPlan)
     private readonly weeklyPlanRepo: Repository<WeeklyPlan>,
     @InjectEntityManager() private readonly entityManager: EntityManager,
-    private readonly usersService: UsersService,
   ) {}
 
   private factorFromQuantity(quantity: number, unitType?: string | null) {

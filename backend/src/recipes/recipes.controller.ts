@@ -1,24 +1,36 @@
-import { Body, Controller, Get, Post, Query, Param, Patch } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Param, Patch, UseGuards, Req } from '@nestjs/common';
 import { RecipesService } from './recipes.service';
 import { CustomFromExistingDto } from './dto/custom-from-existing.dto';
 import { CreateRecipeDto } from './dto/create-recipe.dto';
 import { UpdateRecipeDto } from './dto/update-recipe.dto';
+import { JwtAuthGuard } from '../auth/jwt.guard';
+import { RecipeCandidatesQueryDto } from './dto/recipe-candidates-query.dto';
+import { GenerateRecipeDto } from './dto/generate-recipe.dto';
 
 @Controller('recipes')
+@UseGuards(JwtAuthGuard)
 export class RecipesController {
   constructor(private readonly recipesService: RecipesService) {}
 
   @Get()
-  list(@Query('userId') userId?: string, @Query('search') search?: string) {
+  list(@Req() req: any, @Query('search') search?: string) {
+    const userId = req.user?.userId as string;
     return this.recipesService.listForUser(userId, search);
   }
 
   @Get('candidates')
-  async candidates(@Query('userId') userId: string, @Query('mealSlot') mealSlot?: string, @Query('search') search?: string) {
-    if (!userId) {
-      throw new Error('userId is required');
-    }
-    return this.recipesService.listCandidates(userId, mealSlot, search);
+  async candidates(@Req() req: any, @Query() query: RecipeCandidatesQueryDto) {
+    const userId = req.user?.userId as string;
+    return this.recipesService.listCandidates(userId, {
+      mealSlot: query.mealSlot,
+      search: query.search,
+      maxDifficulty: query.maxDifficulty,
+      mealType: query.mealType,
+      weeklyBudgetGbp: query.weeklyBudgetGbp,
+      mealsPerDay: query.mealsPerDay,
+      estimatedDayCost: query.estimatedDayCost,
+      includeNonSearchable: query.includeNonSearchable,
+    });
   }
 
   @Get(':id')
@@ -27,38 +39,45 @@ export class RecipesController {
   }
 
   @Post('custom-from-existing')
-  async customFromExisting(@Body() body: CustomFromExistingDto) {
-    return this.recipesService.createCustomFromExisting(body);
+  async customFromExisting(@Req() req: any, @Body() body: CustomFromExistingDto) {
+    const userId = req.user?.userId as string;
+    return this.recipesService.createCustomFromExisting({ ...body, createdByUserId: userId });
   }
 
   @Post()
-  async createRecipe(@Body() body: CreateRecipeDto, @Query('userId') userId?: string) {
-    const uid = userId;
-    return this.recipesService.createUserRecipe(uid, body);
+  async createRecipe(@Req() req: any, @Body() body: CreateRecipeDto) {
+    const userId = req.user?.userId as string;
+    return this.recipesService.createUserRecipe(userId, body);
   }
 
   @Patch(':id')
-  async updateRecipe(@Param('id') id: string, @Body() body: UpdateRecipeDto, @Query('userId') userId?: string) {
+  async updateRecipe(@Req() req: any, @Param('id') id: string, @Body() body: UpdateRecipeDto) {
+    const userId = req.user?.userId as string;
     return this.recipesService.updateUserRecipe(id, userId, body);
   }
 
   @Post(':id/ai-adjust')
   async aiAdjustRecipe(
+    @Req() req: any,
     @Param('id') id: string,
-    @Body() body: { userId?: string; note?: string },
+    @Body() body: { note?: string },
   ) {
-    return this.recipesService.adjustRecipeWithAi(id, body.userId, body.note);
+    const userId = req.user?.userId as string;
+    return this.recipesService.adjustRecipeWithAi(id, userId, body.note);
   }
 
   @Post('ai-generate')
-  async aiGenerateRecipe(@Body() body: { userId?: string; note?: string; mealSlot?: string; mealType?: string }) {
-    return this.recipesService.generateRecipeWithAi(body);
+  async aiGenerateRecipe(@Req() req: any, @Body() body: GenerateRecipeDto) {
+    const userId = req.user?.userId as string;
+    return this.recipesService.generateRecipeWithAi({ ...body, userId });
   }
 
   @Post('ai-generate-from-image')
   async aiGenerateFromImage(
-    @Body() body: { userId?: string; imageBase64: string; note?: string; mealSlot?: string; mealType?: string },
+    @Req() req: any,
+    @Body() body: { imageBase64: string; note?: string; mealSlot?: string; mealType?: string },
   ) {
-    return this.recipesService.generateRecipeFromImage(body);
+    const userId = req.user?.userId as string;
+    return this.recipesService.generateRecipeFromImage({ ...body, userId });
   }
 }
