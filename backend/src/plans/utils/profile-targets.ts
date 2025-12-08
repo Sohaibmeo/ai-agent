@@ -14,6 +14,33 @@ export interface Targets {
   calorieDelta: number;
 }
 
+export const ACTIVITY_MULTIPLIER: Record<string, number> = {
+  sedentary: 1.2,
+  light: 1.375,
+  moderate: 1.55,
+  active: 1.725,
+};
+
+export const CUT_MAP: Record<string, number> = {
+  low: -150,
+  mild: -200,
+  medium: -300,
+  moderate: -300,
+  high: -450,
+  hard: -450,
+  extreme: -600,
+};
+
+export const SURPLUS_MAP: Record<string, number> = {
+  low: 200,
+  mild: 250,
+  medium: 350,
+  moderate: 350,
+  high: 500,
+  hard: 500,
+  extreme: 600,
+};
+
 // Simplified calculator based on common heuristics; can be refined later.
 export function calculateTargets(profile: ProfileInputs): Targets {
   const weight = profile.weight_kg ?? 70;
@@ -25,39 +52,15 @@ export function calculateTargets(profile: ProfileInputs): Targets {
   // Mifflin-St Jeor estimation for BMR
   const bmr = 10 * weight + 6.25 * height - 5 * age + 5; // male-ish default
 
-  const activityMultiplier: Record<string, number> = {
-    sedentary: 1.2,
-    light: 1.375,
-    moderate: 1.55,
-    active: 1.725,
-  };
-  const tdee = bmr * (activityMultiplier[activity] ?? 1.55);
+  const tdee = bmr * (ACTIVITY_MULTIPLIER[activity] ?? 1.55);
 
   const intensity = (profile.goal_intensity || 'moderate').toLowerCase();
-  const cutMap: Record<string, number> = {
-    low: -150,
-    mild: -200,
-    medium: -300,
-    moderate: -300,
-    high: -450,
-    hard: -450,
-    extreme: -600,
-  };
-  const surplusMap: Record<string, number> = {
-    low: 200,
-    mild: 250,
-    medium: 350,
-    moderate: 350,
-    high: 500,
-    hard: 500,
-    extreme: 600,
-  };
 
   const calorieDelta =
-    goal === 'lose_weight'
-      ? cutMap[intensity] ?? -300
-      : goal === 'gain_weight'
-        ? surplusMap[intensity] ?? 300
+    goal === 'lose_weight' || goal === 'lose_weight_gain_muscle'
+      ? CUT_MAP[intensity] ?? -300
+      : goal === 'gain_weight' || goal === 'gain_weight_gain_muscle'
+        ? SURPLUS_MAP[intensity] ?? 300
         : 0;
 
   let dailyCalories = tdee + calorieDelta;

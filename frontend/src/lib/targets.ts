@@ -7,6 +7,33 @@ export type ProfileInputs = {
   goal_intensity?: string;
 };
 
+export const ACTIVITY_MULTIPLIER: Record<string, number> = {
+  sedentary: 1.2,
+  light: 1.375,
+  moderate: 1.55,
+  active: 1.725,
+};
+
+export const CUT_MAP: Record<string, number> = {
+  low: -150,
+  mild: -200,
+  medium: -300,
+  moderate: -300,
+  high: -450,
+  hard: -450,
+  extreme: -600,
+};
+
+export const SURPLUS_MAP: Record<string, number> = {
+  low: 200,
+  mild: 250,
+  medium: 350,
+  moderate: 350,
+  high: 500,
+  hard: 500,
+  extreme: 600,
+};
+
 export function calculateTargets(profile: ProfileInputs) {
   const weight = profile.weight_kg ?? 70;
   const height = profile.height_cm ?? 175;
@@ -16,38 +43,13 @@ export function calculateTargets(profile: ProfileInputs) {
   const intensity = (profile.goal_intensity || 'moderate').toLowerCase();
 
   const bmr = 10 * weight + 6.25 * height - 5 * age + 5;
-  const activityMultiplier: Record<string, number> = {
-    sedentary: 1.2,
-    light: 1.375,
-    moderate: 1.55,
-    active: 1.725,
-  };
-  const tdee = bmr * (activityMultiplier[activity] ?? 1.55);
-
-  const cutMap: Record<string, number> = {
-    low: -150,
-    mild: -200,
-    medium: -300,
-    moderate: -300,
-    high: -450,
-    hard: -450,
-    extreme: -600,
-  };
-  const surplusMap: Record<string, number> = {
-    low: 200,
-    mild: 250,
-    medium: 350,
-    moderate: 350,
-    high: 500,
-    hard: 500,
-    extreme: 600,
-  };
+  const tdee = bmr * (ACTIVITY_MULTIPLIER[activity] ?? 1.55);
 
   const calorieDelta =
-    goal === 'lose_weight'
-      ? cutMap[intensity] ?? -300
-      : goal === 'gain_weight'
-        ? surplusMap[intensity] ?? 300
+    goal === 'lose_weight' || goal === 'lose_weight_gain_muscle'
+      ? CUT_MAP[intensity] ?? -300
+      : goal === 'gain_weight' || goal === 'gain_weight_gain_muscle'
+        ? SURPLUS_MAP[intensity] ?? 300
         : 0;
 
   let dailyCalories = tdee + calorieDelta;

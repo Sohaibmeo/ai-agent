@@ -4,50 +4,14 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { calculateTargets, type ProfileInputs } from '../lib/targets';
 import { updateProfile, fetchProfileMe } from '../api/profile';
+import { DIET_TYPES, ALLERGENS } from '../constants/dietAllergy';
+import { GOALS, INTENSITIES, ACTIVITY_LEVELS } from '../constants/targets';
 
 type Step = 0 | 1 | 2 | 3;
 
-const goals = [
-  { value: 'lose_weight', label: 'Lose fat' },
-  { value: 'maintain_weight', label: 'Maintain' },
-  { value: 'gain_weight', label: 'Build muscle' },
-];
-
-const intensities = [
-  { value: 'low', label: 'Gentle' },
-  { value: 'moderate', label: 'Normal' },
-  { value: 'high', label: 'Aggressive' },
-];
-
-const activityLevels = [
-  { value: 'sedentary', label: 'Mostly sitting' },
-  { value: 'light', label: 'Lightly active' },
-  { value: 'moderate', label: 'Train 3–4x/week' },
-  { value: 'active', label: 'Very active' },
-];
-
-const dietTypes = [
-  { value: 'omnivore', label: 'Omnivore' },
-  { value: 'vegetarian', label: 'Vegetarian' },
-  { value: 'vegan', label: 'Vegan' },
-  { value: 'pescatarian', label: 'Pescatarian' },
-];
-
-const allergyOptions = [
-  'gluten',
-  'milk',
-  'egg',
-  'nuts',
-  'peanuts',
-  'soy',
-  'fish',
-  'shellfish',
-  'sesame',
-  'mustard',
-  'celery',
-  'sulphites',
-  'lupin',
-];
+const goals = GOALS;
+const intensities = INTENSITIES;
+const activityLevels = ACTIVITY_LEVELS;
 
 export function OnboardingPage() {
   const { user, token, setAuth } = useAuth();
@@ -74,7 +38,7 @@ export function OnboardingPage() {
     activity_level: 'moderate',
     goal: 'lose_weight',
     goal_intensity: 'moderate',
-    diet_type: 'omnivore',
+    diet_type: undefined,
     allergy_keys: [],
     breakfast_enabled: true,
     snack_enabled: true,
@@ -100,7 +64,7 @@ export function OnboardingPage() {
           activity_level: existing.activity_level || prev.activity_level,
           goal: existing.goal || prev.goal,
           goal_intensity: existing.goal_intensity || prev.goal_intensity,
-          diet_type: existing.diet_type || prev.diet_type,
+          diet_type: existing.diet_type ?? prev.diet_type,
           allergy_keys: existing.allergy_keys ?? [],
           breakfast_enabled: existing.breakfast_enabled ?? true,
           snack_enabled: existing.snack_enabled ?? true,
@@ -316,42 +280,45 @@ export function OnboardingPage() {
                 <p className="text-xs text-slate-500">We&apos;ll avoid anything dangerous and respect your diet style.</p>
                 <div className="mt-2 space-y-3">
                   <div>
-                    <p className="text-[11px] text-slate-500 mb-1">Diet type</p>
+                    <p className="text-[11px] text-slate-500 mb-1">Diet type (optional)</p>
                     <div className="flex flex-wrap gap-2">
-                      {dietTypes.map((d) => (
-                        <button
-                          key={d.value}
-                          type="button"
-                          onClick={() => setProfile((p) => ({ ...p, diet_type: d.value }))}
-                          className={`px-3 py-1.5 rounded-full text-xs border ${
-                            profile.diet_type === d.value
-                              ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
-                              : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400'
-                          }`}
-                        >
-                          {d.label}
-                        </button>
-                      ))}
+                      {DIET_TYPES.map((d) => {
+                        const active = profile.diet_type === d.value;
+                        return (
+                          <button
+                            key={d.value}
+                            type="button"
+                            onClick={() => setProfile((p) => ({ ...p, diet_type: active ? undefined : d.value }))}
+                            className={`px-3 py-1.5 rounded-full text-xs border ${
+                              active
+                                ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                                : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400'
+                            }`}
+                          >
+                            {d.label}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
                   <div>
                     <p className="text-[11px] text-slate-500 mb-1">Allergies / must-avoid</p>
                     <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto pr-1">
-                      {allergyOptions.map((a) => {
-                        const active = profile.allergy_keys.includes(a);
+                      {ALLERGENS.map((a) => {
+                        const active = profile.allergy_keys.includes(a.value);
                         return (
                           <button
-                            key={a}
+                            key={a.value}
                             type="button"
-                            onClick={() => handleToggleAllergy(a)}
+                            onClick={() => handleToggleAllergy(a.value)}
                             className={`px-3 py-1.5 rounded-full text-[11px] border capitalize ${
                               active
                                 ? 'border-red-300 bg-red-50 text-red-700'
                                 : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400'
                             }`}
                           >
-                            {a}
+                            {a.label}
                           </button>
                         );
                       })}
