@@ -13,10 +13,11 @@ export interface RecipeCandidate {
   base_fat?: number | null;
 }
 
-export function fetchRecipeCandidates(params: { userId: string; mealSlot?: string }) {
+export function fetchRecipeCandidates(params: { userId: string; mealSlot?: string; search?: string }) {
   const search = new URLSearchParams();
   search.set('userId', params.userId);
   if (params.mealSlot) search.set('mealSlot', params.mealSlot);
+  if (params.search) search.set('search', params.search);
   return apiClient.get<RecipeCandidate[]>(`/recipes/candidates?${search.toString()}`);
 }
 

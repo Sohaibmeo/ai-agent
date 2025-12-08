@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRecipeCandidates } from '../../hooks/useRecipeCandidates';
 import { DEMO_USER_ID } from '../../lib/config';
 import { notify } from '../../lib/toast';
@@ -24,8 +24,8 @@ export function SwapDialog({
   onSelect,
   onPlanUpdated,
 }: SwapDialogProps) {
-  const { data: candidates, isLoading, isError, refetch } = useRecipeCandidates(mealSlot, DEMO_USER_ID);
   const [search, setSearch] = useState('');
+  const { data: candidates, isLoading, isError, refetch } = useRecipeCandidates(mealSlot, DEMO_USER_ID, search);
   const [autoMode, setAutoMode] = useState<'prompt' | 'question' | null>(null);
   const [autoNote, setAutoNote] = useState('');
   const [isAutoPicking, setIsAutoPicking] = useState(false);
@@ -34,13 +34,6 @@ export function SwapDialog({
     title: 'Adjusting your plan with AI...',
     subtitle: 'We are finding a better meal for this slot while keeping your goals in mind.',
   });
-
-  const filtered = useMemo(() => {
-    const list = candidates || [];
-    const q = search.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter((c) => c.name.toLowerCase().includes(q));
-  }, [candidates, search]);
 
   useEffect(() => {
     if (open && mealSlot) {
@@ -214,7 +207,7 @@ export function SwapDialog({
               </div>
             )}
             {!isLoading && !isError &&
-              filtered.map((c) => (
+              (candidates || []).map((c) => (
                 <button
                   key={c.id}
                   onClick={() => onSelect(c.id)}
@@ -237,7 +230,7 @@ export function SwapDialog({
                     </span>
                 </button>
               ))}
-            {!isLoading && !isError && filtered.length === 0 && (
+            {!isLoading && !isError && (candidates || []).length === 0 && (
               <div className="px-1 text-sm text-slate-500">No candidates found.</div>
             )}
           </div>

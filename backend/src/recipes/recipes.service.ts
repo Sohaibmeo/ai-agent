@@ -27,9 +27,7 @@ export class RecipesService {
       .orderBy('recipe.name', 'ASC')
       .limit(200);
 
-    if (userId) {
-      qb.andWhere('(recipe.createdByUser = :uid OR recipe.createdByUser IS NULL)', { uid: userId });
-    }
+    // Show all recipes regardless of creator/source
     if (search) {
       qb.andWhere(
         new Brackets((qb2) => {
@@ -59,6 +57,31 @@ export class RecipesService {
       where: { id },
       relations: ['ingredients', 'ingredients.ingredient'],
     });
+  }
+
+  async listCandidates(userId: string, mealSlot?: string, search?: string) {
+    const qb = this.recipeRepo
+      .createQueryBuilder('recipe')
+      .leftJoinAndSelect('recipe.ingredients', 'ingredients')
+      .leftJoinAndSelect('ingredients.ingredient', 'ingredientEnt')
+      .orderBy('recipe.name', 'ASC')
+      .limit(50);
+
+    // include all sources (catalog/user/llm) and ignore is_searchable for now
+    qb.where('(recipe.createdByUser = :uid OR recipe.createdByUser IS NULL)', { uid: userId });
+    if (search) {
+      qb.andWhere(
+        new Brackets((qb2) => {
+          qb2.where('LOWER(recipe.name) LIKE :search', { search: `%${search.toLowerCase()}%` });
+          qb2.orWhere('LOWER(recipe.instructions) LIKE :search', { search: `%${search.toLowerCase()}%` });
+        }),
+      );
+    }
+    // Only restrict by slot when the user is not actively searching; searching should surface anything.
+    if (!search && mealSlot) {
+      qb.andWhere('(recipe.meal_slot = :mealSlot OR recipe.meal_slot IS NULL)', { mealSlot });
+    }
+    return qb.getMany();
   }
 
   async generateRecipeWithAi(body: { userId?: string; note?: string; mealSlot?: string; mealType?: string }) {

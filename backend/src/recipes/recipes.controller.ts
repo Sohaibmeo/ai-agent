@@ -14,11 +14,11 @@ export class RecipesController {
   }
 
   @Get('candidates')
-  async candidates(@Query('userId') userId: string, @Query('mealSlot') mealSlot?: string) {
+  async candidates(@Query('userId') userId: string, @Query('mealSlot') mealSlot?: string, @Query('search') search?: string) {
     if (!userId) {
       throw new Error('userId is required');
     }
-    return []
+    return this.recipesService.listCandidates(userId, mealSlot, search);
   }
 
   @Get(':id')
