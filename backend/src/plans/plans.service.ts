@@ -114,19 +114,24 @@ export class PlansService {
     this.pipelineGateway.broadcastPipeline(pipeline);
   }
 
-  findAll() {
+  findAll(userId: string) {
     return this.weeklyPlanRepo.find({
-      where: { status: Not('systemdraft') },
+      where: { status: Not('systemdraft'), user: { id: userId } as any },
       order: { week_start_date: 'DESC' },
       relations: ['days', 'days.meals', 'days.meals.recipe'],
     });
   }
 
-  findById(id: string) {
-    return this.weeklyPlanRepo.findOne({
+  async findById(id: string, userId?: string) {
+    const plan = await this.weeklyPlanRepo.findOne({
       where: { id },
-      relations: ['days', 'days.meals', 'days.meals.recipe'],
+      relations: ['days', 'days.meals', 'days.meals.recipe', 'user'],
     });
+    if (!plan) return null;
+    if (userId && plan.user?.id && plan.user.id !== userId) {
+      throw new Error('Forbidden: plan does not belong to user');
+    }
+    return plan;
   }
 
   async getActivePlan(userId: string) {
@@ -144,9 +149,12 @@ export class PlansService {
     return latest;
   }
 
-  async setStatus(planId: string, status: string) {
+  async setStatus(planId: string, status: string, userId?: string) {
     const plan = await this.weeklyPlanRepo.findOne({ where: { id: planId }, relations: ['user'] });
     if (!plan) throw new Error('Plan not found');
+    if (userId && plan.user?.id !== userId) {
+      throw new Error('Forbidden: cannot modify another user plan');
+    }
     if (status === 'active' && plan.user?.id) {
       await this.weeklyPlanRepo.update({ user: { id: plan.user.id } as any, status: 'active' }, { status: 'archived' });
     }
@@ -159,7 +167,7 @@ export class PlansService {
     return saved;
   }
 
-  async setMealRecipe(planMealId: string, newRecipeId: string) {
+  async setMealRecipe(planMealId: string, newRecipeId: string, userId?: string) {
     const meal = await this.planMealRepo.findOne({
       where: { id: planMealId },
       relations: ['planDay', 'planDay.weeklyPlan', 'planDay.weeklyPlan.user', 'recipe'],
@@ -167,12 +175,16 @@ export class PlansService {
     if (!meal) {
       throw new Error('Plan meal not found');
     }
+    const ownerId = meal.planDay.weeklyPlan.user?.id;
+    if (userId && ownerId && ownerId !== userId) {
+      throw new Error('Forbidden: cannot modify another user plan');
+    }
     const recipe = await this.recipesService.findOneById(newRecipeId);
     if (!recipe) {
       throw new Error('Recipe not found');
     }
     this.logger.log(`setMealRecipe planMeal=${planMealId} newRecipe=${newRecipeId}`);
-    const userId = (meal.planDay.weeklyPlan as any).user?.id;
+    const owningUserId = ownerId;
     const oldIngredients = (meal.recipe as any)?.ingredients?.map((ri: any) => ri.ingredient?.id).filter(Boolean) || [];
 
     meal.recipe = recipe as any;
@@ -184,14 +196,14 @@ export class PlansService {
     await this.planMealRepo.save(meal);
 
     // Preference signals: swapped out old recipe ingredients = dislike, new recipe ingredients = like.
-    if (userId) {
+    if (owningUserId) {
       const newIngredients = await this.recipesService.getIngredientIdsForRecipe(newRecipeId);
       if (oldIngredients.length) {
-        await this.preferencesService.incrementManyIngredients(userId, 'dislike', oldIngredients);
+        await this.preferencesService.incrementManyIngredients(owningUserId, 'dislike', oldIngredients);
       }
       if (newIngredients.length) {
-        await this.preferencesService.incrementManyIngredients(userId, 'like', newIngredients);
-        await this.preferencesService.incrementMealPreference(userId, 'like', newRecipeId);
+        await this.preferencesService.incrementManyIngredients(owningUserId, 'like', newIngredients);
+        await this.preferencesService.incrementMealPreference(owningUserId, 'like', newRecipeId);
       }
     }
 
@@ -693,6 +705,7 @@ export class PlansService {
   }
 
   async saveCustomRecipe(
+    userId: string,
     planMealId: string,
     newName: string,
     ingredientItems: { ingredientId: string; quantity: number; unit: string }[],
@@ -705,7 +718,10 @@ export class PlansService {
     if (!meal?.planDay?.weeklyPlan?.id) {
       throw new Error('Plan meal not found');
     }
-    const userId = (meal.planDay.weeklyPlan as any).user?.id;
+    const ownerId = (meal.planDay.weeklyPlan as any).user?.id;
+    if (userId && ownerId && userId !== ownerId) {
+      throw new Error('Forbidden: cannot modify another user plan');
+    }
     const customRecipe = await this.recipesService.createCustomFromExisting({
       baseRecipeId: meal.recipe?.id || '',
       newName,
@@ -713,7 +729,7 @@ export class PlansService {
       difficulty: meal.recipe?.difficulty,
       ingredientItems,
       instructions: instructions ?? meal.recipe?.instructions,
-      createdByUserId: userId,
+      createdByUserId: ownerId,
       source: 'user',
       isSearchable: true,
     });
@@ -805,6 +821,9 @@ export class PlansService {
     }
 
     const userId = payload.userId || (plan.user as any)?.id;
+    if (userId && plan.user?.id !== userId) {
+      throw new Error('Forbidden: cannot modify another user plan');
+    }
     if (!userId) {
       throw new Error('userId is required on plan or payload');
     }

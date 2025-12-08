@@ -14,8 +14,9 @@ export class PlansController {
   constructor(private readonly plansService: PlansService) {}
 
   @Get()
-  list() {
-    return this.plansService.findAll();
+  list(@Req() req: any) {
+    const userId = req.user?.userId as string;
+    return this.plansService.findAll(userId);
   }
 
   @Get('active')
@@ -41,23 +42,27 @@ export class PlansController {
   }
 
   @Post('set-meal-recipe')
-  setMealRecipe(@Body() body: SetMealRecipeDto) {
-    return this.plansService.setMealRecipe(body.planMealId, body.newRecipeId);
+  setMealRecipe(@Req() req: any, @Body() body: SetMealRecipeDto) {
+    const userId = req.user?.userId as string;
+    return this.plansService.setMealRecipe(body.planMealId, body.newRecipeId, userId);
   }
 
   @Post('activate')
-  activate(@Body() body: ActivatePlanDto) {
-    return this.plansService.setStatus(body.planId, 'active');
+  activate(@Req() req: any, @Body() body: ActivatePlanDto) {
+    const userId = req.user?.userId as string;
+    return this.plansService.setStatus(body.planId, 'active', userId);
   }
 
   @Post('status')
-  setStatus(@Body() body: SetPlanStatusDto) {
-    return this.plansService.setStatus(body.planId, body.status);
+  setStatus(@Req() req: any, @Body() body: SetPlanStatusDto) {
+    const userId = req.user?.userId as string;
+    return this.plansService.setStatus(body.planId, body.status, userId);
   }
 
   @Post('save-custom-recipe')
-  saveCustomRecipe(@Body() body: SaveCustomRecipeDto) {
-    return this.plansService.saveCustomRecipe(body.planMealId, body.newName, body.ingredientItems, body.instructions);
+  saveCustomRecipe(@Req() req: any, @Body() body: SaveCustomRecipeDto) {
+    const userId = req.user?.userId as string;
+    return this.plansService.saveCustomRecipe(userId, body.planMealId, body.newName, body.ingredientItems, body.instructions);
   }
 
   @Post('ai-plan-swap')
@@ -72,7 +77,8 @@ export class PlansController {
   }
 
   @Get(':id')
-  getById(@Param('id') id: string) {
-    return this.plansService.findById(id);
+  getById(@Req() req: any, @Param('id') id: string) {
+    const userId = req.user?.userId as string;
+    return this.plansService.findById(id, userId);
   }
 }

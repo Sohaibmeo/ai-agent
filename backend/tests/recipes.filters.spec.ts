@@ -28,7 +28,7 @@ describe('RecipesService filters', () => {
     const service = new RecipesService(
       repo as unknown as Repository<Recipe>,
       {} as unknown as Repository<RecipeIngredient>,
-      {} as unknown as Repository<UserRecipeScore>,
+      {} as any, // ingredientsService stub
       { generateRecipe: jest.fn(), adjustRecipeWithContext: jest.fn() } as any,
     );
     const result = await service.findCandidatesForUser({ userId: 'u1', mealSlot: 'lunch' });
