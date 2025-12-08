@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { AuthUser, fetchMe } from '../api/auth';
+import { type AuthUser, fetchMe } from '../api/auth';
 
 type AuthState = {
   user: AuthUser | null;
