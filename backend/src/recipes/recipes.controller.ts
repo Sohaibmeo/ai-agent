@@ -49,4 +49,9 @@ export class RecipesController {
   ) {
     return this.recipesService.adjustRecipeWithAi(id, body.userId, body.note);
   }
+
+  @Post('ai-generate')
+  async aiGenerateRecipe(@Body() body: { userId?: string; note?: string; mealSlot?: string; mealType?: string }) {
+    return this.recipesService.generateRecipeWithAi(body);
+  }
 }

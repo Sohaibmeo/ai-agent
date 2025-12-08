@@ -4,12 +4,16 @@ import { useNavigate } from 'react-router-dom';
 import { fetchRecipes } from '../api/recipes';
 import { DEMO_USER_ID } from '../lib/config';
 import { Card } from '../components/shared/Card';
+import { generateRecipeAi } from '../api/recipes';
 
 export function RecipesPage() {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [aiNote, setAiNote] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [showAiForm, setShowAiForm] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchTerm), 400);
@@ -96,52 +100,114 @@ export function RecipesPage() {
             role="dialog"
             aria-modal="true"
           >
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs uppercase text-slate-500">New recipe</div>
-                <h2 className="text-lg font-semibold text-slate-900">How would you like to start?</h2>
-              </div>
-              <button className="text-slate-500 hover:text-slate-800" onClick={() => setShowCreateModal(false)}>
-                ✕
-              </button>
-            </div>
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <Card className="p-4 flex flex-col gap-3">
-                <div className="text-sm font-semibold text-slate-900">From an image</div>
-                <p className="text-xs text-slate-500">Upload a dish photo and let AI draft the recipe.</p>
-                <button
-                  className="rounded-lg bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 cursor-not-allowed"
-                  title="Coming soon"
-                  disabled
-                >
-                  Coming soon
-                </button>
-              </Card>
-              <Card className="p-4 flex flex-col gap-3">
-                <div className="text-sm font-semibold text-slate-900">Describe with AI</div>
-                <p className="text-xs text-slate-500">Type a short description and we will build it.</p>
-                <button
-                  className="rounded-lg bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 cursor-not-allowed"
-                  title="Coming soon"
-                  disabled
-                >
-                  Coming soon
-                </button>
-              </Card>
-              <Card className="p-4 flex flex-col gap-3">
-                <div className="text-sm font-semibold text-slate-900">Create from scratch</div>
-                <p className="text-xs text-slate-500">Start with a blank recipe and fill in details.</p>
-                <button
-                  className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
-                  onClick={() => {
-                    setShowCreateModal(false);
-                    navigate('/recipes/new');
-                  }}
-                >
-                  Start blank
-                </button>
-              </Card>
-            </div>
+            {showAiForm ? (
+              <>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <div className="text-xs uppercase text-slate-500">Describe with AI</div>
+                    <h2 className="text-lg font-semibold text-slate-900">Tell us about the recipe</h2>
+                  </div>
+                  <button className="text-slate-500 hover:text-slate-800" onClick={() => setShowAiForm(false)}>
+                    ✕
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  <textarea
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-200 min-h-[140px]"
+                    placeholder="High-protein veggie lunch, under £5, quick to cook..."
+                    value={aiNote}
+                    onChange={(e) => setAiNote(e.target.value)}
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                      onClick={() => {
+                        setAiNote('');
+                        setShowAiForm(false);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+                      onClick={async () => {
+                        const note = aiNote.trim();
+                        if (!note) {
+                          setShowCreateModal(false);
+                          navigate('/recipes/new');
+                          return;
+                        }
+                        try {
+                          setIsGenerating(true);
+                          const created = await generateRecipeAi({ userId: DEMO_USER_ID, note });
+                          setShowCreateModal(false);
+                          setShowAiForm(false);
+                          setAiNote('');
+                          navigate(`/recipes/${created.id}`);
+                        } catch (e) {
+                          setShowCreateModal(false);
+                          setShowAiForm(false);
+                          navigate('/recipes/new');
+                        } finally {
+                          setIsGenerating(false);
+                        }
+                      }}
+                      disabled={isGenerating}
+                    >
+                      {isGenerating ? 'Generating...' : 'Create with AI'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs uppercase text-slate-500">New recipe</div>
+                    <h2 className="text-lg font-semibold text-slate-900">How would you like to start?</h2>
+                  </div>
+                  <button className="text-slate-500 hover:text-slate-800" onClick={() => setShowCreateModal(false)}>
+                    ✕
+                  </button>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <Card className="p-4 flex flex-col gap-3">
+                    <div className="text-sm font-semibold text-slate-900">From an image</div>
+                    <p className="text-xs text-slate-500">Upload a dish photo and let AI draft the recipe.</p>
+                    <button
+                      className="rounded-lg bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 cursor-not-allowed"
+                      title="Coming soon"
+                      disabled
+                    >
+                      Coming soon
+                    </button>
+                  </Card>
+                  <Card className="p-4 flex flex-col gap-3">
+                    <div className="text-sm font-semibold text-slate-900">Describe with AI</div>
+                    <p className="text-xs text-slate-500">Type a short description and we will build it.</p>
+                    <button
+                      className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
+                      onClick={() => setShowAiForm(true)}
+                    >
+                      Create with AI
+                    </button>
+                  </Card>
+                  <Card className="p-4 flex flex-col gap-3">
+                    <div className="text-sm font-semibold text-slate-900">Create from scratch</div>
+                    <p className="text-xs text-slate-500">Start with a blank recipe and fill in details.</p>
+                    <button
+                      className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
+                      onClick={() => {
+                        setShowCreateModal(false);
+                        navigate('/recipes/new');
+                      }}
+                    >
+                      Start blank
+                    </button>
+                  </Card>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

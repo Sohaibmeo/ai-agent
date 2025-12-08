@@ -61,6 +61,35 @@ export class RecipesService {
     });
   }
 
+  async generateRecipeWithAi(body: { userId?: string; note?: string; mealSlot?: string; mealType?: string }) {
+    const draft = await this.agentsService.generateRecipe({
+      note: body.note,
+      meal_slot: body.mealSlot,
+      meal_type: body.mealType,
+    });
+
+    const created = await this.createUserRecipe(body.userId, {
+      name: draft.name || 'AI recipe',
+      mealSlot: draft.meal_slot || body.mealSlot || 'meal',
+      difficulty: draft.difficulty || 'easy',
+      instructions:
+        Array.isArray(draft.instructions) && draft.instructions.length
+          ? draft.instructions.join('\n')
+          : typeof draft.instructions === 'string'
+            ? draft.instructions
+            : undefined,
+      ingredients:
+        draft.ingredients?.map((ing) => ({
+          ingredient_name: ing.ingredient_name,
+          quantity: Number(ing.quantity),
+          unit: ing.unit || 'g',
+        })) || [],
+    });
+
+    const full = created?.id ? await this.findOneDetailed(created.id) : null;
+    return full || created;
+  }
+
   async adjustRecipeWithAi(recipeId: string, userId: string | undefined, note?: string) {
     const recipe = await this.findOneDetailed(recipeId);
     if (!recipe) {
@@ -289,7 +318,9 @@ export class RecipesService {
       const unit = ing.unit || 'g';
       const ri = this.recipeIngredientRepo.create({
         recipe: saved,
+        recipeId: saved.id,
         ingredient,
+        ingredientId: ingredient.id,
         quantity,
         unit,
       });
