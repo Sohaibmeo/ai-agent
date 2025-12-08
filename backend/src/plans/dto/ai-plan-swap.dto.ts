@@ -2,9 +2,6 @@ import { IsArray, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class AiPlanSwapDto {
   @IsString()
-  userId!: string;
-
-  @IsString()
   weeklyPlanId!: string;
 
   @IsOptional()

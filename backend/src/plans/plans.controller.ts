@@ -1,14 +1,15 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { PlansService } from './plans.service';
 import { GeneratePlanDto } from './dto/generate-plan.dto';
 import { SetMealRecipeDto } from './dto/set-meal-recipe.dto';
 import { ActivatePlanDto } from './dto/set-plan-status.dto';
-import { UserIdParamDto } from './dto/user-id-param.dto';
 import { SetPlanStatusDto } from './dto/set-plan-status.dto';
 import { SaveCustomRecipeDto } from './dto/save-custom-recipe.dto';
 import { AiPlanSwapDto } from './dto/ai-plan-swap.dto';
+import { JwtAuthGuard } from '../auth/jwt.guard';
 
 @Controller('plans')
+@UseGuards(JwtAuthGuard)
 export class PlansController {
   constructor(private readonly plansService: PlansService) {}
 
@@ -17,15 +18,17 @@ export class PlansController {
     return this.plansService.findAll();
   }
 
-  @Get('active/:userId')
-  getActive(@Param() params: UserIdParamDto) {
-    return this.plansService.getActivePlan(params.userId);
+  @Get('active')
+  getActive(@Req() req: any) {
+    const userId = req.user?.userId as string;
+    return this.plansService.getActivePlan(userId);
   }
 
   @Post('generate')
-  generate(@Body() body: GeneratePlanDto) {
+  generate(@Req() req: any, @Body() body: GeneratePlanDto) {
+    const userId = req.user?.userId as string;
     const weekStartDate = body.weekStartDate || new Date().toISOString().slice(0, 10);
-    return this.plansService.generateWeek(body.userId, weekStartDate, body.useAgent, {
+    return this.plansService.generateWeek(userId, weekStartDate, body.useAgent, {
       useLlmRecipes: body.useLlmRecipes,
       sameMealsAllWeek: body.sameMealsAllWeek,
       weeklyBudgetGbp: body.weeklyBudgetGbp,
@@ -58,11 +61,12 @@ export class PlansController {
   }
 
   @Post('ai-plan-swap')
-  aiPlanSwap(@Body() body: AiPlanSwapDto) {
+  aiPlanSwap(@Req() req: any, @Body() body: AiPlanSwapDto) {
     // For debugging:
     // console.log('[ai-plan-swap] request', JSON.stringify(body));
-    if (body?.weeklyPlanId && body.userId) {
-      return this.plansService.reviewAndApplyFromAiSwap(body);
+    const userId = req.user?.userId as string;
+    if (body?.weeklyPlanId && userId) {
+      return this.plansService.reviewAndApplyFromAiSwap({ ...body, userId });
     }
     return { ok: true, received: body, warning: 'weeklyPlanId and userId are required' };
   }
