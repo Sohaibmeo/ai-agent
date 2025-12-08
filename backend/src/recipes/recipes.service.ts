@@ -19,6 +19,36 @@ export class RecipesService {
     private readonly agentsService: AgentsService,
   ) {}
 
+  private readonly difficultyOrder = ['super_easy', 'easy', 'medium', 'hard'];
+
+  private allowedDifficulties(max?: string) {
+    if (!max) return this.difficultyOrder;
+    const idx = this.difficultyOrder.indexOf(max);
+    if (idx === -1) return this.difficultyOrder;
+    return this.difficultyOrder.slice(0, idx + 1);
+  }
+
+  private applySearchFilter(qb: any, search?: string) {
+    const normalized = (search || '').toLowerCase().trim();
+    if (!normalized) return;
+    const terms = normalized.split(/\s+/).filter(Boolean);
+    if (!terms.length) return;
+
+    qb.andWhere(
+      new Brackets((outer) => {
+        terms.forEach((term, idx) => {
+          outer.andWhere(
+            new Brackets((inner) => {
+              const key = `term${idx}`;
+              inner.where(`LOWER(recipe.name) LIKE :${key}`, { [key]: `%${term}%` });
+              inner.orWhere(`LOWER(recipe.instructions) LIKE :${key}`, { [key]: `%${term}%` });
+            }),
+          );
+        });
+      }),
+    );
+  }
+
   async listForUser(userId?: string, search?: string) {
     const qb = this.recipeRepo
       .createQueryBuilder('recipe')
@@ -28,24 +58,8 @@ export class RecipesService {
       .limit(200);
 
     // Show all recipes regardless of creator/source
-    if (search) {
-      qb.andWhere(
-        new Brackets((qb2) => {
-          qb2.where('LOWER(recipe.name) LIKE :search', { search: `%${search.toLowerCase()}%` });
-          qb2.orWhere('LOWER(recipe.instructions) LIKE :search', { search: `%${search.toLowerCase()}%` });
-        }),
-      );
-    }
+    this.applySearchFilter(qb, search);
     return qb.getMany();
-  }
-
-  private difficultyOrder = ['super_easy', 'easy', 'medium', 'hard'];
-
-  private allowedDifficulties(max?: string) {
-    if (!max) return this.difficultyOrder;
-    const idx = this.difficultyOrder.indexOf(max);
-    if (idx === -1) return this.difficultyOrder;
-    return this.difficultyOrder.slice(0, idx + 1);
   }
 
   findOneById(id: string) {
@@ -69,14 +83,7 @@ export class RecipesService {
 
     // include all sources (catalog/user/llm) and ignore is_searchable for now
     qb.where('(recipe.createdByUser = :uid OR recipe.createdByUser IS NULL)', { uid: userId });
-    if (search) {
-      qb.andWhere(
-        new Brackets((qb2) => {
-          qb2.where('LOWER(recipe.name) LIKE :search', { search: `%${search.toLowerCase()}%` });
-          qb2.orWhere('LOWER(recipe.instructions) LIKE :search', { search: `%${search.toLowerCase()}%` });
-        }),
-      );
-    }
+    this.applySearchFilter(qb, search);
     // Only restrict by slot when the user is not actively searching; searching should surface anything.
     if (!search && mealSlot) {
       qb.andWhere('(recipe.meal_slot = :mealSlot OR recipe.meal_slot IS NULL)', { mealSlot });
