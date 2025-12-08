@@ -36,3 +36,6 @@ export async function updateProfileById(userId: string, body: any) {
   if (!res.ok) throw new Error('Failed to update profile');
   return res.json();
 }
+
+// aliases for clarity
+export const updateProfileMe = updateProfile;

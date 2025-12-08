@@ -1,13 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { DEMO_USER_ID } from '../lib/config';
 import { applyPlanAction, fetchActivePlan, generatePlan } from '../api/plans';
 import type { WeeklyPlan } from '../api/types';
+import { useAuth } from '../context/AuthContext';
 
-export function useActivePlan(userId: string = DEMO_USER_ID) {
+export function useActivePlan(userIdFromArgs?: string) {
+  const { user } = useAuth();
+  const userId = (userIdFromArgs || user?.id) as string;
   const queryClient = useQueryClient();
 
   const planQuery = useQuery<WeeklyPlan | null>({
     queryKey: ['plan', 'active', userId],
+    enabled: !!userId,
     queryFn: () => fetchActivePlan(userId),
   });
 
