@@ -11,6 +11,8 @@ import {
 } from './schemas/plan-generation.schema';
 import { reviewInstructionSchema, ReviewInstruction } from './schemas/review-instruction.schema';
 import { PlansService } from '../plans/plans.service';
+import { UsersService } from '../users/users.service';
+import { calculateTargets } from '../plans/utils/profile-targets';
 
 type WeekState = {
   week_start_date: string;
@@ -41,6 +43,7 @@ export class AgentsService {
   constructor(
     @Inject(forwardRef(() => PlansService))
     private readonly plansService: PlansService,
+    private readonly usersService: UsersService,
   ) {}
 
   private summarizePlanContext = async (userId?: string) => {
@@ -107,6 +110,26 @@ export class AgentsService {
     return keywords.some((k) => text.includes(k));
   }
 
+  private async buildExplainContext(message: string, context?: string, userId?: string) {
+    const includePlan = this.shouldUsePlanContext(message, context);
+    let planCtx = '';
+    let targetCtx = '';
+
+    if (includePlan && userId) {
+      planCtx = await this.summarizePlanContext(userId);
+      try {
+        const profile = await this.usersService.getProfile(userId);
+        const targets = calculateTargets(profile || {});
+        targetCtx = `Targets: maintenance ${targets.maintenanceCalories} kcal, daily goal ${targets.dailyCalories} kcal, delta ${targets.calorieDelta >= 0 ? '+' : ''}${targets.calorieDelta} kcal, protein target ${targets.dailyProtein}g.`;
+      } catch (err) {
+        this.logger.warn(`[explain] could not load profile/targets for user ${userId}: ${(err as Error).message}`);
+      }
+    }
+
+    const mergedContext = [context, planCtx, targetCtx].filter(Boolean).join(' ');
+    return { mergedContext, includePlan, ctxLength: mergedContext.length };
+  }
+
   async explain(message: string, context?: string, userId?: string) {
     this.logAgent('explain', `start user=${userId || 'none'} msg="${message.slice(0, 120)}"`);
     const client = this.createClient('explain');
@@ -118,20 +141,28 @@ export class AgentsService {
       configuration: { baseURL: client.baseUrl },
     });
 
+    const { mergedContext, includePlan, ctxLength } = await this.buildExplainContext(message, context, userId);
+
     const system = [
-      'You are ChefBot, a friendly cooking explainer.',
-      'Respond concisely, with clear bullets or short paragraphs.',
-      'Keep tone warm and practical. When relevant, call out safety notes.',
+      'You are CoachChef, a friendly explainer for food, meal plans, macros, and basic training context.',
+      'Your job is to help the user understand:',
+      '- their current weekly plan and per-day macros,',
+      '- how this relates to their goal (cutting, maintaining, or gaining),',
+      '- whether their macros look reasonable for their workouts (e.g. leg day),',
+      '- and general cooking or meal prep questions.',
+      'Respond concisely using short paragraphs or bullet points.',
+      'Use the provided plan summary and macro targets when they are relevant;',
+      'for example, you may mention if a day is low in protein or very close to maintenance calories during a cut.',
+      'If the user asks about serious health or medical questions, give only general guidance and clearly advise them to consult a healthcare professional.',
+      'Keep tone warm and practical. Call out basic safety notes when needed (food hygiene, overtraining, under-eating etc.).',
     ].join(' ');
 
-    const usePlan = this.shouldUsePlanContext(message, context);
-    const planCtx = usePlan ? await this.summarizePlanContext(userId) : '';
     const prompt = [
       new SystemMessage(system),
       new HumanMessage(
         JSON.stringify({
           question: message,
-          context: [context, planCtx].filter(Boolean).join(' ') || undefined,
+          context: mergedContext || undefined,
         }),
       ),
     ];
@@ -141,7 +172,7 @@ export class AgentsService {
     const content = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
     this.logAgent(
       'explain',
-      `model=${client.model} latency_ms=${Date.now() - start} includePlan=${usePlan} planCtxLen=${planCtx?.length || 0} replyPreview="${(content || '').slice(0, 120)}"`,
+      `model=${client.model} latency_ms=${Date.now() - start} includePlan=${includePlan} ctxLen=${ctxLength} replyPreview="${(content || '').slice(0, 120)}"`,
     );
     return { reply: content };
   }
