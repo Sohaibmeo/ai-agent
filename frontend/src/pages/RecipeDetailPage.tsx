@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '../components/shared/Card';
 import { useActivePlan } from '../hooks/usePlan';
@@ -8,7 +8,7 @@ import { IngredientSwapModal } from '../components/recipes/IngredientSwapModal';
 import { notify } from '../lib/toast';
 import { saveCustomRecipe, aiPlanSwap } from '../api/plans';
 import { fetchIngredients } from '../api/ingredients';
-import { fetchRecipeById, updateRecipe, adjustRecipeAi } from '../api/recipes';
+import { fetchRecipeById, updateRecipe, adjustRecipeAi, createRecipe } from '../api/recipes';
 import type { Ingredient, RecipeWithIngredients } from '../api/types';
 import { useLlmAction } from '../hooks/useLlmAction';
 
@@ -44,6 +44,7 @@ const toIngredientRows = (ris: any[] | undefined): IngredientRow[] =>
 export function RecipeDetailPage() {
   const { mealId, recipeId: recipeIdParam } = useParams<{ mealId?: string; recipeId?: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { data: plan, isLoading } = useActivePlan(DEMO_USER_ID);
   const { runWithLlmLoader } = useLlmAction({
@@ -80,6 +81,7 @@ export function RecipeDetailPage() {
   }, [plan, mealId]);
 
   const recipeId = recipeIdParam || meal?.meal.recipe?.id;
+  const isCreateMode = !mealId && !recipeIdParam;
   const { data: recipeDetail } = useQuery<RecipeWithIngredients>({
     queryKey: ['recipe', recipeId],
     queryFn: () => fetchRecipeById(recipeId as string),
@@ -111,6 +113,20 @@ export function RecipeDetailPage() {
     setIsEditingInstructions(false);
     setDirty(false);
   }, [recipe?.id]);
+
+  useEffect(() => {
+    if (isCreateMode) {
+      setRecipeName('New recipe');
+      setInitialRecipeName('New recipe');
+      setInstructionsText('');
+      setInitialInstructions('');
+      setIngredients([]);
+      setInitialIngredients([]);
+      setAiNote('');
+      setDirty(false);
+      setIsEditingName(true);
+    }
+  }, [isCreateMode]);
 
   const fmt = (val?: number | null, suffix = '') => (val || val === 0 ? `${Math.round(Number(val))}${suffix}` : '—');
   const fmtCost = (val?: number | null) => (val || val === 0 ? `£${Number(val).toFixed(2)}` : '—');
@@ -240,6 +256,36 @@ export function RecipeDetailPage() {
     }
   };
 
+  const handleCreate = async () => {
+    const missingId = ingredients.find((ing) => !ing.ingredientId);
+    if (missingId) {
+      notify.error('One or more ingredients are missing an ID; please pick from the list.');
+      return;
+    }
+    try {
+      setIsSaving(true);
+      const nameToSave = recipeName.trim() || 'New recipe';
+      const created = await createRecipe({
+        userId: DEMO_USER_ID,
+        name: nameToSave,
+        instructions: instructionsText,
+        ingredients: ingredients.map((ing) => ({
+          ingredientId: ing.ingredientId,
+          quantity: ing.amount,
+          unit: ing.unit,
+        })),
+        mealSlot: 'meal',
+        difficulty: 'easy',
+      });
+      notify.success('Recipe created');
+      navigate(`/recipes/${created.id}`);
+    } catch (e) {
+      notify.error('Could not create recipe');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleApplyAI = async () => {
     const note = aiNote.trim() || undefined;
     try {
@@ -360,57 +406,78 @@ export function RecipeDetailPage() {
             <span className="rounded bg-amber-50 px-2 py-1 font-semibold text-amber-700">{`£${fmt(m?.meal_cost_gbp ?? recipe?.base_cost_gbp, '')}`}</span>
           </div>
         </div>
-        {dirty && (
+        {isCreateMode ? (
           <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
-            <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-700">You have unsaved changes</span>
+            <span className="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">Create new recipe</span>
             <button
               className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-              onClick={handleResetChanges}
+              onClick={() => navigate(-1)}
             >
-              Undo
+              Cancel
             </button>
             <button
               className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
-              onClick={handleSave}
-              disabled={!(m?.id || recipeId) || isSaving}
+              onClick={handleCreate}
+              disabled={isSaving}
             >
-              {isSaving ? 'Saving...' : 'Save'}
+              {isSaving ? 'Creating...' : 'Create'}
             </button>
           </div>
+        ) : (
+          dirty && (
+            <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
+              <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-700">You have unsaved changes</span>
+              <button
+                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                onClick={handleResetChanges}
+              >
+                Undo
+              </button>
+              <button
+                className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+                onClick={handleSave}
+                disabled={!(m?.id || recipeId) || isSaving}
+              >
+                {isSaving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          )
         )}
       </div>
 
-      <Card title="Adjust this recipe with AI">
-        <div className="text-xs text-slate-600 mb-2">What would you like changed?</div>
-        <textarea
-          className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-slate-300 min-h-[140px] max-h-[280px] resize-y overflow-auto"
-          rows={4}
-          placeholder="Make it lower calories; swap chicken for a halal alternative; remove dairy..."
-          value={aiNote}
-          onChange={(e) => {
-            const next = e.target.value;
-            setAiNote(next);
-          }}
-        />
-        <div className="mt-1 text-[11px] text-slate-500">AI will use this along with your profile defaults.</div>
-        <div className="mt-3 flex justify-end gap-2">
-          <button
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
-            onClick={() => {
-              setAiNote('');
+      {!isCreateMode && (
+        <Card title="Adjust this recipe with AI">
+          <div className="text-xs text-slate-600 mb-2">What would you like changed?</div>
+          <textarea
+            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-slate-300 min-h-[140px] max-h-[280px] resize-y overflow-auto"
+            rows={4}
+            placeholder="Make it lower calories; swap chicken for a halal alternative; remove dairy..."
+            value={aiNote}
+            onChange={(e) => {
+              const next = e.target.value;
+              setAiNote(next);
             }}
-          >
-            Cancel
-          </button>
-          <button
-            className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
-            onClick={handleApplyAI}
-            disabled={(!m?.id && !recipeId) || isApplying}
-          >
-            {isApplying ? 'Applying...' : 'Apply changes'}
-          </button>
-        </div>
-      </Card>
+          />
+          <div className="mt-1 text-[11px] text-slate-500">AI will use this along with your profile defaults.</div>
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+              onClick={() => {
+                setAiNote('');
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
+              onClick={handleApplyAI}
+              disabled={(!m?.id && !recipeId) || isApplying}
+            >
+              {isApplying ? 'Applying...' : 'Apply changes'}
+            </button>
+          </div>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card

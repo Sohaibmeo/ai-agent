@@ -3,11 +3,13 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { fetchRecipes } from '../api/recipes';
 import { DEMO_USER_ID } from '../lib/config';
+import { Card } from '../components/shared/Card';
 
 export function RecipesPage() {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchTerm), 400);
@@ -78,13 +80,71 @@ export function RecipesPage() {
       <div className="fixed bottom-5 right-5">
         <button
           type="button"
-          onClick={() => navigate('/recipes/new')}
+          onClick={() => setShowCreateModal(true)}
           className="flex h-11 items-center gap-2 rounded-full bg-emerald-600 px-4 text-sm font-medium text-white shadow-lg hover:bg-emerald-700"
         >
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/80 text-xs">+</span>
           <span>New recipe</span>
         </button>
       </div>
+
+      {showCreateModal && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowCreateModal(false)}>
+          <div
+            className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs uppercase text-slate-500">New recipe</div>
+                <h2 className="text-lg font-semibold text-slate-900">How would you like to start?</h2>
+              </div>
+              <button className="text-slate-500 hover:text-slate-800" onClick={() => setShowCreateModal(false)}>
+                ✕
+              </button>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <Card className="p-4 flex flex-col gap-3">
+                <div className="text-sm font-semibold text-slate-900">From an image</div>
+                <p className="text-xs text-slate-500">Upload a dish photo and let AI draft the recipe.</p>
+                <button
+                  className="rounded-lg bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 cursor-not-allowed"
+                  title="Coming soon"
+                  disabled
+                >
+                  Coming soon
+                </button>
+              </Card>
+              <Card className="p-4 flex flex-col gap-3">
+                <div className="text-sm font-semibold text-slate-900">Describe with AI</div>
+                <p className="text-xs text-slate-500">Type a short description and we will build it.</p>
+                <button
+                  className="rounded-lg bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 cursor-not-allowed"
+                  title="Coming soon"
+                  disabled
+                >
+                  Coming soon
+                </button>
+              </Card>
+              <Card className="p-4 flex flex-col gap-3">
+                <div className="text-sm font-semibold text-slate-900">Create from scratch</div>
+                <p className="text-xs text-slate-500">Start with a blank recipe and fill in details.</p>
+                <button
+                  className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    navigate('/recipes/new');
+                  }}
+                >
+                  Start blank
+                </button>
+              </Card>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
