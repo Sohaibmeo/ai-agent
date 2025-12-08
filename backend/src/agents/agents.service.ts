@@ -268,7 +268,7 @@ export class AgentsService {
       },
     ];
 
-    const maxRetries = 3;
+    const maxRetries = 5;
     let raw: any;
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
       try {
@@ -357,7 +357,7 @@ export class AgentsService {
       },
       { role: 'user', content: JSON.stringify(payload) },
     ];
-    const maxRetries = 3;
+    const maxRetries = 5;
     let lastErr: any;
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
       try {
@@ -473,7 +473,7 @@ export class AgentsService {
       },
     ];
 
-    const maxRetries = 2;
+    const maxRetries = 5;
     let lastErr: any;
 
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
@@ -559,7 +559,7 @@ export class AgentsService {
       },
     ];
 
-    const maxRetries = 3;
+    const maxRetries = 5;
     let lastErr: any;
 
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
