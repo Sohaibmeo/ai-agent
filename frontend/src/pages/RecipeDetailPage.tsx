@@ -51,6 +51,10 @@ export function RecipeDetailPage() {
     subtitle: 'We will tweak ingredients while keeping macros and budget in mind.',
   });
   const [aiNote, setAiNote] = useState('');
+  const [recipeName, setRecipeName] = useState('');
+  const [initialRecipeName, setInitialRecipeName] = useState('');
+  const [instructionsText, setInstructionsText] = useState('');
+  const [initialInstructions, setInitialInstructions] = useState('');
   const [ingredients, setIngredients] = useState<IngredientRow[]>([]);
   const [initialIngredients, setInitialIngredients] = useState<IngredientRow[]>([]);
   const [swapTarget, setSwapTarget] = useState<IngredientRow | null>(null);
@@ -58,6 +62,8 @@ export function RecipeDetailPage() {
   const [addMode, setAddMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [isEditingInstructions, setIsEditingInstructions] = useState(false);
   const { data: allIngredients } = useQuery<Ingredient[]>({
     queryKey: ['ingredients'],
     queryFn: fetchIngredients,
@@ -88,8 +94,22 @@ export function RecipeDetailPage() {
       const rows = toIngredientRows(recipeIngredients);
       setIngredients(rows);
       setInitialIngredients(rows);
+      setDirty(false);
     }
   }, [recipeIngredients]);
+
+  useEffect(() => {
+    if (!recipe) return;
+    const nextName = recipe.name || '';
+    const nextInstructions = recipe.instructions || '';
+    setRecipeName(nextName);
+    setInitialRecipeName(nextName);
+    setInstructionsText(nextInstructions);
+    setInitialInstructions(nextInstructions);
+    setIsEditingName(false);
+    setIsEditingInstructions(false);
+    setDirty(false);
+  }, [recipe?.id]);
 
   const fmt = (val?: number | null, suffix = '') => (val || val === 0 ? `${Math.round(Number(val))}${suffix}` : '—');
   const fmtCost = (val?: number | null) => (val || val === 0 ? `£${Number(val).toFixed(2)}` : '—');
@@ -108,17 +128,22 @@ export function RecipeDetailPage() {
     ? `P: ${fmt(m?.meal_protein ?? recipe.base_protein, 'g')} · C: ${fmt(m?.meal_carbs ?? recipe.base_carbs, 'g')} · F: ${fmt(m?.meal_fat ?? recipe.base_fat, 'g')}`
     : 'P: — · C: — · F: —';
 
-  const markDirty = (nextIngredients: IngredientRow[], nextNote: string) => {
+  const markDirty = (
+    nextIngredients: IngredientRow[] = ingredients,
+    nextName = recipeName,
+    nextInstructions = instructionsText,
+  ) => {
     setDirty(
       JSON.stringify(nextIngredients) !== JSON.stringify(initialIngredients) ||
-        nextNote.trim().length > 0,
+        nextName.trim() !== initialRecipeName.trim() ||
+        (nextInstructions || '').trim() !== (initialInstructions || '').trim(),
     );
   };
 
   const handleAmountChange = (id: string, value: number) => {
     setIngredients((prev) => {
       const next = prev.map((ing) => (ing.id === id ? { ...ing, amount: value } : ing));
-      markDirty(next, aiNote);
+      markDirty(next);
       return next;
     });
   };
@@ -141,13 +166,13 @@ export function RecipeDetailPage() {
     if (addMode) {
       setIngredients((prev) => {
         const next = [...prev, payload];
-        markDirty(next, aiNote);
+        markDirty(next);
         return next;
       });
     } else {
       setIngredients((prev) => {
         const next = prev.map((ing) => (ing.id === swapTarget.id ? payload : ing));
-        markDirty(next, aiNote);
+        markDirty(next);
         return next;
       });
     }
@@ -166,16 +191,20 @@ export function RecipeDetailPage() {
     }
     try {
       setIsSaving(true);
+      const nameToSave = (recipeName || recipe?.name || 'Recipe').trim() || 'Recipe';
       await saveCustomRecipe({
         planMealId: m.id,
-        newName: recipe.name,
+        newName: nameToSave,
         ingredientItems: ingredients.map((ing) => ({
           ingredientId: ing.ingredientId,
           quantity: ing.amount,
           unit: ing.unit,
         })),
+        instructions: instructionsText,
       });
       setInitialIngredients(ingredients);
+      setInitialRecipeName(nameToSave);
+      setInitialInstructions(instructionsText);
       setDirty(false);
       notify.success('Recipe saved');
     } catch (e) {
@@ -214,25 +243,101 @@ export function RecipeDetailPage() {
     }
   };
 
+  const handleResetChanges = () => {
+    setRecipeName(initialRecipeName);
+    setInstructionsText(initialInstructions);
+    setIngredients(initialIngredients);
+    setDirty(false);
+    setIsEditingName(false);
+    setIsEditingInstructions(false);
+  };
+
   return (
     <div className="min-h-screen p-6 space-y-4">
       <button className="text-sm text-emerald-700 hover:underline" onClick={() => navigate(-1)}>
         ← Back to plans
       </button>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-2">
           <div className="text-xs uppercase text-slate-500">
             {meal?.day ? `Plans / ${meal.day.day_index + 1}` : 'Recipe'}
           </div>
-          <h1 className="text-2xl font-semibold text-slate-900">{recipe?.name || 'Recipe'}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            {isEditingName ? (
+              <>
+                <input
+                  value={recipeName}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setRecipeName(next);
+                    markDirty(ingredients, next);
+                  }}
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-lg font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-200"
+                />
+                <button
+                  className="rounded-full bg-slate-100 px-2 py-1 text-sm text-slate-700 hover:bg-slate-200"
+                  title="Discard name edit"
+                  onClick={() => {
+                    setRecipeName(initialRecipeName);
+                    setIsEditingName(false);
+                    markDirty(ingredients, initialRecipeName);
+                  }}
+                >
+                  ✕
+                </button>
+                <button
+                  className="rounded-full bg-emerald-700 px-2 py-1 text-sm text-white hover:bg-emerald-800"
+                  title="Save name edit"
+                  onClick={() => {
+                    const trimmed = recipeName.trim();
+                    const next = trimmed || initialRecipeName;
+                    setRecipeName(next);
+                    setIsEditingName(false);
+                    markDirty(ingredients, next);
+                  }}
+                >
+                  ✓
+                </button>
+              </>
+            ) : (
+              <>
+                <h1 className="text-2xl font-semibold text-slate-900">{recipeName || 'Recipe'}</h1>
+                <button
+                  className="rounded-full bg-slate-100 px-2 py-1 text-sm text-slate-700 hover:bg-slate-200"
+                  title="Edit name"
+                  onClick={() => setIsEditingName(true)}
+                >
+                  ✏️
+                </button>
+              </>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="rounded bg-slate-100 px-2 py-1 text-slate-600">{m?.meal_slot || '—'}</span>
+            <span className="rounded bg-slate-100 px-2 py-1 text-slate-600">{recipe?.meal_type || 'solid'}</span>
+            <span className="rounded bg-slate-100 px-2 py-1 text-slate-600">{fmt(recipe?.base_kcal ?? m?.meal_kcal, ' kcal')}</span>
+            <span className="rounded bg-amber-50 px-2 py-1 font-semibold text-amber-700">{`£${fmt(m?.meal_cost_gbp ?? recipe?.base_cost_gbp, '')}`}</span>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="rounded bg-slate-100 px-2 py-1 text-slate-600">{m?.meal_slot || '—'}</span>
-          <span className="rounded bg-slate-100 px-2 py-1 text-slate-600">{recipe?.meal_type || 'solid'}</span>
-          <span className="rounded bg-slate-100 px-2 py-1 text-slate-600">{fmt(recipe?.base_kcal ?? m?.meal_kcal, ' kcal')}</span>
-          <span className="rounded bg-amber-50 px-2 py-1 font-semibold text-amber-700">{`£${fmt(m?.meal_cost_gbp ?? recipe?.base_cost_gbp, '')}`}</span>
-        </div>
+        {dirty && (
+          <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
+            <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-700">You have unsaved changes</span>
+            <button
+              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+              onClick={handleResetChanges}
+            >
+              Undo
+            </button>
+            <button
+              className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+              onClick={handleSave}
+              disabled={!m?.id || isSaving}
+            >
+              {isSaving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        )}
       </div>
 
       <Card title="Adjust this recipe with AI">
@@ -245,7 +350,6 @@ export function RecipeDetailPage() {
           onChange={(e) => {
             const next = e.target.value;
             setAiNote(next);
-            markDirty(ingredients, next);
           }}
         />
         <div className="mt-1 text-[11px] text-slate-500">AI will use this along with your profile defaults.</div>
@@ -254,8 +358,6 @@ export function RecipeDetailPage() {
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
             onClick={() => {
               setAiNote('');
-              setIngredients(initialIngredients);
-              setDirty(false);
             }}
           >
             Cancel
@@ -274,16 +376,16 @@ export function RecipeDetailPage() {
         <Card
           title="Ingredients"
           subtitle={macrosLine}
-              action={
-                <button
-                  className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                  onClick={() => {
-                    setSwapTarget({ id: 'new', ingredientId: '', name: '', amount: 100, unit: 'g' });
-                    setAddMode(true);
-                  }}
-                >
-                  <span className="text-lg leading-none">＋</span> Add
-                </button>
+          action={
+            <button
+              className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+              onClick={() => {
+                setSwapTarget({ id: 'new', ingredientId: '', name: '', amount: 100, unit: 'g' });
+                setAddMode(true);
+              }}
+            >
+              <span className="text-lg leading-none">＋</span> Add
+            </button>
           }
         >
           <ul className="space-y-2 text-sm text-slate-800">
@@ -323,7 +425,7 @@ export function RecipeDetailPage() {
                     e.stopPropagation();
                     setIngredients((prev) => {
                       const next = prev.filter((row) => row.id !== ing.id);
-                      markDirty(next, aiNote);
+                      markDirty(next);
                       return next;
                     });
                     notify.success('Ingredient removed');
@@ -337,44 +439,70 @@ export function RecipeDetailPage() {
             ))}
           </ul>
         </Card>
-        <Card title="Method">
-          <ol className="list-decimal space-y-2 pl-4 text-sm text-slate-800">
-            {recipe?.instructions
-              ? recipe.instructions
-                  .split('\n')
-                  .filter((line) => line.trim().length)
-                  .map((line, idx) => <li key={idx}>{line}</li>)
-              : [<li key="placeholder" className="text-xs text-slate-500">No instructions provided.</li>]}
-          </ol>
+        <Card
+          title="Method"
+          action={
+            isEditingInstructions ? (
+              <div className="flex items-center gap-2">
+                <button
+                  className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700 hover:bg-slate-200"
+                  title="Discard instructions edit"
+                  onClick={() => {
+                    setInstructionsText(initialInstructions);
+                    setIsEditingInstructions(false);
+                    markDirty(ingredients, recipeName, initialInstructions);
+                  }}
+                >
+                  ✕
+                </button>
+                <button
+                  className="rounded-full bg-emerald-700 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-800"
+                  title="Save instructions edit"
+                  onClick={() => {
+                    setIsEditingInstructions(false);
+                    markDirty(ingredients, recipeName, instructionsText);
+                  }}
+                >
+                  ✓
+                </button>
+              </div>
+            ) : (
+              <button
+                className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700 hover:bg-slate-200"
+                title="Edit instructions"
+                onClick={() => setIsEditingInstructions(true)}
+              >
+                ✏️
+              </button>
+            )
+          }
+        >
+          {isEditingInstructions ? (
+            <textarea
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-200 min-h-[180px]"
+              value={instructionsText}
+              onChange={(e) => {
+                const next = e.target.value;
+                setInstructionsText(next);
+                markDirty(ingredients, recipeName, next);
+              }}
+              placeholder="Add step-by-step instructions here..."
+            />
+          ) : (
+            <ol className="list-decimal space-y-2 pl-4 text-sm text-slate-800">
+              {instructionsText
+                ? instructionsText
+                    .split('\n')
+                    .filter((line) => line.trim().length)
+                    .map((line, idx) => <li key={idx}>{line}</li>)
+                : [<li key="placeholder" className="text-xs text-slate-500">No instructions provided.</li>]}
+            </ol>
+          )}
         </Card>
       </div>
 
       {mealId && isLoading && <div className="text-sm text-slate-500">Loading meal details...</div>}
       {mealId && !isLoading && !meal && <div className="text-sm text-slate-500">Meal not found in the active plan.</div>}
-
-      {dirty && (
-        <div className="sticky bottom-4 left-0 right-0 flex justify-end">
-          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-lg">
-            <span className="text-sm text-slate-600">You have unsaved changes</span>
-            <button
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
-              onClick={() => {
-                setIngredients(initialIngredients);
-                setDirty(aiNote.trim().length > 0);
-              }}
-            >
-              Reset
-            </button>
-            <button
-              className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"
-              onClick={handleSave}
-              disabled={!m?.id || isSaving}
-            >
-              {isSaving ? 'Saving...' : 'Save recipe'}
-            </button>
-          </div>
-        </div>
-      )}
 
       <IngredientSwapModal
         open={Boolean(swapTarget)}
@@ -387,7 +515,6 @@ export function RecipeDetailPage() {
         onClose={() => {
           setSwapTarget(null);
           setAddMode(false);
-          notify.info('No ingredient selected');
         }}
         mode={addMode ? 'add' : 'replace'}
       />

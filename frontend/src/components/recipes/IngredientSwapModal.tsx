@@ -49,6 +49,7 @@ export function IngredientSwapModal({
   });
   const [unit, setUnit] = useState<string>(currentUnit || 'g');
   const [selected, setSelected] = useState<Ingredient | null>(null);
+  const [isApplying, setIsApplying] = useState(false);
 
   // keep amount in sync if the modal opens with different defaults
   useEffect(() => {
@@ -172,19 +173,37 @@ export function IngredientSwapModal({
         <div className="border-t border-slate-200 px-6 py-3 flex justify-end gap-2">
           <button
             className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
-            disabled={!canApply}
-              onClick={() => {
+            disabled={!canApply || isApplying}
+              onClick={async () => {
                 const baseIngredient = selected || (currentIngredientId ? { id: currentIngredientId, name: currentName } : null);
-                if (!baseIngredient) {
+                if (!baseIngredient || !baseIngredient.name) {
                   notify.error('Please select an ingredient');
                   return;
                 }
-                onSelect(baseIngredient as Ingredient, amount, unit);
-                setSelected(null);
-                setQuery('');
+                try {
+                  setIsApplying(true);
+                  let resolved = baseIngredient as Ingredient;
+                  if (!resolved.id || resolved.id.startsWith('suggest-')) {
+                    const result = await resolveIngredient({ query: resolved.name, limit: 1, createIfMissing: true });
+                    const real = result.resolved || result.matches[0]?.ingredient;
+                    if (!real?.id) {
+                      notify.error('Could not resolve ingredient');
+                      return;
+                    }
+                    resolved = real;
+                  }
+                  onSelect(resolved, amount, unit);
+                  setSelected(null);
+                  setQuery('');
+                  onClose();
+                } catch (e) {
+                  notify.error('Could not apply ingredient');
+                } finally {
+                  setIsApplying(false);
+                }
               }}
           >
-            Apply
+            {isApplying ? 'Applying...' : 'Apply'}
           </button>
           <button
             className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
