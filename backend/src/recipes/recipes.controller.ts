@@ -41,4 +41,12 @@ export class RecipesController {
   async updateRecipe(@Param('id') id: string, @Body() body: UpdateRecipeDto, @Query('userId') userId?: string) {
     return this.recipesService.updateUserRecipe(id, userId, body);
   }
+
+  @Post(':id/ai-adjust')
+  async aiAdjustRecipe(
+    @Param('id') id: string,
+    @Body() body: { userId?: string; note?: string },
+  ) {
+    return this.recipesService.adjustRecipeWithAi(id, body.userId, body.note);
+  }
 }

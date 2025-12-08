@@ -60,3 +60,7 @@ export function updateRecipe(id: string, payload: {
   const qs = searchParams.size ? `?${searchParams.toString()}` : '';
   return apiClient.patch<RecipeWithIngredients>(`/recipes/${id}${qs}`, payload);
 }
+
+export function adjustRecipeAi(id: string, payload: { userId?: string; note?: string }) {
+  return apiClient.post<RecipeWithIngredients>(`/recipes/${id}/ai-adjust`, payload);
+}

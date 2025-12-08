@@ -5,6 +5,7 @@ import { Recipe, RecipeIngredient, UserRecipeScore, Ingredient } from '../databa
 import { IngredientsService } from '../ingredients/ingredients.service';
 import { CreateRecipeDto } from './dto/create-recipe.dto';
 import { UpdateRecipeDto } from './dto/update-recipe.dto';
+import { AgentsService } from '../agents/agents.service';
 
 @Injectable()
 export class RecipesService {
@@ -13,9 +14,10 @@ export class RecipesService {
     @InjectRepository(Recipe)
     private readonly recipeRepo: Repository<Recipe>,
     @InjectRepository(RecipeIngredient)
-  private readonly recipeIngredientRepo: Repository<RecipeIngredient>,
-  private readonly ingredientsService: IngredientsService,
-) {}
+    private readonly recipeIngredientRepo: Repository<RecipeIngredient>,
+    private readonly ingredientsService: IngredientsService,
+    private readonly agentsService: AgentsService,
+  ) {}
 
   async listForUser(userId?: string, search?: string) {
     const qb = this.recipeRepo
@@ -56,6 +58,53 @@ export class RecipesService {
     return this.recipeRepo.findOne({
       where: { id },
       relations: ['ingredients', 'ingredients.ingredient'],
+    });
+  }
+
+  async adjustRecipeWithAi(recipeId: string, userId: string | undefined, note?: string) {
+    const recipe = await this.findOneDetailed(recipeId);
+    if (!recipe) {
+      throw new Error('Recipe not found');
+    }
+
+    const ingredients = recipe.ingredients || [];
+    const payload = {
+      note: note || '',
+      originalRecipe: {
+        name: recipe.name,
+        meal_slot: recipe.meal_slot,
+        meal_type: recipe.meal_type,
+        difficulty: recipe.difficulty,
+        instructions: recipe.instructions,
+        ingredients: ingredients.map((ri) => ({
+          ingredient_name: ri.ingredient.name,
+          quantity: Number(ri.quantity),
+          unit: ri.unit || 'g',
+        })),
+      },
+    };
+
+    const adjusted = await this.agentsService.adjustRecipeWithContext(payload);
+    const adjustedIngredients =
+      adjusted.ingredients && adjusted.ingredients.length ? adjusted.ingredients : payload.originalRecipe.ingredients;
+
+    const mapped = [];
+    for (const ing of adjustedIngredients) {
+      const ingredientEntity = await this.ingredientsService.findOrCreateByName(ing.ingredient_name);
+      mapped.push({
+        ingredientId: ingredientEntity.id,
+        quantity: Number(ing.quantity),
+        unit: ing.unit || 'g',
+      });
+    }
+
+    return this.updateUserRecipe(recipeId, userId, {
+      name: adjusted.name || recipe.name,
+      mealSlot: adjusted.meal_slot || recipe.meal_slot,
+      difficulty: adjusted.difficulty || recipe.difficulty,
+      instructions:
+        Array.isArray(adjusted.instructions) ? adjusted.instructions.join('\n') : adjusted.instructions || recipe.instructions,
+      ingredients: mapped,
     });
   }
 

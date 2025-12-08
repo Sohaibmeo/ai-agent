@@ -8,7 +8,7 @@ import { IngredientSwapModal } from '../components/recipes/IngredientSwapModal';
 import { notify } from '../lib/toast';
 import { saveCustomRecipe, aiPlanSwap } from '../api/plans';
 import { fetchIngredients } from '../api/ingredients';
-import { fetchRecipeById, updateRecipe } from '../api/recipes';
+import { fetchRecipeById, updateRecipe, adjustRecipeAi } from '../api/recipes';
 import type { Ingredient, RecipeWithIngredients } from '../api/types';
 import { useLlmAction } from '../hooks/useLlmAction';
 
@@ -241,26 +241,40 @@ export function RecipeDetailPage() {
   };
 
   const handleApplyAI = async () => {
-    if (!m?.id) return;
-    if (!plan?.id) {
-      notify.error('Missing plan id for AI changes.');
-      return;
-    }
+    const note = aiNote.trim() || undefined;
     try {
       setIsApplying(true);
-      await runWithLlmLoader(async () => {
-        const result = await aiPlanSwap({
-          type: 'swap-inside-recipe',
-          userId: DEMO_USER_ID,
-          weeklyPlanId: plan.id,
-          planMealId: m.id,
-          recipeId: recipe?.id,
-          note: aiNote.trim() || undefined,
-          context: { source: 'recipe-detail' },
+      if (m?.id && plan?.id) {
+        await runWithLlmLoader(async () => {
+          const result = await aiPlanSwap({
+            type: 'swap-inside-recipe',
+            userId: DEMO_USER_ID,
+            weeklyPlanId: plan.id,
+            planMealId: m.id,
+            recipeId: recipe?.id,
+            note,
+            context: { source: 'recipe-detail' },
+          });
+          notify.success('Request sent');
+          return result;
         });
-        notify.success('Request sent');
-        return result;
-      });
+      } else if (recipeId) {
+        const updated = await runWithLlmLoader(async () =>
+          adjustRecipeAi(recipeId, { userId: DEMO_USER_ID, note }),
+        );
+        const updatedIngredients = toIngredientRows(updated.ingredients);
+        setIngredients(updatedIngredients);
+        setInitialIngredients(updatedIngredients);
+        setRecipeName(updated.name || recipeName);
+        setInitialRecipeName(updated.name || recipeName);
+        setInstructionsText(updated.instructions || '');
+        setInitialInstructions(updated.instructions || '');
+        setDirty(false);
+        queryClient.invalidateQueries({ queryKey: ['recipe', recipeId] });
+        notify.success('Recipe adjusted');
+      } else {
+        notify.error('Missing recipe context for AI changes.');
+      }
     } catch (e) {
       console.error(e);
       notify.error('Could not send request');
@@ -391,7 +405,7 @@ export function RecipeDetailPage() {
           <button
             className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
             onClick={handleApplyAI}
-            disabled={!m?.id || !plan?.id || isApplying}
+            disabled={(!m?.id && !recipeId) || isApplying}
           >
             {isApplying ? 'Applying...' : 'Apply changes'}
           </button>
