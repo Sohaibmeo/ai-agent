@@ -2,42 +2,23 @@
 
 ## Backend
 
-We have to make sure that wherever user types to say something like change this or that. it actually works as well. (Improved review agent)
 
-## Next steps (recipes/plans with LLM)
-- Add `is_searchable`, `source` (catalog|user|llm), and `price_estimated` to recipes (migration + entity). Default is_searchable=false; source=llm for generated recipes.
-
-Add fix cost and calories to the newly created ingredients (0.4 gbo per 100g) 4p 4c 9f or something
-
-
-## Flows that needs to be improved
-
-Ok. Now its time to work on the review agent.
-
-Review agent is responsible for making any changes in the plan.
-
-There are 3 ways for users to make the change.
-
-One is to the whole plan (User will do it by selecting multiple days and clicking the modify button which will give user a text area in which he can enter the changes he wants)
-
-Second has two parts first is to click on the swap button and then choosing auto decide for me (We try and see if we can find another dish wil almost close to the same macros).
-
-In the swap menu if user decides to auto swap and then to describe we generate that one
-
-Lasly user can select on a recipe to see the recipe detail page and there he can type any change that will work to only that recipe as well
-
-We can have the plan controller receive our api call
-
-plan service will call the interpretor function or whatever and then pass that info to review agent who will have access to the day generator or a single recipe generator. and then the requested change will be made accordingly
-
-# Suggestions for next changes : 
-
-### Future Versions:
+## Next steps
 - Build “My recipes” tab: list user custom recipes (`is_custom`, `createdByUser`), allow creating from scratch, and optionally record `parent_recipe_id` to reference originals.
+- Allows user to upload an image and the llm would try to observe and make a recipe
+- Allow user to upload a link and llm would will load th recipe from it
+- Add some recipe catalogue and make it searchable
 - Add recipe-detail “Save as my recipe” flow to call `/plans/save-custom-recipe` and surface saved customs in selection flows.
-- Optional “LLM-first plan builder” mode: GPT drafts a full week with inline recipes; formatter normalizes ingredients/prices; persist as `systemdraft` with provenance while keeping the current candidate-based flow as fallback.
-finish hooking swap “auto decide” to a real backend/LLM pick (currently heuristic) and implement the remaining plan advanced settings (history/advanced flow is mostly done).
-The app still relies on DEMO_USER_ID for the current session; multi-user switching isn’t wired in the UI.
+
+Coach upgrade: Double llm usage or stronger protein and calorie requirement. currently we do get pretty good plans but they dont all follow the protein requirements mostly. so after the plan has been generated we check our totla protein requirement and calories requirement then we check the days which have the least protein and try to calculate a number which would be best then try and regenerate by single meal with the lowest protein so we can make up for it.
+
+Lastly we will simply add a nutrition coach who will take the user curreny plan and the user can ask what he lacks or discuss goals or take advice from it
+
+And if we really developed all that and have time we can add user authentication.
+
+After we are done developing all this we can make our document and presentation
+
+
 ## Future total constraints list :
 {
   "days": 7,

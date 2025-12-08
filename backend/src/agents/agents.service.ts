@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
@@ -10,6 +10,9 @@ import {
   LlmPlanDay,
 } from './schemas/plan-generation.schema';
 import { reviewInstructionSchema, ReviewInstruction } from './schemas/review-instruction.schema';
+import { PlansService } from '../plans/plans.service';
+import { UsersService } from '../users/users.service';
+import { calculateTargets } from '../plans/utils/profile-targets';
 
 type WeekState = {
   week_start_date: string;
@@ -29,10 +32,156 @@ export class AgentsService {
     process.env.LLM_MODEL_EXPLAIN || process.env.OPENAI_MODEL_EXPLAIN || this.coachModel;
   private nutritionModel =
     process.env.LLM_MODEL_NUTRITION || process.env.OPENAI_MODEL_NUTRITION || this.coachModel;
+  private visionModel =
+    process.env.LLM_MODEL_VISION || process.env.OPENAI_MODEL_VISION || this.coachModel;
   private llmBaseUrl = process.env.LLM_BASE_URL || '';
   private llmApiKey = process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
   private logAgent(kind: string, message: string) {
     this.logger.log(`[${kind}] ${message}`);
+  }
+
+  constructor(
+    @Inject(forwardRef(() => PlansService))
+    private readonly plansService: PlansService,
+    private readonly usersService: UsersService,
+  ) {}
+
+  private summarizePlanContext = async (userId?: string) => {
+    if (!userId) return '';
+    try {
+      const plan = await this.plansService.getActivePlan(userId);
+      if (!plan) return '';
+      const total = [
+        plan.total_kcal ? `weekly kcal ${Math.round(Number(plan.total_kcal))}` : null,
+        plan.total_protein ? `${Math.round(Number(plan.total_protein))}g protein` : null,
+        plan.total_carbs ? `${Math.round(Number(plan.total_carbs))}g carbs` : null,
+        plan.total_fat ? `${Math.round(Number(plan.total_fat))}g fat` : null,
+      ]
+        .filter(Boolean)
+        .join(', ');
+      const dayName = (idx: number) =>
+        ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][idx] || `Day ${idx + 1}`;
+      const dayLines = (plan.days || [])
+        .map((d) => {
+          const kcal = d.daily_kcal ? Math.round(Number(d.daily_kcal)) : '—';
+          const p = d.daily_protein ? Math.round(Number(d.daily_protein)) : '—';
+          const c = d.daily_carbs ? Math.round(Number(d.daily_carbs)) : '—';
+          const f = d.daily_fat ? Math.round(Number(d.daily_fat)) : '—';
+          return `${dayName(d.day_index)}: ${kcal} kcal, ${p}g protein, ${c}g carbs, ${f}g fat`;
+        })
+        .join(' | ');
+      return [`Active plan summary: ${total}`, dayLines ? `Per day macros: ${dayLines}` : '']
+        .filter(Boolean)
+        .join('. ');
+    } catch (err) {
+      this.logger.warn(`[explain] could not load plan for user ${userId}: ${(err as Error).message}`);
+      return '';
+    }
+  };
+
+  private shouldUsePlanContext(message: string, extraContext?: string) {
+    const text = `${message || ''} ${extraContext || ''}`.toLowerCase();
+    if (text.length < 12) return false;
+    const keywords = [
+      'plan',
+      'meal',
+      'macro',
+      'protein',
+      'carb',
+      'fat',
+      'kcal',
+      'calorie',
+      'calories',
+      'workout',
+      'gym',
+      'training',
+      'recover',
+      'leg day',
+      'day ',
+      'cut',
+      'cutting',
+      'bulk',
+      'bulking',
+      'maintenance',
+      'maintain weight',
+      'surplus',
+      'deficit',
+    ];
+    return keywords.some((k) => text.includes(k));
+  }
+
+  private async buildExplainContext(message: string, context?: string, userId?: string) {
+    const includePlan = this.shouldUsePlanContext(message, context);
+    let planCtx = '';
+    let targetCtx = '';
+
+    if (includePlan && userId) {
+      planCtx = await this.summarizePlanContext(userId);
+      try {
+        const profile = await this.usersService.getProfile(userId);
+        const targets = calculateTargets(profile || {});
+        const delta = targets.calorieDelta;
+        const deltaText =
+          delta === 0
+            ? 'at maintenance'
+            : delta > 0
+              ? `~${delta} kcal above maintenance (surplus)`
+              : `~${Math.abs(delta)} kcal below maintenance (deficit)`;
+        targetCtx = `Targets: maintenance ${targets.maintenanceCalories} kcal/day, goal ${targets.dailyCalories} kcal/day (${deltaText}), protein target ${targets.dailyProtein}g/day.`;
+      } catch (err) {
+        this.logger.warn(`[explain] could not load profile/targets for user ${userId}: ${(err as Error).message}`);
+      }
+    }
+
+    const mergedContext = [context, planCtx, targetCtx].filter(Boolean).join(' ');
+    return { mergedContext, includePlan, ctxLength: mergedContext.length };
+  }
+
+  async explain(message: string, context?: string, userId?: string) {
+    this.logAgent('explain', `start user=${userId || 'none'} msg="${message.slice(0, 120)}"`);
+    const client = this.createClient('explain');
+    const chat = new ChatOpenAI({
+      model: client.model,
+      apiKey: client.apiKey,
+      temperature: 0.4,
+      maxTokens: 800,
+      configuration: { baseURL: client.baseUrl },
+    });
+
+    const { mergedContext, includePlan, ctxLength } = await this.buildExplainContext(message, context, userId);
+
+    const system = [
+      'You are CoachChef, a friendly explainer for food, meal plans, macros, and basic training context.',
+      'Your job is to help the user understand:',
+      '- their current weekly plan and per-day macros,',
+      '- how this relates to their goal (cutting, maintaining, or gaining),',
+      '- whether their macros look reasonable for their workouts (e.g. leg day),',
+      '- and general cooking or meal prep questions.',
+      'Respond concisely using short paragraphs or bullet points.',
+      'Use the provided plan summary and macro targets when they are relevant;',
+      'for example, you may mention if a day is low in protein or very close to maintenance calories during a cut.',
+      'If the user asks about serious health or medical questions, give only general guidance and clearly advise them to consult a healthcare professional.',
+      'Keep tone warm and practical. Call out basic safety notes when needed (food hygiene, overtraining, under-eating etc.).',
+    ].join(' ');
+
+    const prompt = [
+      new SystemMessage(system),
+      new HumanMessage(
+        JSON.stringify({
+          question: message,
+          context: mergedContext || undefined,
+        }),
+      ),
+    ];
+
+    const start = Date.now();
+    const res = await chat.invoke(prompt);
+    const content = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
+    this.logAgent(
+      'explain',
+      `model=${client.model} latency_ms=${Date.now() - start} includePlan=${includePlan} ctxLen=${ctxLength} replyPreview="${(content || '').slice(0, 120)}"`,
+    );
+    return { reply: content };
   }
 
   async interpretReviewAction(payload: {
@@ -225,6 +374,33 @@ export class AgentsService {
       }
     }
     throw lastErr;
+  }
+
+  async describeImage(payload: { imageBase64: string; note?: string }) {
+    if (!payload.imageBase64) throw new Error('Image is required');
+    const prompt = [
+      new SystemMessage(
+        'You are a food vision model. Describe the dish in the photo: name, main ingredients, cooking method, cuisine, and rough portion size. Keep it concise.',
+      ),
+      new HumanMessage({
+        content: [
+          { type: 'text', text: payload.note || 'Describe this dish.' },
+          { type: 'image_url', image_url: `data:image/jpeg;base64,${payload.imageBase64}` },
+        ],
+      }),
+    ];
+
+    const llm = new ChatOpenAI({
+      modelName: this.visionModel,
+      temperature: 0,
+      configuration: { baseURL: this.llmBaseUrl },
+      apiKey: this.llmApiKey,
+    });
+
+    const res = await llm.invoke(prompt);
+    const text = (res as any)?.content || (res as any)?.text || '';
+    this.logger.log(`[vision] describeImage -> ${text?.toString().slice(0, 200)}`);
+    return text?.toString() || 'A dish photo';
   }
 
   async generateIngredientEstimate(payload: {

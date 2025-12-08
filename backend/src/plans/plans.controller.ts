@@ -54,7 +54,7 @@ export class PlansController {
 
   @Post('save-custom-recipe')
   saveCustomRecipe(@Body() body: SaveCustomRecipeDto) {
-    return this.plansService.saveCustomRecipe(body.planMealId, body.newName, body.ingredientItems);
+    return this.plansService.saveCustomRecipe(body.planMealId, body.newName, body.ingredientItems, body.instructions);
   }
 
   @Post('ai-plan-swap')

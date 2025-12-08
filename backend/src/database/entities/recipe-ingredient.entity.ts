@@ -7,9 +7,15 @@ export class RecipeIngredient {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
+  @Column({ name: 'recipe_id', type: 'uuid', nullable: false })
+  recipeId!: string;
+
   @ManyToOne(() => Recipe, (recipe) => recipe.ingredients, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'recipe_id' })
   recipe!: Recipe;
+
+  @Column({ name: 'ingredient_id', type: 'uuid', nullable: false })
+  ingredientId!: string;
 
   @ManyToOne(() => Ingredient, { eager: true })
   @JoinColumn({ name: 'ingredient_id' })

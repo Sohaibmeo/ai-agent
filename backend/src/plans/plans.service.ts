@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Not } from 'typeorm';
 import { PlanDay, PlanMeal, WeeklyPlan, PlanActionLog, Recipe } from '../database/entities';
@@ -12,6 +12,9 @@ import { IngredientsService } from '../ingredients/ingredients.service';
 import { AgentsService } from '../agents/agents.service';
 import { AiPlanSwapDto } from './dto/ai-plan-swap.dto';
 import { ReviewInstruction } from '../agents/schemas/review-instruction.schema';
+import type { AgentPipelineSummary, PipelineStep } from '../agents/pipeline.types';
+import { PipelineGateway } from './pipeline.gateway';
+import { randomUUID } from 'crypto';
 
 // Shape used between PlansService and AgentsService review interpreter.
 export interface ReviewActionContext {
@@ -38,13 +41,78 @@ export class PlansService {
     private readonly planMealRepo: Repository<PlanMeal>,
     @InjectRepository(PlanActionLog)
     private readonly planActionLogRepo: Repository<PlanActionLog>,
+    @Inject(forwardRef(() => RecipesService))
     private readonly recipesService: RecipesService,
     private readonly usersService: UsersService,
     private readonly shoppingListService: ShoppingListService,
     private readonly preferencesService: PreferencesService,
+    @Inject(forwardRef(() => IngredientsService))
     private readonly ingredientsService: IngredientsService,
+    @Inject(forwardRef(() => AgentsService))
     private readonly agentsService: AgentsService,
+    private readonly pipelineGateway: PipelineGateway,
   ) { }
+
+  private initPipeline(
+    kind: AgentPipelineSummary['kind'],
+    steps: Omit<PipelineStep, 'status'>[],
+  ): AgentPipelineSummary {
+    return {
+      kind,
+      steps: steps.map((s) => ({ ...s, status: 'pending' as const })),
+      startedAt: new Date().toISOString(),
+      progress: 0,
+      pipelineId: randomUUID(),
+    };
+  }
+
+  private bumpPipelineProgress(pipeline: AgentPipelineSummary, progress: number) {
+    if (typeof progress !== 'number') return;
+    const clamped = Math.max(pipeline.progress ?? 0, Math.min(100, Math.round(progress)));
+    pipeline.progress = clamped;
+  }
+
+  private markPipelineStep(
+    pipeline: AgentPipelineSummary,
+    stepId: string,
+    status: 'running' | 'done' | 'error',
+    meta?: Record<string, any>,
+    progressHint?: number,
+    detail?: string,
+  ) {
+    const now = new Date().toISOString();
+    if (status === 'running') {
+      pipeline.steps = pipeline.steps.map((step) => {
+        if (step.id === stepId || step.status !== 'running') return step;
+        return { ...step, status: 'done', finishedAt: step.finishedAt ?? now };
+      });
+    }
+    pipeline.steps = pipeline.steps.map((step) => {
+      if (step.id !== stepId) return step;
+      return {
+        ...step,
+        status,
+        startedAt: step.startedAt ?? now,
+        finishedAt: status === 'done' || status === 'error' ? now : step.finishedAt,
+        meta: { ...(step.meta || {}), ...(meta || {}) },
+        progressHint: progressHint ?? step.progressHint,
+        detail: detail ?? step.detail,
+      };
+    });
+    if (status === 'running') {
+      pipeline.currentStepId = stepId;
+    } else if ((status === 'done' || status === 'error') && pipeline.currentStepId === stepId) {
+      pipeline.currentStepId = undefined;
+    }
+
+    const stepIndex = pipeline.steps.findIndex((s) => s.id === stepId);
+    const impliedProgress =
+      status === 'done' && stepIndex >= 0 && pipeline.steps.length
+        ? ((stepIndex + 1) / pipeline.steps.length) * 100
+        : undefined;
+    this.bumpPipelineProgress(pipeline, progressHint ?? impliedProgress ?? 0);
+    this.pipelineGateway.broadcastPipeline(pipeline);
+  }
 
   findAll() {
     return this.weeklyPlanRepo.find({
@@ -223,6 +291,23 @@ export class PlansService {
     },
   ) {
     this.logger.log(`generateWeek start user=${userId} date=${weekStartDate} useAgent=${useAgent}`);
+    let pipeline: AgentPipelineSummary | undefined;
+    const totalDays = 7;
+
+    if (useAgent) {
+      pipeline = this.initPipeline('generate-week', [
+        { id: 'prepare-profile', label: 'Gather profile & goals' },
+        { id: 'profile-guardrails', label: 'Lock nutrition guardrails' },
+        { id: 'draft-week', label: 'Lay out weekly scaffold' },
+        { id: 'generate-days', label: 'Cook day-by-day menus' },
+        { id: 'hydrate-recipes', label: 'Write recipes & instructions' },
+        { id: 'save-plan', label: 'Persist plan & totals' },
+        { id: 'shopping-list', label: 'Rebuild shopping list' },
+        { id: 'finishing', label: 'Finishing touches' },
+      ]);
+    }
+
+    if (pipeline) this.markPipelineStep(pipeline, 'prepare-profile', 'running', { userId }, 4);
     const profile = await this.usersService.getProfile(userId);
     if (overrides?.weeklyBudgetGbp !== undefined) {
       profile.weekly_budget_gbp = overrides.weeklyBudgetGbp;
@@ -245,6 +330,29 @@ export class PlansService {
       return false;
     });
 
+    if (pipeline) {
+      this.markPipelineStep(
+        pipeline,
+        'prepare-profile',
+        'done',
+        { weeklyBudgetGbp: profile.weekly_budget_gbp },
+        10,
+      );
+      this.markPipelineStep(
+        pipeline,
+        'profile-guardrails',
+        'running',
+        {
+          mealSlots,
+          weeklyBudgetGbp: profile.weekly_budget_gbp,
+          maxDifficulty: overrides?.maxDifficulty ?? (profile as any)?.max_difficulty,
+          targets,
+        },
+        18,
+      );
+      this.markPipelineStep(pipeline, 'profile-guardrails', 'done', undefined, 22);
+    }
+
     // When useAgent is true, rely on the Day LLM to generate full recipes; otherwise use existing candidate logic.
     const plan = this.weeklyPlanRepo.create({
       user: { id: userId } as any,
@@ -254,9 +362,51 @@ export class PlansService {
     const savedPlan = await this.weeklyPlanRepo.save(plan);
     this.logger.log(`plan persisted id=${savedPlan.id} user=${userId}`);
 
-    const dayEntities: PlanDay[] = [];
+    if (pipeline) {
+      this.markPipelineStep(
+        pipeline,
+        'draft-week',
+        'running',
+        { planId: savedPlan.id, weekStartDate, mealSlots, useAgent },
+        26,
+      );
+      this.markPipelineStep(pipeline, 'draft-week', 'done', { plannedDays: totalDays }, 30);
+      this.markPipelineStep(
+        pipeline,
+        'generate-days',
+        'running',
+        { currentDay: 1, totalDays, mealSlots },
+        32,
+        'Preparing first day',
+      );
+    }
 
-    for (let dayIdx = 0; dayIdx < 7; dayIdx += 1) {
+    const dayEntities: PlanDay[] = [];
+    let totalMeals = 0;
+    const dayProgressStart = 32;
+    const dayProgressEnd = 74;
+    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+    for (let dayIdx = 0; dayIdx < totalDays; dayIdx += 1) {
+      const dayName = dayNames[dayIdx] || `Day ${dayIdx + 1}`;
+      const startProgress =
+        dayProgressStart +
+        Math.round((dayIdx / totalDays) * (dayProgressEnd - dayProgressStart));
+      const nextProgress =
+        dayProgressStart +
+        Math.round(((dayIdx + 1) / totalDays) * (dayProgressEnd - dayProgressStart));
+
+      if (pipeline) {
+        this.markPipelineStep(
+          pipeline,
+          'generate-days',
+          'running',
+          { currentDay: dayIdx + 1, totalDays, dayName, stage: 'day-start' },
+          startProgress,
+          `Starting ${dayName}`,
+        );
+      }
+
       const savedDay = await this.createPlanDay(savedPlan, dayIdx);
       this.logger.log(`generateWeek day=${dayIdx} start useAgent=${useAgent}`);
       let currentDayKcal = 0;
@@ -272,6 +422,23 @@ export class PlansService {
             currentDayProtein += Number(meal.meal_protein || 0);
             currentDayCost += Number(meal.meal_cost_gbp || 0);
           }
+          totalMeals += cloned.length;
+          if (pipeline) {
+            this.markPipelineStep(
+              pipeline,
+              'generate-days',
+              'running',
+              {
+                currentDay: dayIdx + 1,
+                totalDays,
+                dayName,
+                stage: 'ingredients',
+                mealsCreated: totalMeals,
+              },
+              startProgress + Math.round((nextProgress - startProgress) * 0.6),
+              `${dayName}: ingredient checks`,
+            );
+          }
         } else {
           const requiredSlots = mealSlots.length ? mealSlots : ['meal'];
           const dayPlan = await this.agentsService.generateDayPlanWithCoachLLM({
@@ -281,7 +448,7 @@ export class PlansService {
               week_start_date: weekStartDate,
               weekly_budget_gbp: overrides?.weeklyBudgetGbp ?? profile.weekly_budget_gbp,
               used_budget_gbp: 0,
-              remaining_days: 7 - dayIdx,
+              remaining_days: totalDays - dayIdx,
             },
             targets: {
               daily_kcal: targets.dailyCalories,
@@ -292,6 +459,21 @@ export class PlansService {
           this.logger.log(
             `generateWeek day=${dayIdx} dayGenerator meals=${dayPlan.meals?.length || 0}`,
           );
+          if (pipeline) {
+            this.markPipelineStep(
+              pipeline,
+              'generate-days',
+              'running',
+              {
+                currentDay: dayIdx + 1,
+                totalDays,
+                dayName,
+                stage: 'recipes',
+              },
+              startProgress + Math.round((nextProgress - startProgress) * 0.25),
+              `${dayName}: drafting recipes`,
+            );
+          }
           for (const m of dayPlan.meals || []) {
             const slot =
               typeof m.meal_slot === 'string'
@@ -333,6 +515,49 @@ export class PlansService {
             currentDayKcal += Number(meal.meal_kcal || 0);
             currentDayProtein += Number(meal.meal_protein || 0);
             currentDayCost += Number(meal.meal_cost_gbp || 0);
+            totalMeals += 1;
+          }
+          if (pipeline) {
+            this.markPipelineStep(
+              pipeline,
+              'generate-days',
+              'running',
+              {
+                currentDay: dayIdx + 1,
+                totalDays,
+                dayName,
+                stage: 'aligning',
+                mealsCreated: totalMeals,
+                dailyMacros: {
+                  kcal: currentDayKcal,
+                  protein: currentDayProtein,
+                  cost: currentDayCost,
+                },
+              },
+              startProgress + Math.round((nextProgress - startProgress) * 0.5),
+              `${dayName}: aligning ingredients & macros`,
+            );
+          }
+          if (pipeline) {
+            this.markPipelineStep(
+              pipeline,
+              'generate-days',
+              'running',
+              {
+                currentDay: dayIdx + 1,
+                totalDays,
+                dayName,
+                stage: 'ingredients',
+                mealsCreated: totalMeals,
+                dailyMacros: {
+                  kcal: currentDayKcal,
+                  protein: currentDayProtein,
+                  cost: currentDayCost,
+                },
+              },
+              startProgress + Math.round((nextProgress - startProgress) * 0.8),
+              `${dayName}: ingredient recognition & pricing`,
+            );
           }
         }
       } else {
@@ -340,17 +565,78 @@ export class PlansService {
       }
 
       dayEntities.push(savedDay);
+      if (pipeline) {
+        this.markPipelineStep(
+          pipeline,
+          'generate-days',
+          'running',
+          {
+            currentDay: dayIdx + 1,
+            totalDays,
+            mealsCreated: totalMeals,
+            dayName,
+            stage: 'day-complete',
+            dailyMacros: {
+              kcal: currentDayKcal,
+              protein: currentDayProtein,
+              cost: currentDayCost,
+            },
+          },
+          nextProgress,
+          `${dayName} ready`,
+        );
+      }
+    }
+
+    if (pipeline) {
+      this.markPipelineStep(pipeline, 'generate-days', 'done', { totalMeals, totalDays }, 75);
+      this.markPipelineStep(
+        pipeline,
+        'hydrate-recipes',
+        'running',
+        { totalMeals, totalDays },
+        80,
+      );
+      this.markPipelineStep(pipeline, 'hydrate-recipes', 'done', undefined, 82);
     }
 
     // Recompute daily/weekly aggregates
+    if (pipeline) {
+      this.markPipelineStep(pipeline, 'save-plan', 'running', { planId: savedPlan.id }, 88);
+    }
     await this.recomputeAggregates(savedPlan.id);
+    if (pipeline) {
+      this.markPipelineStep(pipeline, 'save-plan', 'done', undefined, 92);
+      this.markPipelineStep(
+        pipeline,
+        'shopping-list',
+        'running',
+        { planId: savedPlan.id },
+        95,
+      );
+    }
 
     await this.shoppingListService.rebuildForPlan(savedPlan.id);
+    if (pipeline) {
+      this.markPipelineStep(pipeline, 'shopping-list', 'done', undefined, 98);
+    }
 
     const result = await this.weeklyPlanRepo.findOne({
       where: { id: savedPlan.id },
       relations: ['days', 'days.meals', 'days.meals.recipe'],
     });
+    if (pipeline && result) {
+      this.markPipelineStep(
+        pipeline,
+        'finishing',
+        'done',
+        { totalMeals, totalDays, weekStartDate },
+        100,
+      );
+      pipeline.finishedAt = new Date().toISOString();
+      this.pipelineGateway.broadcastPipeline(pipeline);
+      (result as any).agent_pipeline_summary = pipeline;
+    }
     this.logger.log(`generateWeek done id=${savedPlan.id}`);
     return result;
   }
@@ -410,6 +696,7 @@ export class PlansService {
     planMealId: string,
     newName: string,
     ingredientItems: { ingredientId: string; quantity: number; unit: string }[],
+    instructions?: string,
   ) {
     const meal = await this.planMealRepo.findOne({
       where: { id: planMealId },
@@ -425,6 +712,7 @@ export class PlansService {
       mealSlot: meal.meal_slot,
       difficulty: meal.recipe?.difficulty,
       ingredientItems,
+      instructions: instructions ?? meal.recipe?.instructions,
       createdByUserId: userId,
       source: 'user',
       isSearchable: true,
@@ -522,16 +810,79 @@ export class PlansService {
     }
 
     const profile = await this.usersService.getProfile(userId);
+    const pipelineKind: AgentPipelineSummary['kind'] =
+      payload.context?.source === 'recipe-detail' ? 'adjust-recipe' : 'review-plan';
+    const pipeline = this.initPipeline(pipelineKind, [
+      { id: 'interpret-request', label: 'Interpret request' },
+      { id: 'plan-guardrails', label: 'Check guardrails & budget' },
+      { id: 'plan-changes', label: 'Plan safe changes' },
+      { id: 'apply-changes', label: 'Apply changes to plan' },
+      { id: 'recompute', label: 'Recompute aggregates' },
+      { id: 'shopping-refresh', label: 'Refresh shopping list' },
+      { id: 'finishing', label: 'Finishing touches' },
+    ]);
+    this.markPipelineStep(
+      pipeline,
+      'interpret-request',
+      'running',
+      { userId, weeklyPlanId: plan.id },
+      6,
+    );
 
     // 1) Build normalized actionContext from the DTO
     const actionContext = this.buildReviewActionContext(payload);
+    this.markPipelineStep(pipeline, 'interpret-request', 'running', {
+      actionType: actionContext.type,
+    });
 
     // 2) Simple fast-path: pure auto swap with no text => no LLM
     if (actionContext.type === 'swap_meal_auto' && actionContext.planMealId) {
+      this.markPipelineStep(
+        pipeline,
+        'interpret-request',
+        'done',
+        { actionType: actionContext.type },
+        18,
+      );
+      this.markPipelineStep(
+        pipeline,
+        'plan-guardrails',
+        'running',
+        { weeklyBudgetGbp: profile.weekly_budget_gbp, guardrail: 'auto-swap' },
+        24,
+      );
+      this.markPipelineStep(pipeline, 'plan-guardrails', 'done', undefined, 30);
+      this.markPipelineStep(pipeline, 'plan-changes', 'running', { mode: 'auto-swap' }, 40);
+      this.markPipelineStep(pipeline, 'plan-changes', 'done', undefined, 48);
+      this.markPipelineStep(
+        pipeline,
+        'apply-changes',
+        'running',
+        { planMealId: actionContext.planMealId },
+        58,
+      );
       await this.autoSwapMeal(actionContext.planMealId, userId, payload.note);
+      this.markPipelineStep(pipeline, 'apply-changes', 'done', undefined, 68);
+      this.markPipelineStep(pipeline, 'recompute', 'running', undefined, 76);
       await this.recomputeAggregates(plan.id);
+      this.markPipelineStep(pipeline, 'recompute', 'done', undefined, 82);
+      this.markPipelineStep(
+        pipeline,
+        'shopping-refresh',
+        'running',
+        { planId: plan.id },
+        88,
+      );
       await this.shoppingListService.rebuildForPlan(plan.id);
-      return this.findById(plan.id);
+      this.markPipelineStep(pipeline, 'shopping-refresh', 'done', { planId: plan.id }, 92);
+      this.markPipelineStep(pipeline, 'finishing', 'done', { planId: plan.id }, 100);
+      pipeline.finishedAt = new Date().toISOString();
+      this.pipelineGateway.broadcastPipeline(pipeline);
+      const updated = await this.findById(plan.id);
+      if (updated) {
+        (updated as any).agent_pipeline_summary = pipeline;
+      }
+      return updated;
     }
 
     // 3) LLM interpreter: map actionContext + note -> JSON instruction
@@ -547,6 +898,32 @@ export class PlansService {
       },
       currentPlanSummary: undefined, // TODO: plug in a real summary later if needed
     });
+    this.markPipelineStep(
+      pipeline,
+      'interpret-request',
+      'done',
+      { action: reviewInstruction.action, targetLevel: reviewInstruction.targetLevel },
+      18,
+    );
+    this.markPipelineStep(
+      pipeline,
+      'plan-guardrails',
+      'running',
+      {
+        weeklyBudgetGbp: profile.weekly_budget_gbp,
+        hasNote: !!payload.note,
+        actionContextType: actionContext.type,
+      },
+      26,
+    );
+    this.markPipelineStep(pipeline, 'plan-guardrails', 'done', undefined, 32);
+    this.markPipelineStep(
+      pipeline,
+      'plan-changes',
+      'running',
+      { targetLevel: reviewInstruction.targetLevel },
+      40,
+    );
 
     // Safety net: if LLM still returns no_detectable_action, force a sensible default
     if (
@@ -626,6 +1003,28 @@ export class PlansService {
     }
 
     // 4) Execute the instruction (calls generators / swappers / recipe adjustors)
+    this.markPipelineStep(
+      pipeline,
+      'plan-changes',
+      'done',
+      { action: reviewInstruction.action, targetLevel: reviewInstruction.targetLevel },
+      52,
+    );
+    this.markPipelineStep(
+      pipeline,
+      'apply-changes',
+      'running',
+      { action: reviewInstruction.action, targetIds: reviewInstruction.targetIds },
+      60,
+    );
+    this.markPipelineStep(pipeline, 'recompute', 'running', undefined, 70);
+    this.markPipelineStep(
+      pipeline,
+      'shopping-refresh',
+      'running',
+      { planId: plan.id },
+      78,
+    );
     await this.executeReviewInstruction(userId, plan, reviewInstruction, payload.note);
 
     await this.logAction({
@@ -639,7 +1038,18 @@ export class PlansService {
       success: true,
     });
 
-    return this.findById(plan.id);
+    this.markPipelineStep(pipeline, 'apply-changes', 'done', undefined, 80);
+    this.markPipelineStep(pipeline, 'recompute', 'done', undefined, 84);
+    this.markPipelineStep(pipeline, 'shopping-refresh', 'done', { planId: plan.id }, 92);
+    this.markPipelineStep(pipeline, 'finishing', 'done', { planId: plan.id }, 100);
+    pipeline.finishedAt = new Date().toISOString();
+    this.pipelineGateway.broadcastPipeline(pipeline);
+
+    const updatedPlan = await this.findById(plan.id);
+    if (updatedPlan) {
+      (updatedPlan as any).agent_pipeline_summary = pipeline;
+    }
+    return updatedPlan;
   }
 
   // Legacy entry point kept for compatibility with older callers.

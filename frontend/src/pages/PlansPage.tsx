@@ -10,9 +10,11 @@ import { DEMO_USER_ID } from '../lib/config';
 import { SwapDialog } from '../components/plans/SwapDialog';
 import { activatePlan, aiPlanSwap, fetchActivePlan, setMealRecipe, setPlanStatus } from '../api/plans';
 import { notify } from '../lib/toast';
+import { useLlmAction } from '../hooks/useLlmAction';
 
 const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const pillClass = 'rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 border border-slate-200';
+const mealOrder = ['breakfast', 'lunch', 'snack', 'dinner'];
 
 export function PlansPage() {
   const queryClient = useQueryClient();
@@ -20,6 +22,16 @@ export function PlansPage() {
   const { data: plan, isLoading, isError, refetchPlan, generatePlan, isGenerating } = useActivePlan(DEMO_USER_ID);
   const { data: plansList } = usePlansList();
   const { data: profile, saveProfile } = useProfile();
+  const { runWithLlmLoader: runPlanGeneration } = useLlmAction({
+    kind: 'generate-week',
+    title: 'Generating your weekly plan...',
+    subtitle: 'Your AI coach is planning meals around your macros and budget.',
+  });
+  const { runWithLlmLoader: runPlanAdjustment } = useLlmAction({
+    kind: 'review-plan',
+    title: 'Adjusting your plan with AI...',
+    subtitle: 'We will plan safe changes for your meals while keeping targets in mind.',
+  });
   const days = useMemo(() => {
     const d = plan?.days || [];
     return [...d].sort((a, b) => a.day_index - b.day_index);
@@ -54,6 +66,10 @@ export function PlansPage() {
   const [initialized, setInitialized] = useState(false);
   const [isModifyMode, setIsModifyMode] = useState(false);
   const [selectedDayIds, setSelectedDayIds] = useState<string[]>([]);
+  const mealSlotRank = (slot?: string | null) => {
+    const idx = slot ? mealOrder.indexOf(slot.toLowerCase()) : -1;
+    return idx === -1 ? mealOrder.length + 1 : idx;
+  };
   const resetAdvanced = () => {
     setSlots((prev) => ({
       ...prev,
@@ -178,6 +194,30 @@ export function PlansPage() {
     }
   };
 
+  const runAgentPlanGeneration = async () => {
+    try {
+      await runPlanGeneration(async () => {
+        const result = await generatePlan({
+          useAgent: true,
+          useLlmRecipes: false,
+          sameMealsAllWeek,
+          weekStartDate: weekStart,
+          weeklyBudgetGbp: weeklyBudget ? Number(weeklyBudget) : undefined,
+          breakfast_enabled: slots.breakfast_enabled,
+          snack_enabled: slots.snack_enabled,
+          lunch_enabled: slots.lunch_enabled,
+          dinner_enabled: slots.dinner_enabled,
+          maxDifficulty: slots.max_difficulty,
+        });
+        notify.success('New plan generated');
+        return result;
+      });
+    } catch (e) {
+      console.error(e);
+      notify.error('Could not generate plan');
+    }
+  };
+
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
@@ -193,26 +233,7 @@ export function PlansPage() {
             <button
               className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
               disabled={isGenerating}
-              onClick={async () => {
-                try {
-                  notify.info('Generating plan...');
-                  await generatePlan({
-                    useAgent: true,
-                    useLlmRecipes: false,
-                    sameMealsAllWeek,
-                    weekStartDate: weekStart,
-                    weeklyBudgetGbp: weeklyBudget ? Number(weeklyBudget) : undefined,
-                    breakfast_enabled: slots.breakfast_enabled,
-                    snack_enabled: slots.snack_enabled,
-                    lunch_enabled: slots.lunch_enabled,
-                    dinner_enabled: slots.dinner_enabled,
-                    maxDifficulty: slots.max_difficulty,
-                  });
-                  notify.success('New plan generated');
-                } catch (e) {
-                  notify.error('Could not generate plan');
-                }
-              }}
+              onClick={runAgentPlanGeneration}
             >
               {isGenerating ? 'Generating...' : 'Generate New Week'}
             </button>
@@ -270,17 +291,21 @@ export function PlansPage() {
                 onClick={async () => {
                   if (!plan?.id) return;
                   try {
-                    await aiPlanSwap({
-                      type: 'swap-with-days-selected',
-                      userId: DEMO_USER_ID,
-                      weeklyPlanId: plan.id,
-                      planDayIds: selectedDayIds,
-                      note: note.trim() || undefined,
-                      context: { source: 'plans-page' },
+                    await runPlanAdjustment(async () => {
+                      const result = await aiPlanSwap({
+                        type: 'swap-with-days-selected',
+                        userId: DEMO_USER_ID,
+                        weeklyPlanId: plan.id,
+                        planDayIds: selectedDayIds,
+                        note: note.trim() || undefined,
+                        context: { source: 'plans-page' },
+                      });
+                      notify.success('Request sent');
+                      await refreshActivePlan();
+                      return result;
                     });
-                    notify.success('Request sent');
-                    await refreshActivePlan();
                   } catch (e) {
+                    console.error(e);
                     notify.error('Could not send request');
                   }
                 }}
@@ -418,7 +443,7 @@ export function PlansPage() {
                 <div>No plan found.</div>
                 <button
                   className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-                  onClick={() => generatePlan({ useAgent: true, useLlmRecipes: false, sameMealsAllWeek })}
+                  onClick={runAgentPlanGeneration}
                 >
                   Generate a plan
                 </button>
@@ -465,7 +490,9 @@ export function PlansPage() {
                       </button>
                       {expanded && (
                         <div className="space-y-3 px-4 pb-4">
-                          {day.meals.map((meal) => (
+                          {[...(day.meals || [])]
+                            .sort((a, b) => mealSlotRank(a.meal_slot) - mealSlotRank(b.meal_slot))
+                            .map((meal) => (
                             <article
                               key={meal.id}
                               className="flex items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"

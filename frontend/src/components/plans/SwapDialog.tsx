@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRecipeCandidates } from '../../hooks/useRecipeCandidates';
 import { DEMO_USER_ID } from '../../lib/config';
 import { notify } from '../../lib/toast';
 import { aiPlanSwap } from '../../api/plans';
+import { useLlmAction } from '../../hooks/useLlmAction';
 
 interface SwapDialogProps {
   open: boolean;
@@ -23,18 +24,21 @@ export function SwapDialog({
   onSelect,
   onPlanUpdated,
 }: SwapDialogProps) {
-  const { data: candidates, isLoading, isError, refetch } = useRecipeCandidates(mealSlot, DEMO_USER_ID);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+  const { data: candidates, isLoading, isError, refetch } = useRecipeCandidates(mealSlot, DEMO_USER_ID, debouncedSearch);
   const [autoMode, setAutoMode] = useState<'prompt' | 'question' | null>(null);
   const [autoNote, setAutoNote] = useState('');
   const [isAutoPicking, setIsAutoPicking] = useState(false);
-
-  const filtered = useMemo(() => {
-    const list = candidates || [];
-    const q = search.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter((c) => c.name.toLowerCase().includes(q));
-  }, [candidates, search]);
+  const { runWithLlmLoader } = useLlmAction({
+    kind: 'review-plan',
+    title: 'Adjusting your plan with AI...',
+    subtitle: 'We are finding a better meal for this slot while keeping your goals in mind.',
+  });
 
   useEffect(() => {
     if (open && mealSlot) {
@@ -73,13 +77,17 @@ export function SwapDialog({
         note: autoNote.trim() || undefined,
         context: { source: 'swap-dialog', mealSlot },
       };
-      await aiPlanSwap(payload);
-      notify.success('Request sent');
+      await runWithLlmLoader(async () => {
+        const result = await aiPlanSwap(payload);
+        notify.success('Request sent');
+        if (onPlanUpdated) {
+          await onPlanUpdated();
+        }
+        return result;
+      });
       onClose();
-      if (onPlanUpdated) {
-        await onPlanUpdated();
-      }
     } catch (e) {
+      console.error(e);
       notify.error('Could not send request');
     } finally {
       setIsAutoPicking(false);
@@ -187,7 +195,7 @@ export function SwapDialog({
         )}
 
         {autoMode === null && (
-          <div className="max-h-[420px] space-y-2 overflow-y-auto">
+          <div className="relative h-[360px] space-y-2 overflow-y-auto">
             {isLoading && <div className="text-sm text-slate-500 px-1">Loading candidates...</div>}
             {isError && (
               <div className="px-1 text-sm text-red-600">
@@ -204,7 +212,7 @@ export function SwapDialog({
               </div>
             )}
             {!isLoading && !isError &&
-              filtered.map((c) => (
+              (candidates || []).map((c) => (
                 <button
                   key={c.id}
                   onClick={() => onSelect(c.id)}
@@ -227,7 +235,7 @@ export function SwapDialog({
                     </span>
                 </button>
               ))}
-            {!isLoading && !isError && filtered.length === 0 && (
+            {!isLoading && !isError && (candidates || []).length === 0 && (
               <div className="px-1 text-sm text-slate-500">No candidates found.</div>
             )}
           </div>
