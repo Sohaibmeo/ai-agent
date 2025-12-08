@@ -1,33 +1,38 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ShoppingListService } from './shopping-list.service';
 import { ActiveListDto } from './dto/active-list.dto';
-import { UserIdParamDto } from './dto/user-id-param.dto';
 import { UpdatePantryDto } from './dto/update-pantry.dto';
 import { UpdatePriceDto } from './dto/update-price.dto';
 import { EmailListDto } from './dto/email-list.dto';
+import { JwtAuthGuard } from '../auth/jwt.guard';
 
 @Controller('shopping-list')
+@UseGuards(JwtAuthGuard)
 export class ShoppingListController {
   constructor(private readonly shoppingListService: ShoppingListService) {}
 
   @Get(':planId')
-  get(@Param('planId') planId: string, @Query('userId') userId?: string) {
+  get(@Req() req: any, @Param('planId') planId: string) {
+    const userId = req.user?.userId as string;
     return this.shoppingListService.getForPlan(planId, userId);
   }
 
-  @Get('active/:userId')
-  getActiveByUser(@Param() params: UserIdParamDto) {
-    return this.shoppingListService.getActive(params.userId);
+  @Get('active')
+  getActiveByUser(@Req() req: any) {
+    const userId = req.user?.userId as string;
+    return this.shoppingListService.getActive(userId);
   }
 
   @Post('pantry')
-  async updatePantry(@Body() body: UpdatePantryDto) {
-    return this.shoppingListService.updatePantry(body.userId, body.ingredientId, body.hasItem, body.planId);
+  async updatePantry(@Req() req: any, @Body() body: UpdatePantryDto) {
+    const userId = req.user?.userId as string;
+    return this.shoppingListService.updatePantry(userId, body.ingredientId, body.hasItem, body.planId);
   }
 
   @Post('price')
-  async updatePrice(@Body() body: UpdatePriceDto) {
-    return this.shoppingListService.updatePrice(body.userId, body.ingredientId, body.pricePaid, body.quantity, body.unit, body.planId);
+  async updatePrice(@Req() req: any, @Body() body: UpdatePriceDto) {
+    const userId = req.user?.userId as string;
+    return this.shoppingListService.updatePrice(userId, body.ingredientId, body.pricePaid, body.quantity, body.unit, body.planId);
   }
 
   @Post('email')
