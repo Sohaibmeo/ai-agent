@@ -14,6 +14,7 @@ import { useLlmAction } from '../hooks/useLlmAction';
 
 const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const pillClass = 'rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 border border-slate-200';
+const mealOrder = ['breakfast', 'lunch', 'snack', 'dinner'];
 
 export function PlansPage() {
   const queryClient = useQueryClient();
@@ -65,6 +66,10 @@ export function PlansPage() {
   const [initialized, setInitialized] = useState(false);
   const [isModifyMode, setIsModifyMode] = useState(false);
   const [selectedDayIds, setSelectedDayIds] = useState<string[]>([]);
+  const mealSlotRank = (slot?: string | null) => {
+    const idx = slot ? mealOrder.indexOf(slot.toLowerCase()) : -1;
+    return idx === -1 ? mealOrder.length + 1 : idx;
+  };
   const resetAdvanced = () => {
     setSlots((prev) => ({
       ...prev,
@@ -485,7 +490,9 @@ export function PlansPage() {
                       </button>
                       {expanded && (
                         <div className="space-y-3 px-4 pb-4">
-                          {day.meals.map((meal) => (
+                          {[...(day.meals || [])]
+                            .sort((a, b) => mealSlotRank(a.meal_slot) - mealSlotRank(b.meal_slot))
+                            .map((meal) => (
                             <article
                               key={meal.id}
                               className="flex items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
