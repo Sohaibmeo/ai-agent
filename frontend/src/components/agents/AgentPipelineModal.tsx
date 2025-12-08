@@ -215,9 +215,11 @@ export function AgentPipelineModal() {
             </div>
           </div>
           <div className="flex-1">
-            <div className="flex items-center justify-between text-xs text-slate-300">
-              <span>{subtitle || 'Keeping you updated step by step...'}</span>
-              <span className="text-emerald-200 font-semibold">{Math.round(progressDisplay)}%</span>
+            <div className="flex items-start justify-between text-xs text-slate-300">
+              <span className="block min-h-[32px] flex-1 pr-3 leading-snug">
+                {subtitle || 'Keeping you updated step by step...'}
+              </span>
+              <span className="text-emerald-200 font-semibold min-w-[36px] text-right">{Math.round(progressDisplay)}%</span>
             </div>
             <div className="relative mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-800 progress-animated">
               <div
