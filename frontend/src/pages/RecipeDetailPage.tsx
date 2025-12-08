@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '../components/shared/Card';
 import { useActivePlan } from '../hooks/usePlan';
 import { DEMO_USER_ID } from '../lib/config';
@@ -8,7 +8,7 @@ import { IngredientSwapModal } from '../components/recipes/IngredientSwapModal';
 import { notify } from '../lib/toast';
 import { saveCustomRecipe, aiPlanSwap } from '../api/plans';
 import { fetchIngredients } from '../api/ingredients';
-import { fetchRecipeById } from '../api/recipes';
+import { fetchRecipeById, updateRecipe } from '../api/recipes';
 import type { Ingredient, RecipeWithIngredients } from '../api/types';
 import { useLlmAction } from '../hooks/useLlmAction';
 
@@ -44,6 +44,7 @@ const toIngredientRows = (ris: any[] | undefined): IngredientRow[] =>
 export function RecipeDetailPage() {
   const { mealId, recipeId: recipeIdParam } = useParams<{ mealId?: string; recipeId?: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data: plan, isLoading } = useActivePlan(DEMO_USER_ID);
   const { runWithLlmLoader } = useLlmAction({
     kind: 'adjust-recipe',
@@ -183,7 +184,7 @@ export function RecipeDetailPage() {
   };
 
   const handleSave = async () => {
-    if (!m?.id || !recipe?.id) return;
+    if (!m?.id && !recipeId) return;
     const missingId = ingredients.find((ing) => !ing.ingredientId);
     if (missingId) {
       notify.error('One or more ingredients are missing an ID; please pick from the list.');
@@ -192,19 +193,44 @@ export function RecipeDetailPage() {
     try {
       setIsSaving(true);
       const nameToSave = (recipeName || recipe?.name || 'Recipe').trim() || 'Recipe';
-      await saveCustomRecipe({
-        planMealId: m.id,
-        newName: nameToSave,
-        ingredientItems: ingredients.map((ing) => ({
-          ingredientId: ing.ingredientId,
-          quantity: ing.amount,
-          unit: ing.unit,
-        })),
-        instructions: instructionsText,
-      });
-      setInitialIngredients(ingredients);
-      setInitialRecipeName(nameToSave);
-      setInitialInstructions(instructionsText);
+      if (m?.id) {
+        await saveCustomRecipe({
+          planMealId: m.id,
+          newName: nameToSave,
+          ingredientItems: ingredients.map((ing) => ({
+            ingredientId: ing.ingredientId,
+            quantity: ing.amount,
+            unit: ing.unit,
+          })),
+          instructions: instructionsText,
+        });
+        setInitialIngredients(ingredients);
+        setInitialRecipeName(nameToSave);
+        setInitialInstructions(instructionsText);
+      } else if (recipeId) {
+        const updated = await updateRecipe(recipeId, {
+          userId: DEMO_USER_ID,
+          name: nameToSave,
+          instructions: instructionsText,
+          ingredients: ingredients.map((ing) => ({
+            ingredientId: ing.ingredientId,
+            quantity: ing.amount,
+            unit: ing.unit,
+          })),
+          mealSlot: recipe?.meal_slot || undefined,
+          difficulty: recipe?.difficulty ?? undefined,
+        });
+        const updatedIngredients = toIngredientRows(updated.ingredients);
+        setIngredients(updatedIngredients);
+        setInitialIngredients(updatedIngredients);
+        setRecipeName(updated.name || nameToSave);
+        setInitialRecipeName(updated.name || nameToSave);
+        setInstructionsText(updated.instructions || '');
+        setInitialInstructions(updated.instructions || '');
+        queryClient.invalidateQueries({ queryKey: ['recipe', recipeId] });
+      }
+      setIsEditingName(false);
+      setIsEditingInstructions(false);
       setDirty(false);
       notify.success('Recipe saved');
     } catch (e) {
@@ -332,7 +358,7 @@ export function RecipeDetailPage() {
             <button
               className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
               onClick={handleSave}
-              disabled={!m?.id || isSaving}
+              disabled={!(m?.id || recipeId) || isSaving}
             >
               {isSaving ? 'Saving...' : 'Save'}
             </button>

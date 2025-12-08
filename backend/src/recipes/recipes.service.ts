@@ -1,13 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
-import { Recipe, RecipeIngredient, UserIngredientScore, UserRecipeScore, Ingredient } from '../database/entities';
-import { RecipeCandidatesQueryDto } from './dto/recipe-candidates-query.dto';
-import { UsersService } from '../users/users.service';
+import { Recipe, RecipeIngredient, UserRecipeScore, Ingredient } from '../database/entities';
 import { IngredientsService } from '../ingredients/ingredients.service';
-import { PreferencesService } from '../preferences/preferences.service';
-import { AgentsService } from '../agents/agents.service';
-import { GenerateRecipeDto } from './dto/generate-recipe.dto';
 import { CreateRecipeDto } from './dto/create-recipe.dto';
 import { UpdateRecipeDto } from './dto/update-recipe.dto';
 
@@ -19,12 +14,7 @@ export class RecipesService {
     private readonly recipeRepo: Repository<Recipe>,
     @InjectRepository(RecipeIngredient)
   private readonly recipeIngredientRepo: Repository<RecipeIngredient>,
-    @InjectRepository(UserRecipeScore)
-  private readonly recipeScoreRepo: Repository<UserRecipeScore>,
-  private readonly usersService: UsersService,
   private readonly ingredientsService: IngredientsService,
-  private readonly preferencesService: PreferencesService,
-  private readonly agentsService: AgentsService,
 ) {}
 
   async listForUser(userId?: string, search?: string) {
@@ -122,6 +112,8 @@ export class RecipesService {
       }
       const ri = this.recipeIngredientRepo.create({
         recipe: savedRecipe,
+        recipeId: savedRecipe.id,
+        ingredientId: ingredient.id,
         ingredient,
         quantity: item.quantity,
         unit: item.unit,
@@ -181,7 +173,9 @@ export class RecipesService {
       const unit = ing.unit || 'g';
       const ri = this.recipeIngredientRepo.create({
         recipe: savedRecipe,
+        recipeId: savedRecipe.id,
         ingredient: ingredientEntity,
+        ingredientId: ingredientEntity.id,
         quantity,
         unit,
       });
@@ -277,71 +271,145 @@ export class RecipesService {
     return this.findOneDetailed(saved.id);
   }
 
-  async updateUserRecipe(id: string, userId: string | undefined, dto: UpdateRecipeDto) {
-    const recipe = await this.recipeRepo.findOne({
-      where: { id },
-      relations: ['ingredients', 'ingredients.ingredient', 'createdByUser'],
-    });
-    if (!recipe) {
-      throw new Error('Recipe not found');
-    }
-    if (dto.name) recipe.name = dto.name;
-    if (dto.instructions !== undefined) recipe.instructions = dto.instructions;
-    if (dto.mealSlot) recipe.meal_slot = dto.mealSlot;
-    if (dto.difficulty) recipe.difficulty = dto.difficulty;
-    if (userId) {
-      recipe.createdByUser = { id: userId } as any;
-    }
+async updateUserRecipe(id: string, userId: string | undefined, dto: UpdateRecipeDto) {
+  this.logger.log(
+    `updateUserRecipe start id=${id} userId=${userId} ingredientsInPayload=${dto.ingredients?.length ?? 0}`,
+  );
 
-    if (dto.ingredients) {
-      await this.recipeIngredientRepo.delete({ recipe: { id } as any } as any);
-      let totalKcal = 0;
-      let totalProtein = 0;
-      let totalCarbs = 0;
-      let totalFat = 0;
-      let totalCost = 0;
-      const ris: RecipeIngredient[] = [];
-      for (const ing of dto.ingredients) {
-        let ingredient: Ingredient | null = null;
-        if ((ing as any).ingredientId) {
-          ingredient = (await this.ingredientsService.findById((ing as any).ingredientId)) as any;
-        }
-        if (!ingredient && ing.ingredient_name) {
-          ingredient = await this.ingredientsService.findOrCreateByName(ing.ingredient_name);
-        }
-        if (!ingredient) continue;
-        const quantity = Number(ing.quantity ?? 0);
-        const unit = ing.unit || 'g';
-        const ri = this.recipeIngredientRepo.create({
-          recipe,
-          ingredient,
-          quantity,
-          unit,
-        });
-        ris.push(ri);
-
-        const unitType = (ingredient.unit_type || '').toLowerCase();
-        const divisor = unitType === 'per_ml' ? 100 : unitType === 'per_100g' ? 100 : 100;
-        const factor = quantity / divisor;
-
-        totalKcal += (Number(ingredient.kcal_per_unit) || 0) * factor;
-        totalProtein += (Number(ingredient.protein_per_unit) || 0) * factor;
-        totalCarbs += (Number(ingredient.carbs_per_unit) || 0) * factor;
-        totalFat += (Number(ingredient.fat_per_unit) || 0) * factor;
-        totalCost += (Number(ingredient.estimated_price_per_unit_gbp) || 0) * factor;
-      }
-      if (ris.length) {
-        await this.recipeIngredientRepo.save(ris);
-      }
-      recipe.base_kcal = totalKcal;
-      recipe.base_protein = totalProtein;
-      recipe.base_carbs = totalCarbs;
-      recipe.base_fat = totalFat;
-      recipe.base_cost_gbp = totalCost;
-    }
-    await this.recipeRepo.save(recipe);
-    return this.findOneDetailed(recipe.id);
+  // 1) Load recipe with relations
+  const recipe = await this.recipeRepo.findOne({
+    where: { id },
+    relations: ['ingredients', 'ingredients.ingredient', 'createdByUser'],
+  });
+  if (!recipe) {
+    throw new Error('Recipe not found');
   }
+
+  // 2) Ownership checks
+  if (recipe.createdByUser?.id && userId && recipe.createdByUser.id !== userId) {
+    throw new Error('You cannot edit this recipe');
+  }
+  if (!recipe.createdByUser && userId) {
+    recipe.createdByUser = { id: userId } as any;
+  }
+
+  // 3) Basic fields
+  if (dto.name !== undefined) {
+    recipe.name = dto.name;
+  }
+  if (dto.instructions !== undefined) {
+    recipe.instructions = dto.instructions;
+  }
+  if (dto.mealSlot) {
+    recipe.meal_slot = dto.mealSlot;
+  }
+  if (dto.difficulty) {
+    recipe.difficulty = dto.difficulty;
+  }
+
+  let ris: RecipeIngredient[] = recipe.ingredients || [];
+
+  // 4) Replace ingredients if payload provided
+  if (dto.ingredients) {
+    // Clear existing rows for this recipe
+    await this.recipeIngredientRepo
+      .createQueryBuilder()
+      .delete()
+      .where('recipe_id = :id', { id: recipe.id })
+      .execute();
+    this.logger.log(`Cleared existing ingredients for recipe ${recipe.id}`);
+
+    ris = [];
+
+    for (const ing of dto.ingredients) {
+      let ingredientEntity: Ingredient | null = null;
+
+      if (ing.ingredientId) {
+        ingredientEntity = await this.ingredientsService.findById(ing.ingredientId);
+      }
+      if (!ingredientEntity && ing.ingredient_name) {
+        ingredientEntity = await this.ingredientsService.findOrCreateByName(ing.ingredient_name);
+      }
+      if (!ingredientEntity) {
+        this.logger.warn(`Skipping ingredient with no match: ${JSON.stringify(ing)}`);
+        continue;
+      }
+
+      const quantity = Number(ing.quantity ?? 0);
+      const unit = ing.unit || 'g';
+
+      // ⬇️ KEY PART: bind the full recipe entity, not a stub
+      const ri = this.recipeIngredientRepo.create({
+        recipe,                 // ManyToOne -> Recipe
+        ingredient: ingredientEntity,
+        quantity,
+        unit,
+      });
+
+      this.logger.log(
+        `Prepared ingredient row recipeId=${recipe.id} ingredientId=${ingredientEntity.id} qty=${quantity} unit=${unit}`,
+      );
+
+      ris.push(ri);
+    }
+
+    if (ris.length) {
+      const saved = await this.recipeIngredientRepo.save(ris);
+      const savedIds = saved.map((r) => r.id);
+
+      this.logger.log(
+        `Saved ${saved.length} recipe ingredients for recipe ${recipe.id}`,
+      );
+
+      // Debug what actually went into the DB
+      if (savedIds.length) {
+        const rawRows = await this.recipeIngredientRepo.query(
+          `SELECT id, recipe_id, ingredient_id, quantity, unit 
+           FROM recipe_ingredients 
+           WHERE id = ANY($1::uuid[])`,
+          [savedIds],
+        );
+        this.logger.log(`Raw recipe_ingredients rows: ${JSON.stringify(rawRows)}`);
+      }
+    }
+  }
+
+  // 5) Refresh ingredients from DB (for macros + response)
+  const freshIngredients = await this.recipeIngredientRepo.find({
+    where: { recipe: { id: recipe.id } as any },
+    relations: ['ingredient', 'recipe'],
+  });
+  ris = freshIngredients;
+  this.logger.log(`Fetched ${ris.length} ingredients after update for recipe ${recipe.id}`);
+
+  // 6) Recompute macros + cost
+  const macros = ris.length
+    ? this.computeMacrosAndCost(ris)
+    : { kcal: 0, protein: 0, carbs: 0, fat: 0, cost: 0 };
+
+  await this.recipeRepo.update(recipe.id, {
+    name: recipe.name,
+    instructions: recipe.instructions,
+    meal_slot: recipe.meal_slot,
+    difficulty: recipe.difficulty,
+    base_kcal: macros.kcal,
+    base_protein: macros.protein,
+    base_carbs: macros.carbs,
+    base_fat: macros.fat,
+    base_cost_gbp: macros.cost,
+  });
+
+  const finalRecipe = await this.recipeRepo.findOne({
+    where: { id: recipe.id },
+    relations: ['ingredients', 'ingredients.ingredient'],
+  });
+
+  const finalCount = finalRecipe?.ingredients?.length || 0;
+  this.logger.log(`Final recipe ingredients count=${finalCount} for ${recipe.id}`);
+
+  return finalRecipe || { ...recipe, ingredients: freshIngredients };
+}
+
 
   async generateRecipeFromStub(input: {
     stub: {
