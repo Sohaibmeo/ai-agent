@@ -1,6 +1,5 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { ShoppingListService } from './shopping-list.service';
-import { ActiveListDto } from './dto/active-list.dto';
 import { UpdatePantryDto } from './dto/update-pantry.dto';
 import { UpdatePriceDto } from './dto/update-price.dto';
 import { EmailListDto } from './dto/email-list.dto';

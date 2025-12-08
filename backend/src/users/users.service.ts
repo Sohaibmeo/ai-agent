@@ -11,10 +11,6 @@ export class UsersService {
     @InjectRepository(UserProfile) private readonly profileRepo: Repository<UserProfile>,
   ) {}
 
-  findAll() {
-    return this.userRepo.find();
-  }
-
   async getProfile(userId: string) {
     const profile = await this.profileRepo.findOne({
       where: { user_id: userId },

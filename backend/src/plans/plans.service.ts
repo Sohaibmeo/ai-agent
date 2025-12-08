@@ -795,7 +795,7 @@ export class PlansService {
     return ctx;
   }
 
-  async reviewAndApplyFromAiSwap(payload: AiPlanSwapDto) {
+  async reviewAndApplyFromAiSwap(payload: AiPlanSwapDto & { userId: string }) {
     const plan = await this.weeklyPlanRepo.findOne({
       where: { id: payload.weeklyPlanId },
       relations: ['user', 'days', 'days.meals', 'days.meals.recipe'],
@@ -1066,7 +1066,7 @@ export class PlansService {
     if (!payload.weeklyPlanId) {
       throw new NotFoundException('weeklyPlanId is required');
     }
-    return this.reviewAndApplyFromAiSwap(payload as AiPlanSwapDto);
+    return this.reviewAndApplyFromAiSwap({ ...(payload as AiPlanSwapDto), userId: payload.userId });
   }
 
   private async executeReviewInstruction(

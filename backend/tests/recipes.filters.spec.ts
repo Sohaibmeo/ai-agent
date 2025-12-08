@@ -29,12 +29,7 @@ describe('RecipesService filters', () => {
       repo as unknown as Repository<Recipe>,
       {} as unknown as Repository<RecipeIngredient>,
       {} as unknown as Repository<UserRecipeScore>,
-      {
-        getProfile: jest.fn().mockResolvedValue({ max_difficulty: 'easy', allergy_keys: [], diet_type: 'halal' }),
-      } as any,
-      {} as any,
-      { getForUser: jest.fn().mockResolvedValue(null) } as any,
-      {} as any,
+      { generateRecipe: jest.fn(), adjustRecipeWithContext: jest.fn() } as any,
     );
     const result = await service.findCandidatesForUser({ userId: 'u1', mealSlot: 'lunch' });
     expect(result[0].id).toBe('r1');

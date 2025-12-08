@@ -22,18 +22,11 @@ describe('RecipesService', () => {
   };
 
   const recipeIngredientRepo = { find: mockFindIngredients } as any;
-  const prefsService = {
-    getForUser: jest.fn(async () => ({ liked_meals: { r1: 2 }, liked_ingredients: {} })),
-  } as any;
-
   const service = new RecipesService(
     recipeRepo as unknown as Repository<Recipe>,
     recipeIngredientRepo as unknown as Repository<RecipeIngredient>,
     { find: mockFindScores } as any,
-    { getProfile: mockGetProfile } as any,
-    { findAll: jest.fn() } as any,
-    prefsService as PreferencesService,
-    {} as any,
+    { generateRecipe: jest.fn(), adjustRecipeWithContext: jest.fn() } as any,
   );
 
   beforeEach(() => {
