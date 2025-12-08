@@ -50,6 +50,7 @@ export function IngredientSwapModal({
   const [unit, setUnit] = useState<string>(currentUnit || 'g');
   const [selected, setSelected] = useState<Ingredient | null>(null);
   const [isApplying, setIsApplying] = useState(false);
+  const [debouncedQuery, setDebouncedQuery] = useState('');
 
   // keep amount in sync if the modal opens with different defaults
   useEffect(() => {
@@ -63,14 +64,19 @@ export function IngredientSwapModal({
   const heading = mode === 'add' ? 'Add Ingredient' : 'Replace Ingredient';
 
   const searchQuery = query.trim();
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(searchQuery), 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
   const ingredientSearch = useQuery({
-    queryKey: ['ingredient-search', searchQuery],
-    queryFn: () => resolveIngredient({ query: searchQuery, limit: 8, createIfMissing: false }),
-    enabled: open && searchQuery.length > 0,
+    queryKey: ['ingredient-search', debouncedQuery],
+    queryFn: () => resolveIngredient({ query: debouncedQuery, limit: 8, createIfMissing: false }),
+    enabled: open && debouncedQuery.length > 0,
   });
 
   const filtered: Ingredient[] = useMemo(() => {
-    if (searchQuery.length === 0) {
+    if (debouncedQuery.length === 0) {
       return suggestions.slice(0, 8).map((name, idx) => ({ id: `suggest-${idx}`, name }));
     }
     const data = ingredientSearch.data;
@@ -82,7 +88,7 @@ export function IngredientSwapModal({
       if (ing.id) dedup.set(ing.id, ing);
     }
     return Array.from(dedup.values());
-  }, [ingredientSearch.data, searchQuery, suggestions]);
+  }, [ingredientSearch.data, debouncedQuery, suggestions]);
 
   const canApply = Boolean(selected || currentIngredientId);
 
@@ -151,8 +157,13 @@ export function IngredientSwapModal({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            <div className="mt-3 max-h-48 space-y-1 overflow-y-auto">
-              {filtered.length === 0 && <div className="text-xs text-slate-500">No matches yet.</div>}
+            <div className="mt-3 relative h-48 space-y-1 overflow-y-auto">
+              {ingredientSearch.isFetching && (
+                <div className="absolute right-2 top-1 text-[11px] text-slate-400">Searching...</div>
+              )}
+              {filtered.length === 0 && !ingredientSearch.isFetching && (
+                <div className="text-xs text-slate-500">No matches yet.</div>
+              )}
               {filtered.map((ing) => (
                 <button
                   key={ing.id}

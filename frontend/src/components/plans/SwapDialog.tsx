@@ -25,7 +25,12 @@ export function SwapDialog({
   onPlanUpdated,
 }: SwapDialogProps) {
   const [search, setSearch] = useState('');
-  const { data: candidates, isLoading, isError, refetch } = useRecipeCandidates(mealSlot, DEMO_USER_ID, search);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+  const { data: candidates, isLoading, isError, refetch } = useRecipeCandidates(mealSlot, DEMO_USER_ID, debouncedSearch);
   const [autoMode, setAutoMode] = useState<'prompt' | 'question' | null>(null);
   const [autoNote, setAutoNote] = useState('');
   const [isAutoPicking, setIsAutoPicking] = useState(false);
@@ -190,7 +195,7 @@ export function SwapDialog({
         )}
 
         {autoMode === null && (
-          <div className="max-h-[420px] space-y-2 overflow-y-auto">
+          <div className="relative h-[360px] space-y-2 overflow-y-auto">
             {isLoading && <div className="text-sm text-slate-500 px-1">Loading candidates...</div>}
             {isError && (
               <div className="px-1 text-sm text-red-600">
