@@ -380,7 +380,8 @@ export class AgentsService {
     if (!payload.imageBase64) throw new Error('Image is required');
     const prompt = [
       new SystemMessage(
-        'You are a food vision model. Describe the dish in the photo: name, main ingredients, cooking method, cuisine, and rough portion size. Keep it concise.',
+        'You are a food vision model. Return ONE short sentence (max ~270 chars) naming the dish and 2-4 key ingredients or toppings. ' +
+          'Focus on the food only. Avoid camera/setting words.',
       ),
       new HumanMessage({
         content: [
@@ -399,8 +400,9 @@ export class AgentsService {
 
     const res = await llm.invoke(prompt);
     const text = (res as any)?.content || (res as any)?.text || '';
-    this.logger.log(`[vision] describeImage -> ${text?.toString().slice(0, 200)}`);
-    return text?.toString() || 'A dish photo';
+    const clean = text?.toString().replace(/\s+/g, ' ').trim() || 'Dish photo';
+    this.logger.log(`[vision] describeImage -> ${clean.slice(0, 240)}`);
+    return clean;
   }
 
   async generateIngredientEstimate(payload: {

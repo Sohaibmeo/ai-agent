@@ -437,7 +437,7 @@ export function PlansPage() {
               </Card>
             ))}
 
-          {!isLoading && plan && days.length === 0 && (
+          {!isLoading && (!plan || days.length === 0) && (
             <Card>
               <div className="flex flex-col items-center justify-center gap-2 py-6 text-center text-sm text-slate-600">
                 <div>No plan found.</div>
