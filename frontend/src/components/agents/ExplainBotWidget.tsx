@@ -159,6 +159,7 @@ export function ExplainBotWidget() {
         }
       `}
       </style>
+      {open && <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />}
       <div className="fixed bottom-4 left-4 z-50">
         {!open && (
           <button
@@ -177,10 +178,11 @@ export function ExplainBotWidget() {
 
         {open && (
           <div
-            className={`mt-3 rounded-3xl border border-emerald-200 bg-white shadow-[0_20px_40px_rgba(0,0,0,0.18)] ${
+            className={`mt-3 rounded-3xl border border-emerald-400 bg-white shadow-[0_20px_40px_rgba(0,0,0,0.18)] ${
               expanded ? 'fixed inset-4 left-1/2 right-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-4xl' : 'w-[360px]'
             }`}
             style={expanded ? { inset: '1.5rem', left: '50%', transform: 'translateX(-50%)' } : undefined}
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between rounded-t-3xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-4 py-3 text-white">
               <div className="flex items-center gap-2">
