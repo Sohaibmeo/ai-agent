@@ -42,7 +42,7 @@ const toIngredientRows = (ris: any[] | undefined): IngredientRow[] =>
   }));
 
 export function RecipeDetailPage() {
-  const { mealId } = useParams<{ mealId: string }>();
+  const { mealId, recipeId: recipeIdParam } = useParams<{ mealId?: string; recipeId?: string }>();
   const navigate = useNavigate();
   const { data: plan, isLoading } = useActivePlan(DEMO_USER_ID);
   const { runWithLlmLoader } = useLlmAction({
@@ -72,7 +72,7 @@ export function RecipeDetailPage() {
     return undefined;
   }, [plan, mealId]);
 
-  const recipeId = meal?.meal.recipe?.id;
+  const recipeId = recipeIdParam || meal?.meal.recipe?.id;
   const { data: recipeDetail } = useQuery<RecipeWithIngredients>({
     queryKey: ['recipe', recipeId],
     queryFn: () => fetchRecipeById(recipeId as string),
@@ -223,7 +223,7 @@ export function RecipeDetailPage() {
       <div className="flex flex-wrap items-center gap-3">
         <div>
           <div className="text-xs uppercase text-slate-500">
-            {meal?.day ? `Plans / ${meal.day.day_index + 1}` : 'Plan meal'}
+            {meal?.day ? `Plans / ${meal.day.day_index + 1}` : 'Recipe'}
           </div>
           <h1 className="text-2xl font-semibold text-slate-900">{recipe?.name || 'Recipe'}</h1>
         </div>
@@ -231,7 +231,7 @@ export function RecipeDetailPage() {
           <span className="rounded bg-slate-100 px-2 py-1 text-slate-600">{m?.meal_slot || '—'}</span>
           <span className="rounded bg-slate-100 px-2 py-1 text-slate-600">{recipe?.meal_type || 'solid'}</span>
           <span className="rounded bg-slate-100 px-2 py-1 text-slate-600">{fmt(recipe?.base_kcal ?? m?.meal_kcal, ' kcal')}</span>
-          <span className="rounded bg-amber-50 px-2 py-1 font-semibold text-amber-700">{m ? `£${fmt(m.meal_cost_gbp, '')}` : '£—'}</span>
+          <span className="rounded bg-amber-50 px-2 py-1 font-semibold text-amber-700">{`£${fmt(m?.meal_cost_gbp ?? recipe?.base_cost_gbp, '')}`}</span>
         </div>
       </div>
 
@@ -263,7 +263,7 @@ export function RecipeDetailPage() {
           <button
             className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
             onClick={handleApplyAI}
-            disabled={isApplying}
+            disabled={!m?.id || !plan?.id || isApplying}
           >
             {isApplying ? 'Applying...' : 'Apply changes'}
           </button>
@@ -349,8 +349,8 @@ export function RecipeDetailPage() {
         </Card>
       </div>
 
-      {isLoading && <div className="text-sm text-slate-500">Loading meal details...</div>}
-      {!isLoading && !meal && <div className="text-sm text-slate-500">Meal not found in the active plan.</div>}
+      {mealId && isLoading && <div className="text-sm text-slate-500">Loading meal details...</div>}
+      {mealId && !isLoading && !meal && <div className="text-sm text-slate-500">Meal not found in the active plan.</div>}
 
       {dirty && (
         <div className="sticky bottom-4 left-0 right-0 flex justify-end">
@@ -368,7 +368,7 @@ export function RecipeDetailPage() {
             <button
               className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"
               onClick={handleSave}
-              disabled={isSaving}
+              disabled={!m?.id || isSaving}
             >
               {isSaving ? 'Saving...' : 'Save recipe'}
             </button>
