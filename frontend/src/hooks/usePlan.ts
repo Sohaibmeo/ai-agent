@@ -3,15 +3,15 @@ import { applyPlanAction, fetchActivePlan, generatePlan } from '../api/plans';
 import type { WeeklyPlan } from '../api/types';
 import { useAuth } from '../context/AuthContext';
 
-export function useActivePlan(userIdFromArgs?: string) {
+export function useActivePlan() {
   const { user } = useAuth();
-  const userId = (userIdFromArgs || user?.id) as string;
+  const userId = user?.id as string;
   const queryClient = useQueryClient();
 
   const planQuery = useQuery<WeeklyPlan | null>({
     queryKey: ['plan', 'active', userId],
     enabled: !!userId,
-    queryFn: () => fetchActivePlan(userId),
+    queryFn: () => fetchActivePlan(),
   });
 
   const generateMutation = useMutation({
@@ -26,7 +26,7 @@ export function useActivePlan(userIdFromArgs?: string) {
       lunch_enabled?: boolean;
       dinner_enabled?: boolean;
       maxDifficulty?: string;
-    }) => generatePlan({ userId, weekStartDate: new Date().toISOString().slice(0, 10), ...opts }),
+    }) => generatePlan({  weekStartDate: new Date().toISOString().slice(0, 10), ...opts }),
     onSuccess: (data) => {
       queryClient.setQueryData(['plan', 'active', userId], data);
     },

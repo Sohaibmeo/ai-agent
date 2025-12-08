@@ -1,17 +1,8 @@
-import { API_BASE_URL } from '../lib/config';
 import { apiClient } from './client';
 import type { WeeklyPlan } from './types';
 
-export async function fetchActivePlan(userId: string) {
-  const res = await fetch(`${API_BASE_URL}/plans/active/${userId}`, {
-    headers: { 'Content-Type': 'application/json' },
-  });
-  if (res.status === 404) return null;
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || res.statusText);
-  }
-  return (await res.json()) as WeeklyPlan;
+export function fetchActivePlan() {
+  return apiClient.get<WeeklyPlan | null>('/plans/active');
 }
 
 export function fetchPlansList() {
@@ -19,7 +10,6 @@ export function fetchPlansList() {
 }
 
 export function generatePlan(payload: {
-  userId: string;
   weekStartDate?: string;
   useAgent?: boolean;
   useLlmRecipes?: boolean;

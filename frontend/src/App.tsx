@@ -1,4 +1,5 @@
 import { Routes, Route } from 'react-router-dom';
+import type { ReactElement } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { AppShell } from './components/layout/AppShell';
 import { Sidebar } from './components/layout/Sidebar';
@@ -16,7 +17,7 @@ import { OnboardingPage } from './pages/OnboardingPage';
 import { useAuth } from './context/AuthContext';
 import { Navigate, useLocation } from 'react-router-dom';
 
-function Protected({ children }: { children: JSX.Element }) {
+function Protected({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
   const location = useLocation();
   if (loading) {
@@ -32,7 +33,7 @@ function Protected({ children }: { children: JSX.Element }) {
 }
 
 function App() {
-  const { loading } = useAuth();
+  const { loading, user } = useAuth();
   if (loading) {
     return <div className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center">Loading...</div>;
   }
@@ -63,7 +64,7 @@ function App() {
           />
         </Routes>
         <AgentPipelineModal />
-        {useAuth().user && <ExplainBotWidget />}
+        {user && <ExplainBotWidget />}
         <Toaster position="top-right" toastOptions={{ className: 'text-sm' }} />
       </AgentPipelineProvider>
     </div>

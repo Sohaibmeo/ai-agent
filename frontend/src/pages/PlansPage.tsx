@@ -6,7 +6,7 @@ import { Skeleton } from '../components/shared/Skeleton';
 import { useActivePlan } from '../hooks/usePlan';
 import { usePlansList } from '../hooks/usePlansList';
 import { useProfile } from '../hooks/useProfile';
-import { DEMO_USER_ID } from '../lib/config';
+import { useAuth } from '../context/AuthContext';
 import { SwapDialog } from '../components/plans/SwapDialog';
 import { activatePlan, aiPlanSwap, fetchActivePlan, setMealRecipe, setPlanStatus } from '../api/plans';
 import { notify } from '../lib/toast';
@@ -19,7 +19,9 @@ const mealOrder = ['breakfast', 'lunch', 'snack', 'dinner'];
 export function PlansPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { data: plan, isLoading, isError, refetchPlan, generatePlan, isGenerating } = useActivePlan(DEMO_USER_ID);
+  const { user } = useAuth();
+  const userId = user?.id as string;
+  const { data: plan, isLoading, isError, refetchPlan, generatePlan, isGenerating } = useActivePlan();
   const { data: plansList } = usePlansList();
   const { data: profile, saveProfile } = useProfile();
   const { runWithLlmLoader: runPlanGeneration } = useLlmAction({
@@ -151,10 +153,10 @@ export function PlansPage() {
   };
 
   const refreshActivePlan = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['plan', 'active', DEMO_USER_ID] });
+    await queryClient.invalidateQueries({ queryKey: ['plan', 'active', userId] });
     await queryClient.fetchQuery({
-      queryKey: ['plan', 'active', DEMO_USER_ID],
-      queryFn: () => fetchActivePlan(DEMO_USER_ID),
+      queryKey: ['plan', 'active', userId],
+      queryFn: () => fetchActivePlan(),
     });
   };
 
@@ -180,12 +182,12 @@ export function PlansPage() {
       setIsActivating(true);
       await activatePlan(plan.id);
       notify.success('Plan marked as active');
-      await queryClient.invalidateQueries({ queryKey: ['plan', 'active', DEMO_USER_ID] });
+      await queryClient.invalidateQueries({ queryKey: ['plan', 'active', userId] });
       await queryClient.fetchQuery({
-        queryKey: ['plan', 'active', DEMO_USER_ID],
-        queryFn: () => fetchActivePlan(DEMO_USER_ID),
+        queryKey: ['plan', 'active', userId],
+        queryFn: () => fetchActivePlan(),
       });
-      await queryClient.invalidateQueries({ queryKey: ['shopping-list', 'active', DEMO_USER_ID] });
+      await queryClient.invalidateQueries({ queryKey: ['shopping-list', 'active', userId] });
       notify.success('Groceries updated for active plan');
     } catch (e) {
       notify.error('Could not mark plan as active');
@@ -294,7 +296,7 @@ export function PlansPage() {
                     await runPlanAdjustment(async () => {
                       const result = await aiPlanSwap({
                         type: 'swap-with-days-selected',
-                        userId: DEMO_USER_ID,
+                        userId,
                         weeklyPlanId: plan.id,
                         planDayIds: selectedDayIds,
                         note: note.trim() || undefined,
@@ -714,7 +716,7 @@ export function PlansPage() {
                             onClick={() =>
                               activatePlan(p.id).then(() => {
                                 notify.success('Plan activated from history');
-                                queryClient.invalidateQueries({ queryKey: ['plan', 'active', DEMO_USER_ID] });
+                                queryClient.invalidateQueries({ queryKey: ['plan', 'active', userId] });
                               })
                             }
                           >

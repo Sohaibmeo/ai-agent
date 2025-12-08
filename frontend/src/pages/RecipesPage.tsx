@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { fetchRecipes } from '../api/recipes';
-import { DEMO_USER_ID } from '../lib/config';
+import { fetchRecipes, generateRecipeAi, generateRecipeFromImage } from '../api/recipes';
 import { Card } from '../components/shared/Card';
-import { generateRecipeAi, generateRecipeFromImage } from '../api/recipes';
 import { useAgentPipeline } from '../hooks/useAgentPipeline';
+import { useAuth } from '../context/AuthContext';
 
 export function RecipesPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -39,7 +39,8 @@ export function RecipesPage() {
 
   const { data: recipes, isLoading } = useQuery({
     queryKey: ['recipes', debouncedSearch],
-    queryFn: () => fetchRecipes({ userId: DEMO_USER_ID, search: debouncedSearch }),
+    enabled: Boolean(user?.id),
+    queryFn: () => fetchRecipes({ search: debouncedSearch }),
   });
 
   return (
@@ -188,7 +189,7 @@ export function RecipesPage() {
                         });
                         updateStep('capture-note', 'done', undefined, undefined, 18);
                         updateStep('draft-recipe', 'active', 'Generating recipe draft...', undefined, 36);
-                        const created = await generateRecipeAi({ userId: DEMO_USER_ID, note });
+                        const created = await generateRecipeAi({ note });
                         updateStep('draft-recipe', 'done', undefined, undefined, 64);
                         updateStep('build-ingredients', 'active', 'Resolving ingredients...', undefined, 82);
                         updateStep('build-ingredients', 'done', undefined, undefined, 92);
@@ -305,7 +306,6 @@ export function RecipesPage() {
                             updateStep('vision', 'done', undefined, undefined, 58);
                             updateStep('draft-recipe', 'active', 'Drafting recipe...', undefined, 76);
                             const created = await generateRecipeFromImage({
-                              userId: DEMO_USER_ID,
                               imageBase64: base64,
                             });
                             updateStep('draft-recipe', 'done', undefined, undefined, 86);

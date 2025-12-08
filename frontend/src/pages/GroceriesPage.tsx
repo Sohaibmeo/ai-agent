@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card } from '../components/shared/Card';
 import { useShoppingList } from '../hooks/useShoppingList';
-import { DEMO_USER_ID } from '../lib/config';
 import { Skeleton } from '../components/shared/Skeleton';
 import { useNavigate } from 'react-router-dom';
 import { UpdatePriceModal } from '../components/groceries/UpdatePriceModal';
@@ -10,12 +9,15 @@ import { notify } from '../lib/toast';
 import { updatePantry, updatePrice, emailShoppingList } from '../api/shoppingList';
 import { useActivePlan } from '../hooks/usePlan';
 import { usePlansList } from '../hooks/usePlansList';
+import { useAuth } from '../context/AuthContext';
 
 export function GroceriesPage() {
-  const { data: plan } = useActivePlan(DEMO_USER_ID);
+  const { user } = useAuth();
+  const userId = user?.id as string;
+  const { data: plan } = useActivePlan();
   const { data: plansList } = usePlansList();
   const [selectedPlanId, setSelectedPlanId] = useState<string | undefined>(undefined);
-  const { data: list, isLoading } = useShoppingList(selectedPlanId, DEMO_USER_ID);
+  const { data: list, isLoading } = useShoppingList(selectedPlanId);
   const navigate = useNavigate();
   const [items, setItems] = useState(list?.items || []);
   const [priceTarget, setPriceTarget] = useState<ShoppingListItem | null>(null);
@@ -64,7 +66,7 @@ export function GroceriesPage() {
     const next = !target.has_item;
     setItems((prev) => prev.map((item) => (item.id === id ? { ...item, has_item: next } : item)));
     updatePantry({
-      userId: DEMO_USER_ID,
+      userId,
       ingredientId: target.ingredient.id,
       hasItem: next,
       planId: list?.weekly_plan_id,
@@ -240,7 +242,7 @@ export function GroceriesPage() {
         onClose={() => setPriceTarget(null)}
         onSave={(payload) => {
           updatePrice({
-            userId: DEMO_USER_ID,
+            userId,
             ingredientId: priceTarget?.ingredient.id || '',
             pricePaid: payload.pricePaid,
             quantity: payload.quantity,
