@@ -5,6 +5,7 @@ const navItems = [
   { key: 'profile', label: 'Profile', to: '/' },
   { key: 'plans', label: 'Plans', to: '/plans' },
   { key: 'groceries', label: 'Groceries', to: '/groceries' },
+  { key: 'recipes', label: 'Recipes', to: '/recipes' },
 ];
 
 export function Sidebar() {

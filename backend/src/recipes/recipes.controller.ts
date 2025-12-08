@@ -1,14 +1,15 @@
 import { Body, Controller, Get, Post, Query, Param } from '@nestjs/common';
 import { RecipesService } from './recipes.service';
 import { CustomFromExistingDto } from './dto/custom-from-existing.dto';
+import { CreateRecipeDto } from './dto/create-recipe.dto';
 
 @Controller('recipes')
 export class RecipesController {
   constructor(private readonly recipesService: RecipesService) {}
 
   @Get()
-  list() {
-    return this.recipesService.findAll();
+  list(@Query('userId') userId?: string, @Query('search') search?: string) {
+    return this.recipesService.listForUser(userId, search);
   }
 
   @Get('candidates')
@@ -27,5 +28,11 @@ export class RecipesController {
   @Post('custom-from-existing')
   async customFromExisting(@Body() body: CustomFromExistingDto) {
     return this.recipesService.createCustomFromExisting(body);
+  }
+
+  @Post()
+  async createRecipe(@Body() body: CreateRecipeDto, @Query('userId') userId?: string) {
+    const uid = userId;
+    return this.recipesService.createUserRecipe(uid, body);
   }
 }

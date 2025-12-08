@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { RecipeWithIngredients } from './types';
+import type { RecipeWithIngredients, Recipe } from './types';
 
 export interface RecipeCandidate {
   id: string;
@@ -22,4 +22,27 @@ export function fetchRecipeCandidates(params: { userId: string; mealSlot?: strin
 
 export function fetchRecipeById(id: string) {
   return apiClient.get<RecipeWithIngredients>(`/recipes/${id}`);
+}
+
+export function fetchRecipes(params: { userId?: string; search?: string }) {
+  const searchParams = new URLSearchParams();
+  if (params.userId) searchParams.set('userId', params.userId);
+  if (params.search) searchParams.set('search', params.search);
+  const qs = searchParams.toString();
+  return apiClient.get<Recipe[]>(`/recipes${qs ? `?${qs}` : ''}`);
+}
+
+export function createRecipe(payload: {
+  userId?: string;
+  name: string;
+  instructions?: string;
+  ingredients: { ingredient_name?: string; ingredientId?: string; quantity: number; unit?: string }[];
+  mealSlot?: string;
+  difficulty?: string;
+  imageUrl?: string | null;
+}) {
+  const searchParams = new URLSearchParams();
+  if (payload.userId) searchParams.set('userId', payload.userId);
+  const body = { ...payload };
+  return apiClient.post<RecipeWithIngredients>(`/recipes${searchParams.size ? `?${searchParams.toString()}` : ''}`, body);
 }

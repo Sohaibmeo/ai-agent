@@ -14,6 +14,8 @@ Coach upgrade: Double llm usage or stronger protein and calorie requirement. cur
 
 Lastly we will simply add a nutrition coach who will take the user curreny plan and the user can ask what he lacks or discuss goals or take advice from it
 
+And if we really developed all that and have time we can add user authentication.
+
 After we are done developing all this we can make our document and presentation
 
 

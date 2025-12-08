@@ -6,6 +6,7 @@ import { ProfilePage } from './pages/ProfilePage';
 import { PlansPage } from './pages/PlansPage';
 import { GroceriesPage } from './pages/GroceriesPage';
 import { RecipeDetailPage } from './pages/RecipeDetailPage';
+import { RecipesPage } from './pages/RecipesPage';
 import { AgentPipelineProvider } from './hooks/useAgentPipeline';
 import { AgentPipelineModal } from './components/agents/AgentPipelineModal';
 
@@ -19,6 +20,9 @@ function App() {
             <Route path="/plans" element={<PlansPage />} />
             <Route path="/plans/meal/:mealId" element={<RecipeDetailPage />} />
             <Route path="/groceries" element={<GroceriesPage />} />
+            <Route path="/recipes" element={<RecipesPage />} />
+            <Route path="/recipes/new" element={<RecipeDetailPage />} />
+            <Route path="/recipes/:recipeId" element={<RecipeDetailPage />} />
           </Routes>
         </AppShell>
         <AgentPipelineModal />

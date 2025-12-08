@@ -8,6 +8,7 @@ import { IngredientsService } from '../ingredients/ingredients.service';
 import { PreferencesService } from '../preferences/preferences.service';
 import { AgentsService } from '../agents/agents.service';
 import { GenerateRecipeDto } from './dto/generate-recipe.dto';
+import { CreateRecipeDto } from './dto/create-recipe.dto';
 
 @Injectable()
 export class RecipesService {
@@ -25,8 +26,26 @@ export class RecipesService {
   private readonly agentsService: AgentsService,
 ) {}
 
-  findAll() {
-    return this.recipeRepo.find({ relations: ['ingredients'] });
+  async listForUser(userId?: string, search?: string) {
+    const qb = this.recipeRepo
+      .createQueryBuilder('recipe')
+      .leftJoinAndSelect('recipe.ingredients', 'ingredients')
+      .leftJoinAndSelect('ingredients.ingredient', 'ingredientEnt')
+      .orderBy('recipe.name', 'ASC')
+      .limit(200);
+
+    if (userId) {
+      qb.andWhere('(recipe.createdByUser = :uid OR recipe.createdByUser IS NULL)', { uid: userId });
+    }
+    if (search) {
+      qb.andWhere(
+        new Brackets((qb2) => {
+          qb2.where('LOWER(recipe.name) LIKE :search', { search: `%${search.toLowerCase()}%` });
+          qb2.orWhere('LOWER(recipe.instructions) LIKE :search', { search: `%${search.toLowerCase()}%` });
+        }),
+      );
+    }
+    return qb.getMany();
   }
 
   private difficultyOrder = ['super_easy', 'easy', 'medium', 'hard'];
@@ -190,6 +209,71 @@ export class RecipesService {
     await this.recipeRepo.save(savedRecipe);
 
     return savedRecipe;
+  }
+
+  async createUserRecipe(userId: string | undefined, dto: CreateRecipeDto) {
+    const recipe = this.recipeRepo.create({
+      name: dto.name,
+      meal_slot: dto.mealSlot || 'meal',
+      difficulty: dto.difficulty || 'easy',
+      is_custom: true,
+      source: 'user',
+      is_searchable: true,
+      price_estimated: true,
+      createdByUser: userId ? ({ id: userId } as any) : undefined,
+      instructions: dto.instructions,
+    });
+    const saved = await this.recipeRepo.save(recipe);
+
+    let totalKcal = 0;
+    let totalProtein = 0;
+    let totalCarbs = 0;
+    let totalFat = 0;
+    let totalCost = 0;
+
+    const ris: RecipeIngredient[] = [];
+    for (const ing of dto.ingredients || []) {
+      let ingredient: Ingredient | null = null;
+      if ((ing as any).ingredientId) {
+        ingredient = (await this.ingredientsService.findById((ing as any).ingredientId)) as any;
+      }
+      if (!ingredient && ing.ingredient_name) {
+        ingredient = await this.ingredientsService.findOrCreateByName(ing.ingredient_name);
+      }
+      if (!ingredient) continue;
+      const quantity = Number(ing.quantity) || 0;
+      const unit = ing.unit || 'g';
+      const ri = this.recipeIngredientRepo.create({
+        recipe: saved,
+        ingredient,
+        quantity,
+        unit,
+      });
+      ris.push(ri);
+
+      const unitType = (ingredient.unit_type || '').toLowerCase();
+      const divisor = unitType === 'per_ml' ? 100 : unitType === 'per_100g' ? 100 : 100;
+      const factor = quantity / divisor;
+
+      totalKcal += (Number(ingredient.kcal_per_unit) || 0) * factor;
+      totalProtein += (Number(ingredient.protein_per_unit) || 0) * factor;
+      totalCarbs += (Number(ingredient.carbs_per_unit) || 0) * factor;
+      totalFat += (Number(ingredient.fat_per_unit) || 0) * factor;
+      totalCost += (Number(ingredient.estimated_price_per_unit_gbp) || 0) * factor;
+    }
+
+    if (ris.length) {
+      await this.recipeIngredientRepo.save(ris);
+    }
+
+    saved.base_kcal = totalKcal;
+    saved.base_protein = totalProtein;
+    saved.base_carbs = totalCarbs;
+    saved.base_fat = totalFat;
+    saved.base_cost_gbp = totalCost;
+    await this.recipeRepo.save(saved);
+
+    return this.findOneDetailed(saved.id);
   }
 
   async generateRecipeFromStub(input: {
