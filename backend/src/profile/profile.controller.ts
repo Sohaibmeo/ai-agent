@@ -31,9 +31,14 @@ export class ProfileController {
       profile = this.profileRepo.create({ user_id: userId, allergy_keys: [] });
     }
 
-    profile.age = body.age ?? profile.age;
-    profile.height_cm = body.height_cm ?? profile.height_cm;
-    profile.weight_kg = body.weight_kg ?? profile.weight_kg;
+    // Coerce numeric fields to numbers to match the DB schema
+    const age = body.age != null ? Math.round(Number(body.age)) : undefined;
+    const height = body.height_cm != null ? Number(body.height_cm) : undefined;
+    const weight = body.weight_kg != null ? Number(body.weight_kg) : undefined;
+
+    profile.age = Number.isFinite(age) ? age : profile.age;
+    profile.height_cm = Number.isFinite(height) ? height : profile.height_cm;
+    profile.weight_kg = Number.isFinite(weight) ? weight : profile.weight_kg;
     profile.activity_level = body.activity_level ?? profile.activity_level;
     profile.goal = body.goal ?? profile.goal;
     profile.goal_intensity = body.goal_intensity ?? profile.goal_intensity;

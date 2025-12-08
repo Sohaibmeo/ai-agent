@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { calculateTargets, type ProfileInputs } from '../lib/targets';
 import { updateProfile, fetchProfileMe } from '../api/profile';
@@ -49,7 +50,7 @@ const allergyOptions = [
 ];
 
 export function OnboardingPage() {
-  const { user, token } = useAuth();
+  const { user, token, setAuth } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>(0);
   const [loading, setLoading] = useState(true);
@@ -143,6 +144,7 @@ export function OnboardingPage() {
   const handleSave = async () => {
     if (!token) return;
     setSaving(true);
+    const toastId = toast.loading('Saving your profile…');
     try {
       await updateProfile(token, {
         age: profile.age,
@@ -160,9 +162,14 @@ export function OnboardingPage() {
         weekly_budget_gbp: profile.weekly_budget_gbp,
         max_difficulty: profile.max_difficulty,
       });
+      if (user) {
+        setAuth(token, { ...user, hasProfile: true });
+      }
+      toast.success('Profile saved! Redirecting to your plan…', { id: toastId });
       navigate('/plans');
     } catch (e) {
       console.error(e);
+      toast.error('Could not save your profile. Please try again.', { id: toastId });
     } finally {
       setSaving(false);
     }
