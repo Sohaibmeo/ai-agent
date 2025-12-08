@@ -56,13 +56,15 @@ export class AgentsService {
       ]
         .filter(Boolean)
         .join(', ');
+      const dayName = (idx: number) =>
+        ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][idx] || `Day ${idx + 1}`;
       const dayLines = (plan.days || [])
         .map((d) => {
           const kcal = d.daily_kcal ? Math.round(Number(d.daily_kcal)) : '—';
           const p = d.daily_protein ? Math.round(Number(d.daily_protein)) : '—';
           const c = d.daily_carbs ? Math.round(Number(d.daily_carbs)) : '—';
           const f = d.daily_fat ? Math.round(Number(d.daily_fat)) : '—';
-          return `day${d.day_index}: ${kcal} kcal, ${p}g protein, ${c}g carbs, ${f}g fat`;
+          return `${dayName(d.day_index)}: ${kcal} kcal, ${p}g protein, ${c}g carbs, ${f}g fat`;
         })
         .join(' | ');
       return [`Active plan summary: ${total}`, dayLines ? `Per day macros: ${dayLines}` : '']
@@ -73,6 +75,28 @@ export class AgentsService {
       return '';
     }
   };
+
+  private shouldUsePlanContext(message: string, extraContext?: string) {
+    const text = `${message || ''} ${extraContext || ''}`.toLowerCase();
+    if (text.length < 12) return false;
+    const keywords = [
+      'plan',
+      'meal',
+      'macro',
+      'protein',
+      'carb',
+      'fat',
+      'kcal',
+      'calorie',
+      'workout',
+      'gym',
+      'training',
+      'recover',
+      'leg day',
+      'day ',
+    ];
+    return keywords.some((k) => text.includes(k));
+  }
 
   async explain(message: string, context?: string, userId?: string) {
     this.logAgent('explain', `start user=${userId || 'none'} msg="${message.slice(0, 120)}"`);
@@ -91,7 +115,8 @@ export class AgentsService {
       'Keep tone warm and practical. When relevant, call out safety notes.',
     ].join(' ');
 
-    const planCtx = await this.summarizePlanContext(userId);
+    const usePlan = this.shouldUsePlanContext(message, context);
+    const planCtx = usePlan ? await this.summarizePlanContext(userId) : '';
     const prompt = [
       new SystemMessage(system),
       new HumanMessage(
@@ -107,7 +132,7 @@ export class AgentsService {
     const content = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
     this.logAgent(
       'explain',
-      `model=${client.model} latency_ms=${Date.now() - start} planCtxLen=${planCtx?.length || 0} replyPreview="${(content || '').slice(0, 120)}"`,
+      `model=${client.model} latency_ms=${Date.now() - start} includePlan=${usePlan} planCtxLen=${planCtx?.length || 0} replyPreview="${(content || '').slice(0, 120)}"`,
     );
     return { reply: content };
   }
