@@ -9,6 +9,7 @@ import { PreferencesService } from '../preferences/preferences.service';
 import { AgentsService } from '../agents/agents.service';
 import { GenerateRecipeDto } from './dto/generate-recipe.dto';
 import { CreateRecipeDto } from './dto/create-recipe.dto';
+import { UpdateRecipeDto } from './dto/update-recipe.dto';
 
 @Injectable()
 export class RecipesService {
@@ -274,6 +275,72 @@ export class RecipesService {
     await this.recipeRepo.save(saved);
 
     return this.findOneDetailed(saved.id);
+  }
+
+  async updateUserRecipe(id: string, userId: string | undefined, dto: UpdateRecipeDto) {
+    const recipe = await this.recipeRepo.findOne({
+      where: { id },
+      relations: ['ingredients', 'ingredients.ingredient', 'createdByUser'],
+    });
+    if (!recipe) {
+      throw new Error('Recipe not found');
+    }
+    if (dto.name) recipe.name = dto.name;
+    if (dto.instructions !== undefined) recipe.instructions = dto.instructions;
+    if (dto.mealSlot) recipe.meal_slot = dto.mealSlot;
+    if (dto.difficulty) recipe.difficulty = dto.difficulty;
+    if (userId) {
+      recipe.createdByUser = { id: userId } as any;
+    }
+
+    if (dto.ingredients) {
+      await this.recipeIngredientRepo.delete({ recipe: { id } as any } as any);
+      let totalKcal = 0;
+      let totalProtein = 0;
+      let totalCarbs = 0;
+      let totalFat = 0;
+      let totalCost = 0;
+      const ris: RecipeIngredient[] = [];
+      for (const ing of dto.ingredients) {
+        let ingredient: Ingredient | null = null;
+        if ((ing as any).ingredientId) {
+          ingredient = (await this.ingredientsService.findById((ing as any).ingredientId)) as any;
+        }
+        if (!ingredient && ing.ingredient_name) {
+          ingredient = await this.ingredientsService.findOrCreateByName(ing.ingredient_name);
+        }
+        if (!ingredient) continue;
+        const quantity = Number(ing.quantity ?? 0);
+        const unit = ing.unit || 'g';
+        const ri = this.recipeIngredientRepo.create({
+          recipe,
+          ingredient,
+          quantity,
+          unit,
+        });
+        ris.push(ri);
+
+        const unitType = (ingredient.unit_type || '').toLowerCase();
+        const divisor = unitType === 'per_ml' ? 100 : unitType === 'per_100g' ? 100 : 100;
+        const factor = quantity / divisor;
+
+        totalKcal += (Number(ingredient.kcal_per_unit) || 0) * factor;
+        totalProtein += (Number(ingredient.protein_per_unit) || 0) * factor;
+        totalCarbs += (Number(ingredient.carbs_per_unit) || 0) * factor;
+        totalFat += (Number(ingredient.fat_per_unit) || 0) * factor;
+        totalCost += (Number(ingredient.estimated_price_per_unit_gbp) || 0) * factor;
+      }
+      if (ris.length) {
+        await this.recipeIngredientRepo.save(ris);
+      }
+      recipe.base_kcal = totalKcal;
+      recipe.base_protein = totalProtein;
+      recipe.base_carbs = totalCarbs;
+      recipe.base_fat = totalFat;
+      recipe.base_cost_gbp = totalCost;
+    }
+    await this.recipeRepo.save(recipe);
+    return this.findOneDetailed(recipe.id);
   }
 
   async generateRecipeFromStub(input: {

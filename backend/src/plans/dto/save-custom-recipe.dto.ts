@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsString, IsUUID, ValidateNested, IsNumber } from 'class-validator';
+import { IsArray, IsString, IsUUID, ValidateNested, IsNumber, IsOptional } from 'class-validator';
 
 class IngredientChangeDto {
   @IsUUID()
@@ -18,6 +18,10 @@ export class SaveCustomRecipeDto {
 
   @IsString()
   newName!: string;
+
+  @IsString()
+  @IsOptional()
+  instructions?: string;
 
   @IsArray()
   @ValidateNested({ each: true })

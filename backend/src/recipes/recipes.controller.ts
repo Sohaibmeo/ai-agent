@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Post, Query, Param } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Param, Patch } from '@nestjs/common';
 import { RecipesService } from './recipes.service';
 import { CustomFromExistingDto } from './dto/custom-from-existing.dto';
 import { CreateRecipeDto } from './dto/create-recipe.dto';
+import { UpdateRecipeDto } from './dto/update-recipe.dto';
 
 @Controller('recipes')
 export class RecipesController {
@@ -34,5 +35,10 @@ export class RecipesController {
   async createRecipe(@Body() body: CreateRecipeDto, @Query('userId') userId?: string) {
     const uid = userId;
     return this.recipesService.createUserRecipe(uid, body);
+  }
+
+  @Patch(':id')
+  async updateRecipe(@Param('id') id: string, @Body() body: UpdateRecipeDto, @Query('userId') userId?: string) {
+    return this.recipesService.updateUserRecipe(id, userId, body);
   }
 }

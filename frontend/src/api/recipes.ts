@@ -46,3 +46,17 @@ export function createRecipe(payload: {
   const body = { ...payload };
   return apiClient.post<RecipeWithIngredients>(`/recipes${searchParams.size ? `?${searchParams.toString()}` : ''}`, body);
 }
+
+export function updateRecipe(id: string, payload: {
+  userId?: string;
+  name?: string;
+  instructions?: string;
+  ingredients?: { ingredient_name?: string; ingredientId?: string; quantity?: number; unit?: string }[];
+  mealSlot?: string;
+  difficulty?: string;
+}) {
+  const searchParams = new URLSearchParams();
+  if (payload.userId) searchParams.set('userId', payload.userId);
+  const qs = searchParams.size ? `?${searchParams.toString()}` : '';
+  return apiClient.patch<RecipeWithIngredients>(`/recipes/${id}${qs}`, payload);
+}

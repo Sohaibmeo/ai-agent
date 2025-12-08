@@ -54,6 +54,7 @@ export function saveCustomRecipe(payload: {
   planMealId: string;
   newName: string;
   ingredientItems: { ingredientId: string; quantity: number; unit: string }[];
+  instructions?: string;
 }) {
   return apiClient.post('/plans/save-custom-recipe', payload);
 }

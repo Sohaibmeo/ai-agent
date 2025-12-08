@@ -693,6 +693,7 @@ export class PlansService {
     planMealId: string,
     newName: string,
     ingredientItems: { ingredientId: string; quantity: number; unit: string }[],
+    instructions?: string,
   ) {
     const meal = await this.planMealRepo.findOne({
       where: { id: planMealId },
@@ -708,6 +709,7 @@ export class PlansService {
       mealSlot: meal.meal_slot,
       difficulty: meal.recipe?.difficulty,
       ingredientItems,
+      instructions: instructions ?? meal.recipe?.instructions,
       createdByUserId: userId,
       source: 'user',
       isSearchable: true,

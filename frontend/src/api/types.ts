@@ -21,6 +21,7 @@ export interface Recipe {
   name: string;
   meal_slot: string;
   meal_type?: string;
+  difficulty?: string | null;
   instructions?: string | null;
   image_url?: string | null;
   base_kcal?: number | null;
