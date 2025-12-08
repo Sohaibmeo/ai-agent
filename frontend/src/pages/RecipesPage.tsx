@@ -5,7 +5,7 @@ import { fetchRecipes } from '../api/recipes';
 import { DEMO_USER_ID } from '../lib/config';
 import { Card } from '../components/shared/Card';
 import { generateRecipeAi } from '../api/recipes';
-import { useLlmAction } from '../hooks/useLlmAction';
+import { useAgentPipeline } from '../hooks/useAgentPipeline';
 
 export function RecipesPage() {
   const navigate = useNavigate();
@@ -15,11 +15,7 @@ export function RecipesPage() {
   const [aiNote, setAiNote] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [showAiForm, setShowAiForm] = useState(false);
-  const { runWithLlmLoader } = useLlmAction({
-    kind: 'generic-llm',
-    title: 'Creating your recipe with AI...',
-    subtitle: 'Drafting ingredients and steps based on your description.',
-  });
+  const { startRun, updateStep, endRun, setError } = useAgentPipeline();
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchTerm), 400);
@@ -153,30 +149,49 @@ export function RecipesPage() {
                       const note = aiNote.trim();
                       if (!note) {
                         setShowCreateModal(false);
-                          navigate('/recipes/new');
-                          return;
+                        navigate('/recipes/new');
+                        return;
                       }
                       try {
                         setIsGenerating(true);
-                        const created = await runWithLlmLoader(() =>
-                          generateRecipeAi({ userId: DEMO_USER_ID, note }),
-                        );
+                        const steps = [
+                          { id: 'capture-note', label: 'Capturing your request', status: 'active' as const, progressHint: 10 },
+                          { id: 'draft-recipe', label: 'Drafting recipe with AI', status: 'pending' as const, progressHint: 45 },
+                          { id: 'build-ingredients', label: 'Building ingredients', status: 'pending' as const, progressHint: 75 },
+                          { id: 'finishing', label: 'Finishing up', status: 'pending' as const, progressHint: 98 },
+                        ];
+                        startRun('generic-llm', {
+                          title: 'Creating your recipe with AI...',
+                          subtitle: 'Drafting ingredients and steps based on your description.',
+                          steps,
+                        });
+                        updateStep('capture-note', 'done', undefined, undefined, 18);
+                        updateStep('draft-recipe', 'active', 'Generating recipe draft...', undefined, 36);
+                        const created = await generateRecipeAi({ userId: DEMO_USER_ID, note });
+                        updateStep('draft-recipe', 'done', undefined, undefined, 64);
+                        updateStep('build-ingredients', 'active', 'Resolving ingredients...', undefined, 82);
+                        updateStep('build-ingredients', 'done', undefined, undefined, 92);
+                        updateStep('finishing', 'active', 'Saving recipe...', undefined, 98);
+                        updateStep('finishing', 'done', undefined, undefined, 100);
+                        setTimeout(() => endRun(), 400);
                         setShowCreateModal(false);
                         setShowAiForm(false);
                         setAiNote('');
                         navigate(`/recipes/${created.id}`);
                       } catch (e) {
-                          setShowCreateModal(false);
-                          setShowAiForm(false);
-                          navigate('/recipes/new');
-                        } finally {
-                          setIsGenerating(false);
-                        }
-                      }}
-                      disabled={isGenerating}
-                    >
-                      {isGenerating ? 'Generating...' : 'Create with AI'}
-                    </button>
+                        setError('Could not create recipe. Try again or start from scratch.');
+                        setShowCreateModal(false);
+                        setShowAiForm(false);
+                        navigate('/recipes/new');
+                        setTimeout(() => endRun(), 600);
+                      } finally {
+                        setIsGenerating(false);
+                      }
+                    }}
+                    disabled={isGenerating}
+                  >
+                    {isGenerating ? 'Generating...' : 'Create with AI'}
+                  </button>
                   </div>
                 </div>
               </>
