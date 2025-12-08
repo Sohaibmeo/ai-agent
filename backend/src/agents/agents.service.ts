@@ -88,12 +88,21 @@ export class AgentsService {
       'fat',
       'kcal',
       'calorie',
+      'calories',
       'workout',
       'gym',
       'training',
       'recover',
       'leg day',
       'day ',
+      'cut',
+      'cutting',
+      'bulk',
+      'bulking',
+      'maintenance',
+      'maintain weight',
+      'surplus',
+      'deficit',
     ];
     return keywords.some((k) => text.includes(k));
   }

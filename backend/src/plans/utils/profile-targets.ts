@@ -10,6 +10,8 @@ export interface ProfileInputs {
 export interface Targets {
   dailyCalories: number;
   dailyProtein: number;
+  maintenanceCalories: number;
+  calorieDelta: number;
 }
 
 // Simplified calculator based on common heuristics; can be refined later.
@@ -31,12 +33,36 @@ export function calculateTargets(profile: ProfileInputs): Targets {
   };
   const tdee = bmr * (activityMultiplier[activity] ?? 1.55);
 
-  let dailyCalories = tdee;
-  if (goal === 'lose_weight') {
-    dailyCalories = tdee * 0.8;
-  } else if (goal === 'gain_weight') {
-    dailyCalories = tdee * 1.1;
-  }
+  const intensity = (profile.goal_intensity || 'moderate').toLowerCase();
+  const cutMap: Record<string, number> = {
+    low: -150,
+    mild: -200,
+    medium: -300,
+    moderate: -300,
+    high: -450,
+    hard: -450,
+    extreme: -600,
+  };
+  const surplusMap: Record<string, number> = {
+    low: 200,
+    mild: 250,
+    medium: 350,
+    moderate: 350,
+    high: 500,
+    hard: 500,
+    extreme: 600,
+  };
+
+  const calorieDelta =
+    goal === 'lose_weight'
+      ? cutMap[intensity] ?? -300
+      : goal === 'gain_weight'
+        ? surplusMap[intensity] ?? 300
+        : 0;
+
+  let dailyCalories = tdee + calorieDelta;
+  // guard rails
+  dailyCalories = Math.max(1200, dailyCalories);
 
   // Protein 1.6-2.2 g/kg; pick mid
   const dailyProtein = weight * 1.9;
@@ -44,5 +70,7 @@ export function calculateTargets(profile: ProfileInputs): Targets {
   return {
     dailyCalories: Math.round(dailyCalories),
     dailyProtein: Math.round(dailyProtein),
+    maintenanceCalories: Math.round(tdee),
+    calorieDelta: Math.round(calorieDelta),
   };
 }
