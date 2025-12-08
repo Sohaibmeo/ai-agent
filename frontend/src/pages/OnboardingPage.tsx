@@ -170,39 +170,39 @@ export function OnboardingPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
-        <div className="text-sm text-slate-300">Preparing your onboarding…</div>
+      <div className="min-h-screen flex items-center justify-center bg-slate-100">
+        <div className="text-sm text-slate-600">Preparing your onboarding…</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4 py-8">
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-3xl space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-emerald-300/80">Welcome, {user?.email}</p>
-            <h1 className="mt-1 text-2xl font-semibold text-slate-50">Let&apos;s tune ChefBot to your body</h1>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="text-xs uppercase tracking-[0.2em] text-emerald-700/80">Welcome, {user?.email}</p>
+            <h1 className="mt-1 text-2xl font-semibold text-slate-900">Let&apos;s tune ChefBot to your body</h1>
+            <p className="mt-1 text-xs text-slate-500">
               This takes under a minute. We&apos;ll use it to set your calories and protein targets.
             </p>
           </div>
           <div className="hidden sm:flex flex-col items-end gap-1">
-            <div className="flex items-center gap-2 text-xs text-slate-400">
+            <div className="flex items-center gap-2 text-xs text-slate-500">
               <span>Step {step + 1} of 4</span>
-              <div className="h-1 w-24 rounded-full bg-slate-800 overflow-hidden">
-                <div className="h-full bg-emerald-400 transition-all" style={{ width: `${((step + 1) / 4) * 100}%` }} />
+              <div className="h-1 w-24 rounded-full bg-slate-200 overflow-hidden">
+                <div className="h-full bg-emerald-500 transition-all" style={{ width: `${((step + 1) / 4) * 100}%` }} />
               </div>
             </div>
           </div>
         </div>
 
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/80 shadow-2xl shadow-emerald-500/10 p-5 md:p-6 grid md:grid-cols-[2fr,1.2fr] gap-6">
+        <div className="rounded-3xl border border-slate-200 bg-white shadow-2xl p-5 md:p-6 grid md:grid-cols-[2fr,1.2fr] gap-6">
           <div className="space-y-4">
             {step === 0 && (
               <div className="space-y-4">
-                <h2 className="text-sm font-semibold text-slate-100">Your basics</h2>
-                <p className="text-xs text-slate-400">We&apos;ll use this to estimate your maintenance calories.</p>
+                <h2 className="text-sm font-semibold text-slate-900">Your basics</h2>
+                <p className="text-xs text-slate-500">We&apos;ll use this to estimate your maintenance calories.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2">
                   {[
                     { key: 'age', label: 'Age', suffix: 'yrs' },
@@ -210,8 +210,8 @@ export function OnboardingPage() {
                     { key: 'weight_kg', label: 'Weight', suffix: 'kg' },
                   ].map((field) => (
                     <div key={field.key}>
-                      <label className="block text-[11px] text-slate-400 mb-1">{field.label}</label>
-                      <div className="flex items-center rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2">
+                      <label className="block text-[11px] text-slate-500 mb-1">{field.label}</label>
+                      <div className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-2">
                         <input
                           type="number"
                           min={0}
@@ -222,7 +222,7 @@ export function OnboardingPage() {
                               [field.key]: e.target.value ? Number(e.target.value) : undefined,
                             }))
                           }
-                          className="w-full bg-transparent text-sm text-slate-50 outline-none"
+                          className="w-full bg-transparent text-sm text-slate-900 outline-none"
                         />
                         <span className="ml-1 text-[11px] text-slate-500">{field.suffix}</span>
                       </div>
@@ -234,11 +234,11 @@ export function OnboardingPage() {
 
             {step === 1 && (
               <div className="space-y-4">
-                <h2 className="text-sm font-semibold text-slate-100">Goal & training style</h2>
-                <p className="text-xs text-slate-400">Tell us what you&apos;re aiming for and how active you are.</p>
+                <h2 className="text-sm font-semibold text-slate-900">Goal & training style</h2>
+                <p className="text-xs text-slate-500">Tell us what you&apos;re aiming for and how active you are.</p>
                 <div className="space-y-3 mt-2">
                   <div>
-                    <p className="text-[11px] text-slate-400 mb-1">Goal</p>
+                    <p className="text-[11px] text-slate-500 mb-1">Goal</p>
                     <div className="flex flex-wrap gap-2">
                       {goals.map((g) => (
                         <button
@@ -247,8 +247,8 @@ export function OnboardingPage() {
                           onClick={() => setProfile((p) => ({ ...p, goal: g.value }))}
                           className={`px-3 py-1.5 rounded-full text-xs border ${
                             profile.goal === g.value
-                              ? 'border-emerald-400 bg-emerald-500/10 text-emerald-100'
-                              : 'border-slate-700 bg-slate-950/40 text-slate-300 hover:border-slate-500'
+                              ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                              : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400'
                           }`}
                         >
                           {g.label}
@@ -258,7 +258,7 @@ export function OnboardingPage() {
                   </div>
 
                   <div>
-                    <p className="text-[11px] text-slate-400 mb-1">Intensity</p>
+                    <p className="text-[11px] text-slate-500 mb-1">Intensity</p>
                     <div className="flex flex-wrap gap-2">
                       {intensities.map((i) => (
                         <button
@@ -267,8 +267,8 @@ export function OnboardingPage() {
                           onClick={() => setProfile((p) => ({ ...p, goal_intensity: i.value }))}
                           className={`px-3 py-1.5 rounded-full text-xs border ${
                             profile.goal_intensity === i.value
-                              ? 'border-emerald-400 bg-emerald-500/10 text-emerald-100'
-                              : 'border-slate-700 bg-slate-950/40 text-slate-300 hover:border-slate-500'
+                              ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                              : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400'
                           }`}
                         >
                           {i.label}
@@ -278,7 +278,7 @@ export function OnboardingPage() {
                   </div>
 
                   <div>
-                    <p className="text-[11px] text-slate-400 mb-1">Activity level</p>
+                    <p className="text-[11px] text-slate-500 mb-1">Activity level</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {activityLevels.map((a) => (
                         <button
@@ -287,8 +287,8 @@ export function OnboardingPage() {
                           onClick={() => setProfile((p) => ({ ...p, activity_level: a.value }))}
                           className={`px-3 py-2 rounded-xl text-xs border text-left ${
                             profile.activity_level === a.value
-                              ? 'border-emerald-400 bg-emerald-500/10 text-emerald-100'
-                              : 'border-slate-700 bg-slate-950/40 text-slate-300 hover:border-slate-500'
+                              ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                              : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400'
                           }`}
                         >
                           <span className="block font-medium text-[11px] mb-0.5 capitalize">
@@ -305,11 +305,11 @@ export function OnboardingPage() {
 
             {step === 2 && (
               <div className="space-y-4">
-                <h2 className="text-sm font-semibold text-slate-100">Diet & allergies</h2>
-                <p className="text-xs text-slate-400">We&apos;ll avoid anything dangerous and respect your diet style.</p>
+                <h2 className="text-sm font-semibold text-slate-900">Diet & allergies</h2>
+                <p className="text-xs text-slate-500">We&apos;ll avoid anything dangerous and respect your diet style.</p>
                 <div className="mt-2 space-y-3">
                   <div>
-                    <p className="text-[11px] text-slate-400 mb-1">Diet type</p>
+                    <p className="text-[11px] text-slate-500 mb-1">Diet type</p>
                     <div className="flex flex-wrap gap-2">
                       {dietTypes.map((d) => (
                         <button
@@ -318,8 +318,8 @@ export function OnboardingPage() {
                           onClick={() => setProfile((p) => ({ ...p, diet_type: d.value }))}
                           className={`px-3 py-1.5 rounded-full text-xs border ${
                             profile.diet_type === d.value
-                              ? 'border-emerald-400 bg-emerald-500/10 text-emerald-100'
-                              : 'border-slate-700 bg-slate-950/40 text-slate-300 hover:border-slate-500'
+                              ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                              : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400'
                           }`}
                         >
                           {d.label}
@@ -329,7 +329,7 @@ export function OnboardingPage() {
                   </div>
 
                   <div>
-                    <p className="text-[11px] text-slate-400 mb-1">Allergies / must-avoid</p>
+                    <p className="text-[11px] text-slate-500 mb-1">Allergies / must-avoid</p>
                     <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto pr-1">
                       {allergyOptions.map((a) => {
                         const active = profile.allergy_keys.includes(a);
@@ -340,8 +340,8 @@ export function OnboardingPage() {
                             onClick={() => handleToggleAllergy(a)}
                             className={`px-3 py-1.5 rounded-full text-[11px] border capitalize ${
                               active
-                                ? 'border-red-400 bg-red-500/10 text-red-100'
-                                : 'border-slate-700 bg-slate-950/40 text-slate-300 hover:border-slate-500'
+                                ? 'border-red-300 bg-red-50 text-red-700'
+                                : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400'
                             }`}
                           >
                             {a}
@@ -356,8 +356,8 @@ export function OnboardingPage() {
 
             {step === 3 && (
               <div className="space-y-4">
-                <h2 className="text-sm font-semibold text-slate-100">Meals & budget</h2>
-                <p className="text-xs text-slate-400">Choose which meals to plan and how much to roughly spend per week.</p>
+                <h2 className="text-sm font-semibold text-slate-900">Meals & budget</h2>
+                <p className="text-xs text-slate-500">Choose which meals to plan and how much to roughly spend per week.</p>
                 <div className="mt-2 space-y-3">
                   <div className="flex flex-wrap gap-2">
                     {[
@@ -379,8 +379,8 @@ export function OnboardingPage() {
                           }
                           className={`px-3 py-1.5 rounded-full text-xs border ${
                             active
-                              ? 'border-emerald-400 bg-emerald-500/10 text-emerald-100'
-                              : 'border-slate-700 bg-slate-950/40 text-slate-300 hover:border-slate-500'
+                              ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                              : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400'
                           }`}
                         >
                           {m.label}
@@ -390,8 +390,8 @@ export function OnboardingPage() {
                   </div>
 
                   <div>
-                    <p className="text-[11px] text-slate-400 mb-1">Weekly grocery budget (optional)</p>
-                    <div className="flex items-center rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2 max-w-xs">
+                    <p className="text-[11px] text-slate-500 mb-1">Weekly grocery budget (optional)</p>
+                    <div className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-2 max-w-xs">
                       <span className="mr-1 text-[11px] text-slate-500">£</span>
                       <input
                         type="number"
@@ -403,17 +403,17 @@ export function OnboardingPage() {
                             weekly_budget_gbp: e.target.value ? Number(e.target.value) : undefined,
                           }))
                         }
-                        className="w-full bg-transparent text-sm text-slate-50 outline-none"
+                        className="w-full bg-transparent text-sm text-slate-900 outline-none"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <p className="text-[11px] text-slate-400 mb-1">Max recipe difficulty</p>
+                    <p className="text-[11px] text-slate-500 mb-1">Max recipe difficulty</p>
                     <select
                       value={profile.max_difficulty}
                       onChange={(e) => setProfile((p) => ({ ...p, max_difficulty: e.target.value }))}
-                      className="mt-1 w-full max-w-xs rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-400/70"
+                      className="mt-1 w-full max-w-xs rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-300"
                     >
                       <option value="super_easy">Super easy</option>
                       <option value="easy">Easy</option>
@@ -430,7 +430,7 @@ export function OnboardingPage() {
                 type="button"
                 disabled={step === 0}
                 onClick={() => setStep((s) => (s > 0 ? ((s - 1) as Step) : s))}
-                className="text-xs text-slate-400 hover:text-slate-200 disabled:opacity-30 disabled:cursor-not-allowed"
+                className="text-xs text-slate-500 hover:text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 ← Back
               </button>
@@ -438,7 +438,7 @@ export function OnboardingPage() {
                 <button
                   type="button"
                   onClick={() => setStep((s) => ((s + 1) as Step))}
-                  className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-emerald-400"
+                  className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-600"
                 >
                   Continue
                 </button>
@@ -447,7 +447,7 @@ export function OnboardingPage() {
                   type="button"
                   disabled={!canFinish || saving}
                   onClick={handleSave}
-                  className="rounded-full bg-emerald-500 px-5 py-2 text-xs font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-60"
+                  className="rounded-full bg-emerald-500 px-5 py-2 text-xs font-semibold text-white hover:bg-emerald-600 disabled:opacity-60"
                 >
                   {saving ? 'Saving…' : 'Finish & view my plan'}
                 </button>
@@ -455,31 +455,31 @@ export function OnboardingPage() {
             </div>
           </div>
 
-          <div className="space-y-3 border border-slate-800 rounded-2xl bg-slate-950/70 p-4">
-            <p className="text-[11px] font-medium text-emerald-200 uppercase tracking-[0.2em]">Daily targets (preview)</p>
-            <p className="text-xs text-slate-400">Based on your current inputs. ChefBot will aim your weekly plan around these numbers.</p>
+          <div className="space-y-3 border border-slate-200 rounded-2xl bg-slate-50 p-4">
+            <p className="text-[11px] font-medium text-emerald-700 uppercase tracking-[0.2em]">Daily targets (preview)</p>
+            <p className="text-xs text-slate-500">Based on your current inputs. ChefBot will aim your weekly plan around these numbers.</p>
             <div className="mt-2 grid grid-cols-3 gap-2">
-              <div className="rounded-xl bg-slate-900/80 border border-slate-800 px-3 py-2">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-400">Calories</p>
-                <p className="mt-1 text-lg font-semibold text-slate-50">
+              <div className="rounded-xl bg-white border border-slate-200 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Calories</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">
                   {targets.dailyCalories}
-                  <span className="ml-0.5 text-[10px] text-slate-400">kcal</span>
+                  <span className="ml-0.5 text-[10px] text-slate-500">kcal</span>
                 </p>
                 <p className="mt-0.5 text-[10px] text-slate-500">Daily target</p>
               </div>
-              <div className="rounded-xl bg-slate-900/80 border border-slate-800 px-3 py-2">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-400">Protein</p>
-                <p className="mt-1 text-lg font-semibold text-slate-50">
+              <div className="rounded-xl bg-white border border-slate-200 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Protein</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">
                   {targets.dailyProtein}
-                  <span className="ml-0.5 text-[10px] text-slate-400">g</span>
+                  <span className="ml-0.5 text-[10px] text-slate-500">g</span>
                 </p>
                 <p className="mt-0.5 text-[10px] text-slate-500">Approx 1.9g/kg</p>
               </div>
-              <div className="rounded-xl bg-slate-900/80 border border-slate-800 px-3 py-2">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-400">Maintenance</p>
-                <p className="mt-1 text-lg font-semibold text-slate-50">
+              <div className="rounded-xl bg-white border border-slate-200 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Maintenance</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">
                   {targets.maintenanceCalories}
-                  <span className="ml-0.5 text-[10px] text-slate-400">kcal</span>
+                  <span className="ml-0.5 text-[10px] text-slate-500">kcal</span>
                 </p>
                 <p className="mt-0.5 text-[10px] text-slate-500">
                   {targets.calorieDelta < 0

@@ -14,6 +14,22 @@ import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { useAuth } from './context/AuthContext';
+import { Navigate, useLocation } from 'react-router-dom';
+
+function Protected({ children }: { children: JSX.Element }) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
+  if (!user) {
+    return <Navigate to="/auth/login" replace state={{ from: location }} />;
+  }
+  if (!user.hasProfile && location.pathname !== '/onboarding') {
+    return <Navigate to="/onboarding" replace />;
+  }
+  return children;
+}
 
 function App() {
   const { loading } = useAuth();
@@ -30,22 +46,24 @@ function App() {
           <Route
             path="/*"
             element={
-              <AppShell sidebar={<Sidebar />}>
-                <Routes>
-                  <Route path="/" element={<ProfilePage />} />
-                  <Route path="/plans" element={<PlansPage />} />
-                  <Route path="/plans/meal/:mealId" element={<RecipeDetailPage />} />
-                  <Route path="/groceries" element={<GroceriesPage />} />
-                  <Route path="/recipes" element={<RecipesPage />} />
-                  <Route path="/recipes/new" element={<RecipeDetailPage />} />
-                  <Route path="/recipes/:recipeId" element={<RecipeDetailPage />} />
-                </Routes>
-              </AppShell>
+              <Protected>
+                <AppShell sidebar={<Sidebar />}>
+                  <Routes>
+                    <Route path="/" element={<ProfilePage />} />
+                    <Route path="/plans" element={<PlansPage />} />
+                    <Route path="/plans/meal/:mealId" element={<RecipeDetailPage />} />
+                    <Route path="/groceries" element={<GroceriesPage />} />
+                    <Route path="/recipes" element={<RecipesPage />} />
+                    <Route path="/recipes/new" element={<RecipeDetailPage />} />
+                    <Route path="/recipes/:recipeId" element={<RecipeDetailPage />} />
+                  </Routes>
+                </AppShell>
+              </Protected>
             }
           />
         </Routes>
         <AgentPipelineModal />
-        <ExplainBotWidget />
+        {useAuth().user && <ExplainBotWidget />}
         <Toaster position="top-right" toastOptions={{ className: 'text-sm' }} />
       </AgentPipelineProvider>
     </div>
