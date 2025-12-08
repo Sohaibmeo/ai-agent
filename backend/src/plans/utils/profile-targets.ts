@@ -41,6 +41,15 @@ export const SURPLUS_MAP: Record<string, number> = {
   extreme: 600,
 };
 
+export const PROTEIN_MULTIPLIERS: Record<string, number> = {
+  maintain_weight: 1.6,
+  lose_weight: 1.8,
+  maintain_weight_gain_muscle: 1.9,
+  lose_weight_gain_muscle: 2.0,
+  gain_weight: 1.7,
+  gain_weight_gain_muscle: 1.8,
+};
+
 // Simplified calculator based on common heuristics; can be refined later.
 export function calculateTargets(profile: ProfileInputs): Targets {
   const weight = profile.weight_kg ?? 70;
@@ -56,19 +65,27 @@ export function calculateTargets(profile: ProfileInputs): Targets {
 
   const intensity = (profile.goal_intensity || 'moderate').toLowerCase();
 
-  const calorieDelta =
-    goal === 'lose_weight' || goal === 'lose_weight_gain_muscle'
-      ? CUT_MAP[intensity] ?? -300
-      : goal === 'gain_weight' || goal === 'gain_weight_gain_muscle'
-        ? SURPLUS_MAP[intensity] ?? 300
-        : 0;
+  const cutDelta = CUT_MAP[intensity] ?? -300;
+  const surplusDelta = SURPLUS_MAP[intensity] ?? 300;
+
+  let calorieDelta = 0;
+  if (goal === 'lose_weight' || goal === 'lose_weight_gain_muscle') {
+    calorieDelta = cutDelta;
+  } else if (goal === 'gain_weight' || goal === 'gain_weight_gain_muscle') {
+    calorieDelta = surplusDelta;
+  } else if (goal === 'maintain_weight_gain_muscle') {
+    // gentle surplus for recomposition
+    calorieDelta = Math.round(surplusDelta / 2);
+  } else {
+    calorieDelta = 0;
+  }
 
   let dailyCalories = tdee + calorieDelta;
   // guard rails
   dailyCalories = Math.max(1200, dailyCalories);
 
-  // Protein 1.6-2.2 g/kg; pick mid
-  const dailyProtein = weight * 1.9;
+  const proteinPerKg = PROTEIN_MULTIPLIERS[goal] ?? 1.6;
+  const dailyProtein = weight * proteinPerKg;
 
   return {
     dailyCalories: Math.round(dailyCalories),

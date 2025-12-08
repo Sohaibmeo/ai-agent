@@ -1,6 +1,7 @@
 export const GOALS = [
   { value: 'maintain_weight', label: 'Maintain weight' },
   { value: 'lose_weight', label: 'Lose weight' },
+  { value: 'maintain_weight_gain_muscle', label: 'Maintain weight & gain muscle' },
   { value: 'lose_weight_gain_muscle', label: 'Lose weight & gain muscle' },
   { value: 'gain_weight', label: 'Gain weight' },
   { value: 'gain_weight_gain_muscle', label: 'Gain weight & gain muscle' },

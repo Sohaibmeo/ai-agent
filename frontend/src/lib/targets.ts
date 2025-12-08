@@ -34,6 +34,15 @@ export const SURPLUS_MAP: Record<string, number> = {
   extreme: 600,
 };
 
+export const PROTEIN_MULTIPLIERS: Record<string, number> = {
+  maintain_weight: 1.6,
+  lose_weight: 1.8,
+  maintain_weight_gain_muscle: 1.9,
+  lose_weight_gain_muscle: 2.0,
+  gain_weight: 1.7,
+  gain_weight_gain_muscle: 1.8,
+};
+
 export function calculateTargets(profile: ProfileInputs) {
   const weight = profile.weight_kg ?? 70;
   const height = profile.height_cm ?? 175;
@@ -45,16 +54,24 @@ export function calculateTargets(profile: ProfileInputs) {
   const bmr = 10 * weight + 6.25 * height - 5 * age + 5;
   const tdee = bmr * (ACTIVITY_MULTIPLIER[activity] ?? 1.55);
 
-  const calorieDelta =
-    goal === 'lose_weight' || goal === 'lose_weight_gain_muscle'
-      ? CUT_MAP[intensity] ?? -300
-      : goal === 'gain_weight' || goal === 'gain_weight_gain_muscle'
-        ? SURPLUS_MAP[intensity] ?? 300
-        : 0;
+  const cutDelta = CUT_MAP[intensity] ?? -300;
+  const surplusDelta = SURPLUS_MAP[intensity] ?? 300;
+
+  let calorieDelta = 0;
+  if (goal === 'lose_weight' || goal === 'lose_weight_gain_muscle') {
+    calorieDelta = cutDelta;
+  } else if (goal === 'gain_weight' || goal === 'gain_weight_gain_muscle') {
+    calorieDelta = surplusDelta;
+  } else if (goal === 'maintain_weight_gain_muscle') {
+    calorieDelta = Math.round(surplusDelta / 2);
+  } else {
+    calorieDelta = 0;
+  }
 
   let dailyCalories = tdee + calorieDelta;
   dailyCalories = Math.max(1200, dailyCalories);
-  const dailyProtein = weight * 1.9;
+  const proteinPerKg = PROTEIN_MULTIPLIERS[goal] ?? 1.6;
+  const dailyProtein = weight * proteinPerKg;
 
   return {
     dailyCalories: Math.round(dailyCalories),
