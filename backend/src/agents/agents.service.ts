@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
@@ -10,6 +10,7 @@ import {
   LlmPlanDay,
 } from './schemas/plan-generation.schema';
 import { reviewInstructionSchema, ReviewInstruction } from './schemas/review-instruction.schema';
+import { PlansService } from '../plans/plans.service';
 
 type WeekState = {
   week_start_date: string;
@@ -37,7 +38,44 @@ export class AgentsService {
     this.logger.log(`[${kind}] ${message}`);
   }
 
-  async explain(message: string, context?: string) {
+  constructor(
+    @Inject(forwardRef(() => PlansService))
+    private readonly plansService: PlansService,
+  ) {}
+
+  private summarizePlanContext = async (userId?: string) => {
+    if (!userId) return '';
+    try {
+      const plan = await this.plansService.getActivePlan(userId);
+      if (!plan) return '';
+      const total = [
+        plan.total_kcal ? `weekly kcal ${Math.round(Number(plan.total_kcal))}` : null,
+        plan.total_protein ? `${Math.round(Number(plan.total_protein))}g protein` : null,
+        plan.total_carbs ? `${Math.round(Number(plan.total_carbs))}g carbs` : null,
+        plan.total_fat ? `${Math.round(Number(plan.total_fat))}g fat` : null,
+      ]
+        .filter(Boolean)
+        .join(', ');
+      const dayLines = (plan.days || [])
+        .map((d) => {
+          const kcal = d.daily_kcal ? Math.round(Number(d.daily_kcal)) : '—';
+          const p = d.daily_protein ? Math.round(Number(d.daily_protein)) : '—';
+          const c = d.daily_carbs ? Math.round(Number(d.daily_carbs)) : '—';
+          const f = d.daily_fat ? Math.round(Number(d.daily_fat)) : '—';
+          return `day${d.day_index}: ${kcal} kcal, ${p}g protein, ${c}g carbs, ${f}g fat`;
+        })
+        .join(' | ');
+      return [`Active plan summary: ${total}`, dayLines ? `Per day macros: ${dayLines}` : '']
+        .filter(Boolean)
+        .join('. ');
+    } catch (err) {
+      this.logger.warn(`[explain] could not load plan for user ${userId}: ${(err as Error).message}`);
+      return '';
+    }
+  };
+
+  async explain(message: string, context?: string, userId?: string) {
+    this.logAgent('explain', `start user=${userId || 'none'} msg="${message.slice(0, 120)}"`);
     const client = this.createClient('explain');
     const chat = new ChatOpenAI({
       model: client.model,
@@ -53,12 +91,13 @@ export class AgentsService {
       'Keep tone warm and practical. When relevant, call out safety notes.',
     ].join(' ');
 
+    const planCtx = await this.summarizePlanContext(userId);
     const prompt = [
       new SystemMessage(system),
       new HumanMessage(
         JSON.stringify({
           question: message,
-          context: context || undefined,
+          context: [context, planCtx].filter(Boolean).join(' ') || undefined,
         }),
       ),
     ];
@@ -66,7 +105,10 @@ export class AgentsService {
     const start = Date.now();
     const res = await chat.invoke(prompt);
     const content = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
-    this.logAgent('explain', `model=${client.model} latency_ms=${Date.now() - start}`);
+    this.logAgent(
+      'explain',
+      `model=${client.model} latency_ms=${Date.now() - start} planCtxLen=${planCtx?.length || 0} replyPreview="${(content || '').slice(0, 120)}"`,
+    );
     return { reply: content };
   }
 

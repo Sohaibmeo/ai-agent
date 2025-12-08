@@ -11,10 +11,10 @@ export class AgentsController {
   }
 
   @Post('explain')
-  async explain(@Body() body: { message?: string; context?: string }) {
+  async explain(@Body() body: { message?: string; context?: string; userId?: string }) {
     if (!body?.message) {
       throw new BadRequestException('message is required');
     }
-    return this.agentsService.explain(body.message, body.context);
+    return this.agentsService.explain(body.message, body.context, body.userId);
   }
 }

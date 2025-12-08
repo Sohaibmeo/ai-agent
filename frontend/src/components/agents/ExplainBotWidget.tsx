@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { explainChat } from '../../api/agents';
+import { DEMO_USER_ID } from '../../lib/config';
 import { notify } from '../../lib/toast';
 
 type ChatMessage = { id: string; role: 'user' | 'bot' | 'error'; text: string };
@@ -133,7 +134,7 @@ export function ExplainBotWidget() {
     setInput('');
     setSending(true);
     try {
-      const res = await explainChat({ message: text });
+      const res = await explainChat({ message: text, userId: DEMO_USER_ID });
       const botMsg: ChatMessage = { id: `b-${Date.now()}`, role: 'bot', text: res.reply };
       setMessages((prev) => [...prev, botMsg]);
     } catch (err: any) {

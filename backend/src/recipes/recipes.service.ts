@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
 import { Recipe, RecipeIngredient, UserRecipeScore, Ingredient } from '../database/entities';
@@ -15,7 +15,9 @@ export class RecipesService {
     private readonly recipeRepo: Repository<Recipe>,
     @InjectRepository(RecipeIngredient)
     private readonly recipeIngredientRepo: Repository<RecipeIngredient>,
+    @Inject(forwardRef(() => IngredientsService))
     private readonly ingredientsService: IngredientsService,
+    @Inject(forwardRef(() => AgentsService))
     private readonly agentsService: AgentsService,
   ) {}
 

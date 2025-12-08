@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Not } from 'typeorm';
 import { PlanDay, PlanMeal, WeeklyPlan, PlanActionLog, Recipe } from '../database/entities';
@@ -41,11 +41,14 @@ export class PlansService {
     private readonly planMealRepo: Repository<PlanMeal>,
     @InjectRepository(PlanActionLog)
     private readonly planActionLogRepo: Repository<PlanActionLog>,
+    @Inject(forwardRef(() => RecipesService))
     private readonly recipesService: RecipesService,
     private readonly usersService: UsersService,
     private readonly shoppingListService: ShoppingListService,
     private readonly preferencesService: PreferencesService,
+    @Inject(forwardRef(() => IngredientsService))
     private readonly ingredientsService: IngredientsService,
+    @Inject(forwardRef(() => AgentsService))
     private readonly agentsService: AgentsService,
     private readonly pipelineGateway: PipelineGateway,
   ) { }
