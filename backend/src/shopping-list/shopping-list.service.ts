@@ -12,6 +12,8 @@ import {
 } from '../database/entities';
 import { InjectEntityManager } from '@nestjs/typeorm';
 import { EntityManager } from 'typeorm';
+import * as nodemailer from 'nodemailer';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class ShoppingListService {
@@ -27,6 +29,7 @@ export class ShoppingListService {
     @InjectRepository(WeeklyPlan)
     private readonly weeklyPlanRepo: Repository<WeeklyPlan>,
     @InjectEntityManager() private readonly entityManager: EntityManager,
+    private readonly usersService: UsersService,
   ) {}
 
   private factorFromQuantity(quantity: number, unitType?: string | null) {
@@ -74,6 +77,64 @@ export class ShoppingListService {
       weekly_plan_id: planId,
       items,
     };
+  }
+
+  private async buildEmailTransport() {
+    const host = process.env.SMTP_HOST;
+    const port = Number(process.env.SMTP_PORT || 587);
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+    if (!host || !user || !pass) {
+      throw new Error('SMTP not configured (SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS)');
+    }
+    return nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: { user, pass },
+    });
+  }
+
+  private formatListEmail(items: any[], planId: string, note?: string) {
+    const lines = items
+      .map((i) => {
+        const cost = i.estimated_cost_gbp ? `£${Number(i.estimated_cost_gbp).toFixed(2)}` : '—';
+        return `• ${i.ingredient?.name || '—'} — ${Number(i.total_quantity)} ${i.unit || ''} (${cost})${
+          i.has_item ? ' ✓' : ''
+        }`;
+      })
+      .join('\n');
+    return [
+      `Shopping list for plan ${planId}`,
+      note ? `Note: ${note}` : '',
+      '',
+      lines || 'No items.',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  async emailList(planId: string) {
+    const plan = await this.weeklyPlanRepo.findOne({
+      where: { id: planId },
+      relations: ['user'],
+    });
+    if (!plan?.user?.id) {
+      throw new Error('Plan or plan user not found');
+    }
+    const userId = plan.user.id;
+    const toEmail = (plan.user as any).email;
+    if (!toEmail) {
+      throw new Error('No recipient email found for user');
+    }
+    const list = await this.getForPlan(planId, userId);
+    const transport = await this.buildEmailTransport();
+    const from = process.env.SMTP_FROM || 'no-reply@chefbot.local';
+    const subject = 'Your grocery list';
+    const text = this.formatListEmail(list.items || [], planId, undefined);
+    await transport.sendMail({ from, to: toEmail, subject, text });
+    this.logger.log(`Sent grocery list email to ${toEmail} for plan=${planId}`);
+    return { ok: true };
   }
 
   async rebuildForPlan(planId: string) {

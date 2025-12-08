@@ -9,10 +9,12 @@ import {
   Ingredient,
   WeeklyPlan,
 } from '../database/entities';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([ShoppingListItem, PantryItem, UserIngredientPrice, Ingredient, WeeklyPlan]),
+    UsersModule,
   ],
   providers: [ShoppingListService],
   controllers: [ShoppingListController],

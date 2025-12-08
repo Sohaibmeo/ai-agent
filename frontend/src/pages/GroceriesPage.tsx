@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { UpdatePriceModal } from '../components/groceries/UpdatePriceModal';
 import type { ShoppingListItem } from '../api/types';
 import { notify } from '../lib/toast';
-import { updatePantry, updatePrice } from '../api/shoppingList';
+import { updatePantry, updatePrice, emailShoppingList } from '../api/shoppingList';
 import { useActivePlan } from '../hooks/usePlan';
 import { usePlansList } from '../hooks/usePlansList';
 
@@ -38,6 +38,20 @@ export function GroceriesPage() {
       .filter((i) => !i.has_item)
       .reduce((sum, i) => sum + (i.estimated_cost_gbp ? Number(i.estimated_cost_gbp) : 0), 0);
   }, [items]);
+
+  const emailList = async () => {
+    const planId = selectedPlanId || list?.weekly_plan_id || plan?.id;
+    if (!planId) {
+      notify.error('No plan selected');
+      return;
+    }
+    try {
+      await emailShoppingList({ planId });
+      notify.success('Sent shopping list');
+    } catch (err: any) {
+      notify.error('Could not send email');
+    }
+  };
 
   const toggleItem = (id: string) => {
     const target = items.find((i) => i.id === id);
@@ -107,6 +121,15 @@ export function GroceriesPage() {
               title="Copy shopping list (CSV)"
             >
               📋 Copy list
+            </button>
+          )}
+          {items.length > 0 && (
+            <button
+              className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
+              onClick={emailList}
+              title="Email shopping list"
+            >
+              ✉️ Email list
             </button>
           )}
         </div>

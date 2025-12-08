@@ -16,3 +16,7 @@ export function updatePantry(payload: UpdatePantryPayload) {
 export function updatePrice(payload: UpdatePricePayload) {
   return apiClient.post<ShoppingList>('/shopping-list/price', payload);
 }
+
+export function emailShoppingList(payload: { planId: string }) {
+  return apiClient.post<{ ok: boolean }>('/shopping-list/email', payload);
+}

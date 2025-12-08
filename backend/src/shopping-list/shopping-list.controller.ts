@@ -4,6 +4,7 @@ import { ActiveListDto } from './dto/active-list.dto';
 import { UserIdParamDto } from './dto/user-id-param.dto';
 import { UpdatePantryDto } from './dto/update-pantry.dto';
 import { UpdatePriceDto } from './dto/update-price.dto';
+import { EmailListDto } from './dto/email-list.dto';
 
 @Controller('shopping-list')
 export class ShoppingListController {
@@ -27,5 +28,10 @@ export class ShoppingListController {
   @Post('price')
   async updatePrice(@Body() body: UpdatePriceDto) {
     return this.shoppingListService.updatePrice(body.userId, body.ingredientId, body.pricePaid, body.quantity, body.unit, body.planId);
+  }
+
+  @Post('email')
+  async emailList(@Body() body: EmailListDto) {
+    return this.shoppingListService.emailList(body.planId);
   }
 }

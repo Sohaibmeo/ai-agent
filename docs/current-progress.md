@@ -2,21 +2,16 @@
 
 ## Backend
 
+store chat history
 
 ## Next steps
-- Build “My recipes” tab: list user custom recipes (`is_custom`, `createdByUser`), allow creating from scratch, and optionally record `parent_recipe_id` to reference originals.
-- Allows user to upload an image and the llm would try to observe and make a recipe
-- Allow user to upload a link and llm would will load th recipe from it
-- Add some recipe catalogue and make it searchable
-- Add recipe-detail “Save as my recipe” flow to call `/plans/save-custom-recipe` and surface saved customs in selection flows.
+is_custom logic for recipes
 
-Coach upgrade: Double llm usage or stronger protein and calorie requirement. currently we do get pretty good plans but they dont all follow the protein requirements mostly. so after the plan has been generated we check our totla protein requirement and calories requirement then we check the days which have the least protein and try to calculate a number which would be best then try and regenerate by single meal with the lowest protein so we can make up for it.
+User auth
 
-Lastly we will simply add a nutrition coach who will take the user curreny plan and the user can ask what he lacks or discuss goals or take advice from it
+Nodemail eamiling sending groceries to the user email
 
-And if we really developed all that and have time we can add user authentication.
-
-After we are done developing all this we can make our document and presentation
+Documentation and Presentation
 
 
 ## Future total constraints list :
