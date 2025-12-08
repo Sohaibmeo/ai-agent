@@ -114,6 +114,141 @@ export class ShoppingListService {
       .join('\n');
   }
 
+  private formatListEmailHtml(items: any[], planId: string, note?: string) {
+    const rows = (items || [])
+      .map((i) => {
+        const name = i.ingredient?.name || '—';
+        const qty = Number(i.total_quantity || 0);
+        const unit = i.unit || '';
+        const cost = i.estimated_cost_gbp ? `£${Number(i.estimated_cost_gbp).toFixed(2)}` : '—';
+        const hasItem = !!i.has_item;
+
+        return `
+          <tr>
+            <td style="padding: 12px 12px; border-bottom: 1px solid #233044; font-size: 13px; color: #f8fafc;">
+              ${name}
+            </td>
+            <td style="padding: 12px 12px; border-bottom: 1px solid #233044; font-size: 13px; color: #e2e8f0; white-space: nowrap;">
+              ${qty} ${unit}
+            </td>
+            <td style="padding: 12px 12px; border-bottom: 1px solid #233044; font-size: 13px; color: #e2e8f0; white-space: nowrap;">
+              ${cost}
+            </td>
+            <td style="padding: 12px 12px; border-bottom: 1px solid #233044; font-size: 13px; text-align: center; color: #f8fafc;">
+              ${hasItem ? '✅' : ''}
+            </td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    const noteBlock = note
+      ? `<p style="margin: 0 0 12px 0; font-size: 13px; color: #6b7280;">
+          <strong>Note:</strong> ${note}
+        </p>`
+      : '';
+
+    const appUrl = process.env.APP_BASE_URL || '#';
+
+    return `
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Your grocery list</title>
+  </head>
+  <body style="margin: 0; padding: 0; background-color: #0f172a; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#0f172a; padding: 24px 0;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 640px; background-color: #0f172a; padding: 0 16px;">
+            <tr>
+              <td style="padding-bottom: 16px; text-align: left;">
+                <span style="display:inline-flex; align-items:center; gap:8px; font-size: 12px; color: #cbd5e1; text-transform: uppercase; letter-spacing: 0.08em;">
+                  <span style="display:inline-flex; align-items:center; justify-content:center; width: 20px; height: 20px; border-radius:999px; background: radial-gradient(circle at 30% 20%, #22c55e, #16a34a); color:#0f172a; font-weight:700;">C</span>
+                  <strong style="color:#e2e8f0;">CookTrack</strong>
+                </span>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-radius: 18px; border: 1px solid #233044; background: #0b1220; padding: 20px 20px 16px 20px;">
+                  <tr>
+                    <td style="padding-bottom: 8px;">
+                      <h1 style="margin: 0 0 4px 0; font-size: 18px; color: #f8fafc; font-weight: 700;">
+                        Your grocery list is ready 🧺
+                      </h1>
+                      <p style="margin: 0; font-size: 13px; color: #cbd5e1;">
+                        Plan ID: <span style="color:#e2e8f0;">${planId}</span>
+                      </p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0 12px 0;">
+                      ${noteBlock}
+                      <p style="margin: 0; font-size: 13px; color: #cbd5e1;">
+                        Here’s a summary of what you need to buy. Tick things off in the app as you shop.
+                      </p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding-top: 8px;">
+                      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; border-radius: 12px; overflow: hidden; background-color:#0f172a; border: 1px solid #233044;">
+                        <thead>
+                          <tr style="background: linear-gradient(to right, rgba(16,185,129,0.18), rgba(52,211,153,0.12));">
+                            <th align="left" style="padding: 10px 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color:#e2f3eb; border-bottom: 1px solid #233044;">
+                              Ingredient
+                            </th>
+                            <th align="left" style="padding: 10px 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color:#e2f3eb; border-bottom: 1px solid #233044;">
+                              Quantity
+                            </th>
+                            <th align="left" style="padding: 10px 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color:#e2f3eb; border-bottom: 1px solid #233044;">
+                              Est. Cost
+                            </th>
+                            <th align="center" style="padding: 10px 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color:#e2f3eb; border-bottom: 1px solid #233044;">
+                              Have
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          ${
+                            rows ||
+                            `<tr>
+                              <td colspan="4" style="padding: 12px; font-size: 13px; color:#cbd5e1; text-align:center;">
+                                No items in this list.
+                              </td>
+                            </tr>`
+                          }
+                        </tbody>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding-top: 16px; text-align:center;">
+                      <a href="${appUrl}" target="_blank" style="display:inline-block; padding: 10px 18px; border-radius: 999px; background: linear-gradient(to right, #22c55e, #4ade80); color:#022c22; font-size: 13px; font-weight:600; text-decoration:none;">
+                        Open in CookTrack App
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding-top: 12px; text-align:center;">
+                <p style="margin: 0; font-size: 11px; color:#6b7280;">
+                  You’re receiving this email because you generated a grocery list in CookTrack.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+    `;
+  }
+
   async emailList(planId: string) {
     const plan = await this.weeklyPlanRepo.findOne({
       where: { id: planId },
@@ -129,10 +264,12 @@ export class ShoppingListService {
     }
     const list = await this.getForPlan(planId, userId);
     const transport = await this.buildEmailTransport();
-    const from = process.env.SMTP_FROM || 'no-reply@chefbot.local';
+    const from = process.env.SMTP_FROM || 'CookTrack <no-reply@cooktrack.local>';
     const subject = 'Your grocery list';
-    const text = this.formatListEmail(list.items || [], planId, undefined);
-    await transport.sendMail({ from, to: toEmail, subject, text });
+    const items = list.items || [];
+    const text = this.formatListEmail(items, planId, undefined);
+    const html = this.formatListEmailHtml(items, planId, undefined);
+    await transport.sendMail({ from, to: toEmail, subject, text, html });
     this.logger.log(`Sent grocery list email to ${toEmail} for plan=${planId}`);
     return { ok: true };
   }

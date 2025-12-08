@@ -20,6 +20,7 @@ export function GroceriesPage() {
   const [items, setItems] = useState(list?.items || []);
   const [priceTarget, setPriceTarget] = useState<ShoppingListItem | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isEmailSending, setIsEmailSending] = useState(false);
 
   useEffect(() => {
     setItems(list?.items || []);
@@ -46,10 +47,14 @@ export function GroceriesPage() {
       return;
     }
     try {
+      setIsEmailSending(true);
+      notify.info('Sending shopping list...');
       await emailShoppingList({ planId });
       notify.success('Sent shopping list');
     } catch (err: any) {
       notify.error('Could not send email');
+    } finally {
+      setIsEmailSending(false);
     }
   };
 
@@ -127,6 +132,8 @@ export function GroceriesPage() {
             <button
               className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
               onClick={emailList}
+              disabled={isEmailSending}
+              style={isEmailSending ? { opacity: 0.6, cursor: 'not-allowed' } : undefined}
               title="Email shopping list"
             >
               ✉️ Email list
