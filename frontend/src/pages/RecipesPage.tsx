@@ -15,7 +15,9 @@ export function RecipesPage() {
   const [aiNote, setAiNote] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [showAiForm, setShowAiForm] = useState(false);
+  const [showImageForm, setShowImageForm] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const { startRun, updateStep, endRun, setError } = useAgentPipeline();
 
   const fileToBase64 = (file: File): Promise<string> =>
@@ -114,7 +116,10 @@ export function RecipesPage() {
             if (isGenerating) return;
             setShowCreateModal(false);
             setShowAiForm(false);
+            setShowImageForm(false);
             setAiNote('');
+            setImageFile(null);
+            setImagePreview(null);
           }}
         >
           <div
@@ -130,13 +135,16 @@ export function RecipesPage() {
                     <div className="text-xs uppercase text-slate-500">Describe with AI</div>
                     <h2 className="text-lg font-semibold text-slate-900">Tell us about the recipe</h2>
                   </div>
-                  <button
-                    className="text-slate-500 hover:text-slate-800 disabled:opacity-50"
-                    disabled={isGenerating}
-                    onClick={() => setShowAiForm(false)}
-                  >
-                    ✕
-                  </button>
+                    <button
+                      className="text-slate-500 hover:text-slate-800 disabled:opacity-50"
+                      disabled={isGenerating}
+                      onClick={() => {
+                        setShowAiForm(false);
+                        setShowImageForm(false);
+                      }}
+                    >
+                      ✕
+                    </button>
                 </div>
                 <div className="space-y-3">
                   <textarea
@@ -208,8 +216,129 @@ export function RecipesPage() {
                   </div>
                 </div>
               </>
-            ) : (
+            ) : showImageForm ? (
               <>
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <div className="text-xs uppercase text-slate-500">From an image</div>
+                      <h2 className="text-lg font-semibold text-slate-900">Upload a photo of the dish</h2>
+                    </div>
+                    <button
+                      className="text-slate-500 hover:text-slate-800 disabled:opacity-50"
+                      disabled={isGenerating}
+                      onClick={() => {
+                        setShowAiForm(false);
+                        setImageFile(null);
+                        setImagePreview(null);
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="w-full rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        {imagePreview ? (
+                          <img src={imagePreview} alt="Preview" className="h-16 w-16 rounded-lg object-cover border" />
+                        ) : (
+                          <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400">
+                            📷
+                          </div>
+                        )}
+                        <div className="text-sm text-slate-700">
+                          {imageFile ? imageFile.name : 'Choose an image of your dish'}
+                          <div className="text-xs text-slate-500">JPEG/PNG up to ~8MB</div>
+                        </div>
+                      </div>
+                      <label className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0] || null;
+                            setImageFile(file);
+                            if (file) {
+                              const previewUrl = URL.createObjectURL(file);
+                              setImagePreview(previewUrl);
+                            } else {
+                              setImagePreview(null);
+                            }
+                          }}
+                          disabled={isGenerating}
+                        />
+                        Upload image
+                      </label>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                        disabled={isGenerating}
+                        onClick={() => {
+                          setImageFile(null);
+                          setImagePreview(null);
+                          setShowAiForm(false);
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+                        onClick={async () => {
+                          if (!imageFile) return;
+                          try {
+                            setIsGenerating(true);
+                            const steps = [
+                              { id: 'upload', label: 'Reading image', status: 'active' as const, progressHint: 10 },
+                              { id: 'vision', label: 'Describing dish', status: 'pending' as const, progressHint: 40 },
+                              { id: 'draft-recipe', label: 'Drafting recipe with AI', status: 'pending' as const, progressHint: 70 },
+                              { id: 'finishing', label: 'Saving recipe', status: 'pending' as const, progressHint: 95 },
+                            ];
+                            startRun('generic-llm', {
+                              title: 'Creating your recipe from the photo...',
+                              subtitle: 'Analyzing the image and drafting the recipe.',
+                              steps,
+                            });
+                            updateStep('upload', 'done', undefined, undefined, 18);
+                            updateStep('vision', 'active', 'Describing the dish...', undefined, 36);
+                            const base64 = await fileToBase64(imageFile);
+                            updateStep('vision', 'done', undefined, undefined, 58);
+                            updateStep('draft-recipe', 'active', 'Drafting recipe...', undefined, 76);
+                            const created = await generateRecipeFromImage({
+                              userId: DEMO_USER_ID,
+                              imageBase64: base64,
+                            });
+                            updateStep('draft-recipe', 'done', undefined, undefined, 86);
+                            updateStep('finishing', 'active', 'Saving recipe...', undefined, 96);
+                            updateStep('finishing', 'done', undefined, undefined, 100);
+                            setTimeout(() => endRun(), 400);
+                            setShowCreateModal(false);
+                            setShowAiForm(false);
+                            setImageFile(null);
+                            setImagePreview(null);
+                            setAiNote('');
+                            navigate(`/recipes/${created.id}`);
+                          } catch (e) {
+                            setError('Could not create recipe from image. Try again or use AI text.');
+                            setTimeout(() => endRun(), 600);
+                            setShowCreateModal(false);
+                            setShowAiForm(false);
+                            setImageFile(null);
+                            setImagePreview(null);
+                            navigate('/recipes/new');
+                          } finally {
+                            setIsGenerating(false);
+                          }
+                        }}
+                        disabled={isGenerating || !imageFile}
+                      >
+                        {isGenerating ? 'Processing...' : 'Create from image'}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-xs uppercase text-slate-500">New recipe</div>
@@ -221,7 +350,10 @@ export function RecipesPage() {
                     onClick={() => {
                       setShowCreateModal(false);
                       setShowAiForm(false);
+                      setShowImageForm(false);
                       setAiNote('');
+                      setImageFile(null);
+                      setImagePreview(null);
                     }}
                   >
                     ✕
@@ -231,64 +363,11 @@ export function RecipesPage() {
                   <Card className="p-4 flex flex-col gap-3">
                     <div className="text-sm font-semibold text-slate-900">From an image</div>
                     <p className="text-xs text-slate-500">Upload a dish photo and let AI draft the recipe.</p>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="text-xs text-slate-600"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0] || null;
-                        setImageFile(file);
-                      }}
-                      disabled={isGenerating}
-                    />
                     <button
-                      className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
-                      onClick={async () => {
-                        if (!imageFile) return;
-                        try {
-                          setIsGenerating(true);
-                          const steps = [
-                            { id: 'upload', label: 'Reading image', status: 'active' as const, progressHint: 10 },
-                            { id: 'vision', label: 'Describing dish', status: 'pending' as const, progressHint: 40 },
-                            { id: 'draft-recipe', label: 'Drafting recipe with AI', status: 'pending' as const, progressHint: 70 },
-                            { id: 'finishing', label: 'Saving recipe', status: 'pending' as const, progressHint: 95 },
-                          ];
-                          startRun('generic-llm', {
-                            title: 'Creating your recipe from the photo...',
-                            subtitle: 'Analyzing the image and drafting the recipe.',
-                            steps,
-                          });
-                          updateStep('upload', 'done', undefined, undefined, 18);
-                          updateStep('vision', 'active', 'Describing the dish...', undefined, 36);
-                          const base64 = await fileToBase64(imageFile);
-                          updateStep('vision', 'done', undefined, undefined, 58);
-                          updateStep('draft-recipe', 'active', 'Drafting recipe...', undefined, 76);
-                          const created = await generateRecipeFromImage({
-                            userId: DEMO_USER_ID,
-                            imageBase64: base64,
-                          });
-                          updateStep('draft-recipe', 'done', undefined, undefined, 86);
-                          updateStep('finishing', 'active', 'Saving recipe...', undefined, 96);
-                          updateStep('finishing', 'done', undefined, undefined, 100);
-                          setTimeout(() => endRun(), 400);
-                          setShowCreateModal(false);
-                          setShowAiForm(false);
-                          setAiNote('');
-                          setImageFile(null);
-                          navigate(`/recipes/${created.id}`);
-                        } catch (e) {
-                          setError('Could not create recipe from image. Try again or use AI text.');
-                          setTimeout(() => endRun(), 600);
-                          setShowCreateModal(false);
-                          setShowAiForm(false);
-                          navigate('/recipes/new');
-                        } finally {
-                          setIsGenerating(false);
-                        }
-                      }}
-                      disabled={isGenerating || !imageFile}
+                      className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
+                      onClick={() => setShowImageForm(true)}
                     >
-                      {isGenerating ? 'Processing...' : 'Create from image'}
+                      Create from image
                     </button>
                   </Card>
                   <Card className="p-4 flex flex-col gap-3">
