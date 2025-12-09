@@ -18,7 +18,7 @@ export function Sidebar() {
         <div className="flex items-center gap-2">
           <div className="h-9 w-9 rounded-lg bg-slate-900 text-white text-center leading-9 font-semibold">MP</div>
           <div>
-            <div className="text-sm font-semibold text-slate-900">Meal Planner</div>
+            <div className="text-sm font-semibold text-slate-900">OverCooked</div>
             <div className="text-xs text-slate-500">AI-assisted</div>
           </div>
         </div>

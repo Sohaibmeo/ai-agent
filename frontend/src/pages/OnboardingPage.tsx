@@ -153,7 +153,7 @@ export function OnboardingPage() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-sm uppercase tracking-[0.16em] text-emerald-700">Welcome, {user?.email}</p>
-            <h1 className="mt-1 text-3xl font-semibold text-slate-900">Let&apos;s tune ChefBot to your body</h1>
+            <h1 className="mt-1 text-3xl font-semibold text-slate-900">Let&apos;s tune OverCooked to your body</h1>
             <p className="mt-1 text-sm text-slate-500">
               This takes under a minute. We&apos;ll use it to set your calories and protein targets.
             </p>
@@ -431,7 +431,7 @@ export function OnboardingPage() {
 
           <div className="space-y-3 border border-slate-200 rounded-2xl bg-slate-50 p-4">
             <p className="text-[11px] font-medium text-emerald-700 uppercase tracking-[0.2em]">Daily targets (preview)</p>
-            <p className="text-xs text-slate-500">Based on your current inputs. ChefBot will aim your weekly plan around these numbers.</p>
+            <p className="text-xs text-slate-500">Based on your current inputs. OverCooked will aim your weekly plan around these numbers.</p>
             <div className="mt-2 grid grid-cols-3 gap-2">
               <div className="rounded-xl bg-white border border-slate-200 px-3 py-2">
                 <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Calories</p>

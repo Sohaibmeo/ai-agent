@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 
 type ChatMessage = { id: string; role: 'user' | 'bot' | 'error'; text: string };
 
-const ChefBotIcon = ({ pulse }: { pulse?: boolean }) => {
+const OverCookedIcon = ({ pulse }: { pulse?: boolean }) => {
   const floatStyle = pulse ? { animation: 'bot-float 4s ease-in-out infinite' } : undefined;
   const stroke = '#b57a3d';
   return (
@@ -184,7 +184,7 @@ export function ExplainBotWidget() {
             onClick={() => setOpen(true)}
             className="group flex items-center gap-3 rounded-full border border-emerald-200 bg-white px-3 py-2 pr-4 shadow-[0_18px_30px_rgba(0,0,0,0.12)] transition hover:-translate-y-[1px] hover:shadow-[0_22px_36px_rgba(0,0,0,0.16)]"
           >
-            <ChefBotIcon pulse />
+            <OverCookedIcon pulse />
             <div className="text-left">
               <div className="text-[11px] uppercase tracking-wide text-emerald-600 font-semibold">Explain agent</div>
               <div className="text-xs text-slate-700">Need a tip? Ask me.</div>
@@ -203,10 +203,10 @@ export function ExplainBotWidget() {
           >
             <div className="flex items-center justify-between rounded-t-3xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-4 py-3 text-white">
               <div className="flex items-center gap-2">
-                <ChefBotIcon />
+                  <OverCookedIcon />
                 <div>
                   <div className="text-[11px] uppercase tracking-wide text-emerald-100">Explain agent</div>
-                  <div className="text-sm font-semibold">ChefBot is listening</div>
+                  <div className="text-sm font-semibold">OverCooked is listening</div>
                 </div>
               </div>
               <div className="flex items-center gap-2">
