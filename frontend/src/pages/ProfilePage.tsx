@@ -349,7 +349,7 @@ export function ProfilePage() {
           ) : (
             <div className="space-y-3 text-sm text-slate-700">
               <p className="text-xs text-slate-500">
-                Based on your current inputs. ChefBot will aim your weekly plan around these numbers.
+                Based on your current inputs. OverCooked will aim your weekly plan around these numbers.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">

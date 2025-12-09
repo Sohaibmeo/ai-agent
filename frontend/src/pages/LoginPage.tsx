@@ -52,7 +52,7 @@ export function LoginPage() {
         <div className="mb-8 text-center">
           <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 border border-emerald-200">
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs font-medium text-emerald-700">ChefBot • Meal Planning</span>
+            <span className="text-xs font-medium text-emerald-700">OverCooked • Meal Planning</span>
           </div>
           <h1 className="mt-4 text-2xl font-semibold text-slate-900">Welcome back</h1>
           <p className="mt-1 text-xs text-slate-500">Log in to view and tweak your weekly plan.</p>

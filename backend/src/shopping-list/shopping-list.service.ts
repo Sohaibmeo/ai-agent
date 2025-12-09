@@ -162,10 +162,10 @@ export class ShoppingListService {
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 640px; background-color: #0f172a; padding: 0 16px;">
             <tr>
               <td style="padding-bottom: 16px; text-align: left;">
-                <span style="display:inline-flex; align-items:center; gap:8px; font-size: 12px; color: #cbd5e1; text-transform: uppercase; letter-spacing: 0.08em;">
-                  <span style="display:inline-flex; align-items:center; justify-content:center; width: 20px; height: 20px; border-radius:999px; background: radial-gradient(circle at 30% 20%, #22c55e, #16a34a); color:#0f172a; font-weight:700;">C</span>
-                  <strong style="color:#e2e8f0;">CookTrack</strong>
-                </span>
+                  <span style="display:inline-flex; align-items:center; gap:8px; font-size: 12px; color: #cbd5e1; text-transform: uppercase; letter-spacing: 0.08em;">
+                    <span style="display:inline-flex; align-items:center; justify-content:center; width: 20px; height: 20px; border-radius:999px; background: radial-gradient(circle at 30% 20%, #22c55e, #16a34a); color:#0f172a; font-weight:700;">O</span>
+                    <strong style="color:#e2e8f0;">OverCooked</strong>
+                  </span>
               </td>
             </tr>
             <tr>
@@ -224,7 +224,7 @@ export class ShoppingListService {
                   <tr>
                     <td style="padding-top: 16px; text-align:center;">
                       <a href="${appUrl}" target="_blank" style="display:inline-block; padding: 10px 18px; border-radius: 999px; background: linear-gradient(to right, #22c55e, #4ade80); color:#022c22; font-size: 13px; font-weight:600; text-decoration:none;">
-                        Open in CookTrack App
+                        Open in OverCooked
                       </a>
                     </td>
                   </tr>
@@ -233,9 +233,9 @@ export class ShoppingListService {
             </tr>
             <tr>
               <td style="padding-top: 12px; text-align:center;">
-                <p style="margin: 0; font-size: 11px; color:#6b7280;">
-                  You’re receiving this email because you generated a grocery list in CookTrack.
-                </p>
+                  <p style="margin: 0; font-size: 11px; color:#6b7280;">
+                    You’re receiving this email because you generated a grocery list in OverCooked.
+                  </p>
               </td>
             </tr>
           </table>
@@ -262,7 +262,7 @@ export class ShoppingListService {
     }
     const list = await this.getForPlan(planId, userId);
     const transport = await this.buildEmailTransport();
-    const from = process.env.SMTP_FROM || 'CookTrack <no-reply@cooktrack.local>';
+    const from = process.env.SMTP_FROM || 'OverCooked <no-reply@overcooked.ai>';
     const subject = 'Your grocery list';
     const items = list.items || [];
     const text = this.formatListEmail(items, planId, undefined);

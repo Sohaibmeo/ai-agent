@@ -40,11 +40,11 @@ export class AuthService {
     await this.userRepo.save(user);
 
     const transport = await this.buildEmailTransport();
-    const from = process.env.SMTP_FROM || 'ChefBot <no-reply@cooktrack.com>';
+    const from = process.env.SMTP_FROM || 'OverCooked <no-reply@overcooked.ai>';
     await transport.sendMail({
       from,
       to: email,
-      subject: 'ChefBot password reset',
+      subject: 'OverCooked password reset',
       text: `Your temporary password is: ${tempPassword}\n\nUse it to log in and update your password immediately.`,
     });
   }
