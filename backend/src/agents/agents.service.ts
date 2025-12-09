@@ -383,21 +383,24 @@ export class AgentsService {
 
   async describeImage(payload: { imageBase64: string; note?: string }) {
     if (!payload.imageBase64) throw new Error('Image is required');
+    const visionClient = this.createClient('vision');
+    const imageData = `data:image/jpeg;base64,${payload.imageBase64}`;
+    const imageField =
+      visionClient.provider === 'openai'
+        ? { type: 'image_url', image_url: { url: imageData } }
+        : { type: 'image_url', image_url: imageData };
     const prompt = [
       new SystemMessage(
         'You are a food vision model. Return ONE short sentence (max ~270 chars) naming the dish and 2-4 key ingredients or toppings. ' +
           'Focus on the food only. Avoid camera/setting words.',
       ),
       new HumanMessage({
-        content: [
-          { type: 'text', text: payload.note || 'Describe this dish.' },
-          { type: 'image_url', image_url: `data:image/jpeg;base64,${payload.imageBase64}` },
-        ],
+        content: [{ type: 'text', text: payload.note || 'Describe this dish.' }, imageField],
       }),
     ];
 
-    const visionClient = this.createClient('vision');
-    const llm = new ChatOpenAI(this.buildChatOptions(visionClient, { temperature: 0 }));
+    const visionOptions = visionClient.provider === 'openai' ? {} : { temperature: 0 };
+    const llm = new ChatOpenAI(this.buildChatOptions(visionClient, visionOptions));
 
     const res = await llm.invoke(prompt);
     const text = (res as any)?.content || (res as any)?.text || '';
