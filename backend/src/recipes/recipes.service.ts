@@ -51,7 +51,8 @@ export class RecipesService {
     );
   }
 
-  async listForUser(userId?: string, search?: string) {
+  async listForUser(userId: string, opts: { search?: string; mine?: boolean } = {}) {
+    const { search, mine } = opts;
     const qb = this.recipeRepo
       .createQueryBuilder('recipe')
       .leftJoinAndSelect('recipe.ingredients', 'ingredients')
@@ -59,7 +60,12 @@ export class RecipesService {
       .orderBy('recipe.name', 'ASC')
       .limit(200);
 
-    // Show all recipes regardless of creator/source
+    if (mine) {
+      qb.where('recipe.createdByUser = :uid', { uid: userId });
+    } else {
+      qb.where('(recipe.createdByUser = :uid OR recipe.createdByUser IS NULL)', { uid: userId });
+    }
+
     this.applySearchFilter(qb, search);
     return qb.getMany();
   }

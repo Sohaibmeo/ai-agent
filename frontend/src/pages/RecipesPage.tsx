@@ -11,6 +11,7 @@ export function RecipesPage() {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [mineOnly, setMineOnly] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [aiNote, setAiNote] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -38,9 +39,9 @@ export function RecipesPage() {
   }, [searchTerm]);
 
   const { data: recipes, isLoading } = useQuery({
-    queryKey: ['recipes', debouncedSearch],
+    queryKey: ['recipes', debouncedSearch, mineOnly],
     enabled: Boolean(user?.id),
-    queryFn: () => fetchRecipes({ search: debouncedSearch }),
+    queryFn: () => fetchRecipes({ search: debouncedSearch, mine: mineOnly }),
   });
 
   return (
@@ -49,6 +50,17 @@ export function RecipesPage() {
         <div>
           <h1 className="text-lg font-semibold text-slate-900">Your recipes</h1>
           <p className="text-xs text-slate-500">Browse, search and create recipes you can reuse in your plans.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-2 text-xs text-slate-700">
+            <input
+              type="checkbox"
+              className="rounded border-slate-300 text-emerald-600"
+              checked={mineOnly}
+              onChange={(e) => setMineOnly(e.target.checked)}
+            />
+            My recipes only
+          </label>
         </div>
       </div>
 

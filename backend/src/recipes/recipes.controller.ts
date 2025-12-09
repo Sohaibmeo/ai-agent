@@ -13,9 +13,10 @@ export class RecipesController {
   constructor(private readonly recipesService: RecipesService) {}
 
   @Get()
-  list(@Req() req: any, @Query('search') search?: string) {
+  list(@Req() req: any, @Query('search') search?: string, @Query('mine') mine?: string) {
     const userId = req.user?.userId as string;
-    return this.recipesService.listForUser(userId, search);
+    const mineOnly = String(mine || '').toLowerCase() === 'true';
+    return this.recipesService.listForUser(userId, { search, mine: mineOnly });
   }
 
   @Get('candidates')

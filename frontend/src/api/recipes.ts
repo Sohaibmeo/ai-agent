@@ -25,9 +25,10 @@ export function fetchRecipeById(id: string) {
   return apiClient.get<RecipeWithIngredients>(`/recipes/${id}`);
 }
 
-export function fetchRecipes(params: { search?: string } = {}) {
+export function fetchRecipes(params: { search?: string; mine?: boolean } = {}) {
   const searchParams = new URLSearchParams();
   if (params.search) searchParams.set('search', params.search);
+  if (params.mine) searchParams.set('mine', 'true');
   const qs = searchParams.toString();
   return apiClient.get<Recipe[]>(`/recipes${qs ? `?${qs}` : ''}`);
 }
