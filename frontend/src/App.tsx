@@ -12,7 +12,6 @@ import { AgentPipelineProvider } from './hooks/useAgentPipeline';
 import { AgentPipelineModal } from './components/agents/AgentPipelineModal';
 import { ExplainBotWidget } from './components/agents/ExplainBotWidget';
 import { LoginPage } from './pages/LoginPage';
-import { RegisterPage } from './pages/RegisterPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { useAuth } from './context/AuthContext';
 import { Navigate, useLocation } from 'react-router-dom';
@@ -42,7 +41,6 @@ function App() {
       <AgentPipelineProvider>
         <Routes>
           <Route path="/auth/login" element={<LoginPage />} />
-          <Route path="/auth/register" element={<RegisterPage />} />
           <Route path="/onboarding" element={<OnboardingPage />} />
           <Route
             path="/*"

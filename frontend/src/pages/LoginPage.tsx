@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { login } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
 
@@ -79,10 +79,7 @@ export function LoginPage() {
           </button>
 
           <div className="mt-4 text-center text-[11px] text-slate-600">
-            Don&apos;t have an account?{' '}
-            <Link to="/auth/register" className="text-emerald-600 hover:text-emerald-700">
-              Create one
-            </Link>
+            Need an account? Ask the admin to create one for you.
           </div>
         </form>
       </div>

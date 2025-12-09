@@ -1,45 +1,17 @@
-import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
-import { User, UserProfile, UserPreferences } from '../database/entities';
+import { User, UserProfile } from '../database/entities';
 
 @Injectable()
 export class AuthService {
   constructor(
     @InjectRepository(User) private readonly userRepo: Repository<User>,
     @InjectRepository(UserProfile) private readonly profileRepo: Repository<UserProfile>,
-    @InjectRepository(UserPreferences) private readonly prefsRepo: Repository<UserPreferences>,
     private readonly jwt: JwtService,
   ) {}
-
-  async register(email: string, password: string) {
-    const existing = await this.userRepo.findOne({ where: { email } });
-    if (existing) throw new BadRequestException('Email already in use');
-
-    const password_hash = await bcrypt.hash(password, 10);
-    const user = this.userRepo.create({ email, password_hash });
-    const saved = await this.userRepo.save(user);
-
-    const profile = this.profileRepo.create({
-      user_id: saved.id,
-      allergy_keys: [],
-    });
-    await this.profileRepo.save(profile);
-
-    const prefs = this.prefsRepo.create({
-      user: saved,
-      liked_ingredients: {},
-      disliked_ingredients: {},
-      liked_meals: {},
-      disliked_meals: {},
-      preferred_cuisines: {},
-    });
-    await this.prefsRepo.save(prefs);
-
-    return this.buildAuthResponse(saved);
-  }
 
   async login(email: string, password: string) {
     const user = await this.userRepo.findOne({ where: { email } });
