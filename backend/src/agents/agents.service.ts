@@ -22,6 +22,13 @@ type WeekState = {
   notes?: string; // can hold diversity / constraint hints for the LLM
 };
 
+type LlmClient = {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  provider: 'local' | 'openai';
+};
+
 @Injectable()
 export class AgentsService {
   private readonly logger = new Logger(AgentsService.name);
@@ -36,6 +43,8 @@ export class AgentsService {
     process.env.LLM_MODEL_VISION || process.env.OPENAI_MODEL_VISION || this.coachModel;
   private llmBaseUrl = process.env.LLM_BASE_URL || '';
   private llmApiKey = process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
+  private openaiMaxCompletionTokens = Number(process.env.LLM_MAX_COMPLETION_TOKENS_OPENAI) || 4096;
+  private localMaxTokens = Number(process.env.LLM_MAX_TOKENS_LOCAL) || 800;
   private logAgent(kind: string, message: string) {
     this.logger.log(`[${kind}] ${message}`);
   }
@@ -140,13 +149,9 @@ export class AgentsService {
   async explain(message: string, context?: string, userId?: string) {
     this.logAgent('explain', `start user=${userId || 'none'} msg="${message.slice(0, 120)}"`);
     const client = this.createClient('explain');
-    const chat = new ChatOpenAI({
-      model: client.model,
-      apiKey: client.apiKey,
-      temperature: 0.4,
-      maxTokens: 800,
-      configuration: { baseURL: client.baseUrl },
-    });
+    const chat = new ChatOpenAI(
+      this.buildChatOptions(client, { temperature: 0.4 }),
+    );
 
     const { mergedContext, includePlan, ctxLength } = await this.buildExplainContext(message, context, userId);
 
@@ -391,12 +396,8 @@ export class AgentsService {
       }),
     ];
 
-    const llm = new ChatOpenAI({
-      modelName: this.visionModel,
-      temperature: 0,
-      configuration: { baseURL: this.llmBaseUrl },
-      apiKey: this.llmApiKey,
-    });
+    const visionClient = this.createClient('vision');
+    const llm = new ChatOpenAI(this.buildChatOptions(visionClient, { temperature: 0 }));
 
     const res = await llm.invoke(prompt);
     const text = (res as any)?.content || (res as any)?.text || '';
@@ -782,17 +783,7 @@ export class AgentsService {
     kind: 'review' | 'coach' | 'explain' | 'nutrition',
   ): Promise<any> {
     const client = this.createClient(kind);
-    const chat = new ChatOpenAI({
-      model,
-      maxTokens: 800,
-      apiKey: client.apiKey,
-      configuration: {
-        baseURL: client.baseUrl,
-      },
-      modelKwargs: {
-        response_format: { type: 'json_object' },
-      },
-    });
+    const chat = new ChatOpenAI(this.buildChatOptions(client, {}, { jsonResponse: true }));
 
     const lcMessages = messages.map((m) =>
       m.role === 'system' ? new SystemMessage(m.content) : new HumanMessage(m.content),
@@ -800,24 +791,40 @@ export class AgentsService {
     const start = Date.now();
     try {
       const res = await chat.invoke(lcMessages);
-      const content = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
-      if (!content) {
-        this.logAgent(kind, `empty response model=${model}`);
-        throw new Error('LLM returned empty content');
+      let raw: any = (res as any)?.content ?? (res as any)?.text ?? '';
+      if (Array.isArray(raw)) {
+        raw = raw
+          .map((blk: any) => {
+            if (typeof blk === 'string') return blk;
+            if (blk && typeof blk.text === 'string') return blk.text;
+            if (blk && typeof blk.content === 'string') return blk.content;
+            return '';
+          })
+          .join('');
       }
-      const parsed = JSON.parse(content);
-      this.logAgent(kind, `success model=${model} provider=${this.provider} latency_ms=${Date.now() - start}`);
+
+      if (!raw || (typeof raw === 'string' && !raw.trim())) {
+        this.logAgent(
+          kind,
+          `empty or non-textual content model=${model} fullRes=${JSON.stringify(res).slice(0, 500)}...`,
+        );
+        throw new Error('LLM returned empty textual content');
+      }
+
+      const contentStr = typeof raw === 'string' ? raw : JSON.stringify(raw);
+      const parsed = JSON.parse(contentStr);
+      this.logAgent(kind, `success model=${model} provider=${client.provider} latency_ms=${Date.now() - start}`);
       return parsed;
     } catch (err) {
       this.logger.error(
-        `[${kind}] model=${model} provider=${this.provider} failed: ${(err as Error).message}`,
+        `[${kind}] model=${model} provider=${client.provider} failed: ${(err as Error).message}`,
       );
       throw err;
     }
   }
 
-  private createClient(kind: 'review' | 'coach' | 'explain' | 'nutrition') {
-    const provider = this.provider === 'openai' ? 'openai' : 'local';
+  private createClient(kind: 'review' | 'coach' | 'explain' | 'nutrition' | 'vision'): LlmClient {
+    const provider = ['openai', 'cloud'].includes(this.provider) ? 'openai' : 'local';
     const apiKey = provider === 'openai' ? process.env.OPENAI_API_KEY || this.llmApiKey : this.llmApiKey;
     const baseUrl =
       provider === 'openai'
@@ -833,7 +840,65 @@ export class AgentsService {
           ? this.coachModel
           : kind === 'explain'
             ? this.explainModel
-            : this.nutritionModel;
-    return { baseUrl, apiKey, model };
+            : kind === 'vision'
+              ? this.visionModel
+              : this.nutritionModel;
+    return { baseUrl, apiKey, model, provider };
+  }
+
+  private buildChatOptions(
+    client: LlmClient,
+    overrides: Record<string, any> = {},
+    options?: { jsonResponse?: boolean },
+  ) {
+    const {
+      modelKwargs: overrideKwargs,
+      maxTokens: overrideMaxTokens,
+      maxCompletionTokens: overrideMaxCompletionTokens,
+      temperature: overrideTemperature,
+      ...rest
+    } = overrides;
+
+    const result: Record<string, any> = {
+      model: client.model,
+      apiKey: client.apiKey,
+      configuration: { baseURL: client.baseUrl },
+      ...rest,
+    };
+    if (overrideTemperature !== undefined) {
+      if (client.provider === 'openai' && overrideTemperature !== 1) {
+        this.logger.warn(
+          `[agents] skipping temperature=${overrideTemperature} for openai model=${client.model} (only 1 supported)`,
+        );
+      } else {
+        result.temperature = overrideTemperature;
+      }
+    }
+
+    const responseFormat =
+      options?.jsonResponse
+        ? { response_format: { type: 'json_object' } }
+        : undefined;
+
+    if (client.provider === 'openai') {
+      const modelKwargs = {
+        max_completion_tokens:
+          overrideMaxCompletionTokens ?? overrideMaxTokens ?? this.openaiMaxCompletionTokens,
+        ...(responseFormat || {}),
+        ...(overrideKwargs || {}),
+      };
+      result.modelKwargs = modelKwargs;
+    } else {
+      result.maxTokens = overrideMaxTokens ?? this.localMaxTokens;
+      const modelKwargs = {
+        ...(responseFormat || {}),
+        ...(overrideKwargs || {}),
+      };
+      if (Object.keys(modelKwargs).length) {
+        result.modelKwargs = modelKwargs;
+      }
+    }
+
+    return result;
   }
 }
