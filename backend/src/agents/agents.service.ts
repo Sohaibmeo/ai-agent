@@ -51,7 +51,7 @@ export class AgentsService {
     process.env.LLM_MODEL_VISION || process.env.OPENAI_MODEL_VISION || this.coachModel;
   private llmBaseUrl = process.env.LLM_BASE_URL || '';
   private llmApiKey = process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
-  private openaiMaxCompletionTokens = Number(process.env.LLM_MAX_COMPLETION_TOKENS_OPENAI) || 4096;
+  private openaiMaxCompletionTokens = Number(process.env.LLM_MAX_COMPLETION_TOKENS_OPENAI) || 8000;
   private localMaxTokens = Number(process.env.LLM_MAX_TOKENS_LOCAL) || 800;
   private logAgent(kind: string, message: string) {
     this.logger.log(`[${kind}] ${message}`);

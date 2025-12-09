@@ -1,14 +1,14 @@
-import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as dotenv from 'dotenv';
-import { WsAdapter } from '@nestjs/platform-ws';
-import * as bodyParser from 'body-parser';
+import bodyParser from 'body-parser';
 
-dotenv.config();
+let app: INestApplication | undefined;
 
-async function bootstrap() {
+async function bootstrap(): Promise<INestApplication> {
+  dotenv.config();
+
   const allowedOrigins = (process.env.FRONTEND_URLS || '')
     .split(',')
     .map((url) => url.trim())
@@ -28,21 +28,26 @@ async function bootstrap() {
         }
       : true;
 
-  const app = await NestFactory.create(AppModule, { cors: corsOptions });
-  app.use(bodyParser.json({ limit: '10mb' }));
-  app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
-  app.useWebSocketAdapter(new WsAdapter(app));
-  app.useGlobalPipes(
+  const nestApp = await NestFactory.create(AppModule);
+  nestApp.enableCors(corsOptions);
+  nestApp.use(bodyParser.json({ limit: '10mb' }));
+  nestApp.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
+  nestApp.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: false,
       transform: true,
     }),
   );
-  const port = process.env.PORT || 3000;
-  await app.listen(port);
-  // eslint-disable-next-line no-console
-  console.log(`API listening on port ${port}`);
+  await nestApp.init(); // ❗ no app.listen() in serverless
+  return nestApp;
 }
 
-bootstrap();
+// This is what Vercel will actually call
+export default async function handler(req: any, res: any) {
+  if (!app) {
+    app = await bootstrap();
+  }
+  const instance = app.getHttpAdapter().getInstance();
+  return instance(req, res);
+}
