@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '../components/shared/Card';
 import { useActivePlan } from '../hooks/usePlan';
@@ -44,10 +44,8 @@ const toIngredientRows = (ris: any[] | undefined): IngredientRow[] =>
 export function RecipeDetailPage() {
   const { mealId, recipeId: recipeIdParam } = useParams<{ mealId?: string; recipeId?: string }>();
   const navigate = useNavigate();
-  const location = useLocation();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const userId = user?.id as string;
   const { data: plan, isLoading } = useActivePlan();
   const { runWithLlmLoader } = useLlmAction({
     kind: 'adjust-recipe',
