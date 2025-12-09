@@ -104,7 +104,7 @@ export const RECIPE_GENERATOR_SYSTEM_PROMPT = [
   '- All ingredient quantities MUST be in grams.',
   '- Set unit = "g" for every ingredient.',
   '- Use realistic quantities (e.g. 30–80g for cheese, 50–150g for meat per portion, etc.).',
-  '- Keep instructions short and numbered (3–8 steps if using an array).',
+  '- Keep instructions short; if using a numbered list, do not prefix each step with its own numeric label (the UI handles numbering).',
   '- Do NOT invent IDs or database fields.',
 ].join(' ');
 
