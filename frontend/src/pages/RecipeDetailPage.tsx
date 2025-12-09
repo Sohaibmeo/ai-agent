@@ -10,7 +10,6 @@ import { fetchIngredients } from '../api/ingredients';
 import { fetchRecipeById, updateRecipe, adjustRecipeAi, createRecipe } from '../api/recipes';
 import type { Ingredient, RecipeWithIngredients } from '../api/types';
 import { useLlmAction } from '../hooks/useLlmAction';
-import { useAuth } from '../context/AuthContext';
 
 type IngredientRow = {
   id: string; // recipe_ingredient id
@@ -45,7 +44,6 @@ export function RecipeDetailPage() {
   const { mealId, recipeId: recipeIdParam } = useParams<{ mealId?: string; recipeId?: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { user } = useAuth();
   const { data: plan, isLoading } = useActivePlan();
   const { runWithLlmLoader } = useLlmAction({
     kind: 'adjust-recipe',
