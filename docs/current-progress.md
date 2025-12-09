@@ -1,23 +1,37 @@
-# Unfinished items
+# Next steps
 
-## Backend
+Proper User Auth
+
+Documentation and Presentation
+
+Switch the llm use from local to the cloud chat gpt maybe mini 5?
+
+store chat history for a session (maybe a day limit or a week limit or wipe it when a new plan is marked as active)
+
+is_custom logic for recipes
 
 
-## Next steps
-- Build “My recipes” tab: list user custom recipes (`is_custom`, `createdByUser`), allow creating from scratch, and optionally record `parent_recipe_id` to reference originals.
-- Allows user to upload an image and the llm would try to observe and make a recipe
-- Allow user to upload a link and llm would will load th recipe from it
-- Add some recipe catalogue and make it searchable
-- Add recipe-detail “Save as my recipe” flow to call `/plans/save-custom-recipe` and surface saved customs in selection flows.
+# Proper Auth Implementation Plan
 
-Coach upgrade: Double llm usage or stronger protein and calorie requirement. currently we do get pretty good plans but they dont all follow the protein requirements mostly. so after the plan has been generated we check our totla protein requirement and calories requirement then we check the days which have the least protein and try to calculate a number which would be best then try and regenerate by single meal with the lowest protein so we can make up for it.
+Backend
+- Enforce JWT on all user-specific endpoints (`/profile`, `/plans`, `/recipes`, `/shopping-list`, agents); derive userId from token only.
+- Remove demo/default user fallbacks; add ownership checks where applicable (plan/recipe CRUD, shopping list).
+- Ensure migrations are run (password_hash, profile numeric columns); keep JWT_SECRET configured.
 
-Lastly we will simply add a nutrition coach who will take the user curreny plan and the user can ask what he lacks or discuss goals or take advice from it
+Frontend
+- Remove DEMO_USER_ID usage; thread authed userId from AuthContext into all hooks (plan, recipes, shopping list, profile, agents/explain, swap dialog, pipeline).
+- Make all API clients send Authorization header; on 401, logout and redirect to login.
+- Keep route protection: unauth → /auth/login, no profile → /onboarding; hide auth-only widgets (explain bot) when logged out.
 
-And if we really developed all that and have time we can add user authentication.
+State & UX
+- After onboarding/profile save, mark hasProfile true locally or refetch /auth/me to avoid re-onboarding loop.
+- Add/keep toasts for auth/API errors; disable buttons during requests (login/register/profile save).
+- Ensure logout clears token and related cached queries.
 
-After we are done developing all this we can make our document and presentation
-
+Validation / Testing
+- Happy path: register → onboarding → plans/recipes/groceries using real userId and token.
+- Unauthed access blocked; onboarding shown if profile missing.
+- Spot-check AI/agents calls use authed userId, not demo; verify plan/recipe endpoints respect ownership.
 
 ## Future total constraints list :
 {

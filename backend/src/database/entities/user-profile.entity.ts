@@ -13,10 +13,10 @@ export class UserProfile {
   @Column({ type: 'int', nullable: true })
   age?: number;
 
-  @Column({ type: 'int', nullable: true })
+  @Column({ type: 'numeric', nullable: true })
   height_cm?: number;
 
-  @Column({ type: 'int', nullable: true })
+  @Column({ type: 'numeric', nullable: true })
   weight_kg?: number;
 
   @Column({ type: 'varchar', length: 50, nullable: true })

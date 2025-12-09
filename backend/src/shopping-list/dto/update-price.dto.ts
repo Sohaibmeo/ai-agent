@@ -2,9 +2,6 @@ import { IsNumber, IsUUID, IsOptional, IsString } from 'class-validator';
 
 export class UpdatePriceDto {
   @IsUUID()
-  userId!: string;
-
-  @IsUUID()
   ingredientId!: string;
 
   @IsNumber()

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useRecipeCandidates } from '../../hooks/useRecipeCandidates';
-import { DEMO_USER_ID } from '../../lib/config';
 import { notify } from '../../lib/toast';
 import { aiPlanSwap } from '../../api/plans';
 import { useLlmAction } from '../../hooks/useLlmAction';
+import { useAuth } from '../../context/AuthContext';
 
 interface SwapDialogProps {
   open: boolean;
@@ -24,13 +24,15 @@ export function SwapDialog({
   onSelect,
   onPlanUpdated,
 }: SwapDialogProps) {
+  const { user } = useAuth();
+  const userId = user?.id as string;
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
     return () => clearTimeout(t);
   }, [search]);
-  const { data: candidates, isLoading, isError, refetch } = useRecipeCandidates(mealSlot, DEMO_USER_ID, debouncedSearch);
+  const { data: candidates, isLoading, isError, refetch } = useRecipeCandidates(mealSlot, debouncedSearch);
   const [autoMode, setAutoMode] = useState<'prompt' | 'question' | null>(null);
   const [autoNote, setAutoNote] = useState('');
   const [isAutoPicking, setIsAutoPicking] = useState(false);
@@ -71,7 +73,7 @@ export function SwapDialog({
       setIsAutoPicking(true);
       const payload = {
         type: autoNote.trim() ? 'auto-swap-with-context' : 'auto-swap-no-text',
-        userId: DEMO_USER_ID,
+        userId,
         weeklyPlanId,
         planMealId,
         note: autoNote.trim() || undefined,

@@ -1,20 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { DEMO_USER_ID } from '../lib/config';
-import { fetchProfile, updateProfile } from '../api/profile';
+import { fetchProfileMe, updateProfileMe } from '../api/profile';
 import type { UserProfile } from '../api/types';
+import { useAuth } from '../context/AuthContext';
 
-export function useProfile(userId: string = DEMO_USER_ID) {
+export function useProfile() {
+  const { token } = useAuth();
   const queryClient = useQueryClient();
 
   const profileQuery = useQuery<UserProfile>({
-    queryKey: ['profile', userId],
-    queryFn: () => fetchProfile(userId),
+    queryKey: ['profile', 'me'],
+    enabled: Boolean(token),
+    queryFn: () => fetchProfileMe(token as string),
   });
 
   const mutation = useMutation({
-    mutationFn: (payload: Partial<UserProfile>) => updateProfile(userId, payload),
+    mutationFn: (payload: Partial<UserProfile>) => updateProfileMe(token as string, payload),
     onSuccess: (data) => {
-      queryClient.setQueryData(['profile', userId], data);
+      queryClient.setQueryData(['profile', 'me'], data);
     },
   });
 

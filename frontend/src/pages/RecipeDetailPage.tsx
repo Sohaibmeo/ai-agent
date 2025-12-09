@@ -3,7 +3,6 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '../components/shared/Card';
 import { useActivePlan } from '../hooks/usePlan';
-import { DEMO_USER_ID } from '../lib/config';
 import { IngredientSwapModal } from '../components/recipes/IngredientSwapModal';
 import { notify } from '../lib/toast';
 import { saveCustomRecipe, aiPlanSwap } from '../api/plans';
@@ -11,6 +10,7 @@ import { fetchIngredients } from '../api/ingredients';
 import { fetchRecipeById, updateRecipe, adjustRecipeAi, createRecipe } from '../api/recipes';
 import type { Ingredient, RecipeWithIngredients } from '../api/types';
 import { useLlmAction } from '../hooks/useLlmAction';
+import { useAuth } from '../context/AuthContext';
 
 type IngredientRow = {
   id: string; // recipe_ingredient id
@@ -46,7 +46,9 @@ export function RecipeDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const { data: plan, isLoading } = useActivePlan(DEMO_USER_ID);
+  const { user } = useAuth();
+  const userId = user?.id as string;
+  const { data: plan, isLoading } = useActivePlan();
   const { runWithLlmLoader } = useLlmAction({
     kind: 'adjust-recipe',
     title: 'Adjusting your recipe with AI...',
@@ -225,7 +227,6 @@ export function RecipeDetailPage() {
         setInitialInstructions(instructionsText);
       } else if (recipeId) {
         const updated = await updateRecipe(recipeId, {
-          userId: DEMO_USER_ID,
           name: nameToSave,
           instructions: instructionsText,
           ingredients: ingredients.map((ing) => ({
@@ -266,7 +267,6 @@ export function RecipeDetailPage() {
       setIsSaving(true);
       const nameToSave = recipeName.trim() || 'New recipe';
       const created = await createRecipe({
-        userId: DEMO_USER_ID,
         name: nameToSave,
         instructions: instructionsText,
         ingredients: ingredients.map((ing) => ({
@@ -294,7 +294,6 @@ export function RecipeDetailPage() {
         await runWithLlmLoader(async () => {
           const result = await aiPlanSwap({
             type: 'swap-inside-recipe',
-            userId: DEMO_USER_ID,
             weeklyPlanId: plan.id,
             planMealId: m.id,
             recipeId: recipe?.id,
@@ -306,7 +305,7 @@ export function RecipeDetailPage() {
         });
       } else if (recipeId) {
         const updated = await runWithLlmLoader(async () =>
-          adjustRecipeAi(recipeId, { userId: DEMO_USER_ID, note }),
+          adjustRecipeAi(recipeId, { note }),
         );
         const updatedIngredients = toIngredientRows(updated.ingredients);
         setIngredients(updatedIngredients);

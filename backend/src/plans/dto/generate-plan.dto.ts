@@ -1,10 +1,7 @@
-import { IsBoolean, IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsBoolean, IsNumber, IsOptional, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class GeneratePlanDto {
-  @IsUUID()
-  userId!: string;
-
   @IsOptional()
   @IsString()
   weekStartDate?: string;

@@ -11,6 +11,9 @@ export class User {
   @Column({ nullable: true })
   email?: string;
 
+  @Column({ type: 'varchar', nullable: true })
+  password_hash?: string;
+
   @OneToMany(() => UserProfile, (profile) => profile.user)
   profiles!: UserProfile[];
 

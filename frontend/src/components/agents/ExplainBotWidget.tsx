@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { explainChat } from '../../api/agents';
-import { DEMO_USER_ID } from '../../lib/config';
 import { notify } from '../../lib/toast';
+import { useAuth } from '../../context/AuthContext';
 
 type ChatMessage = { id: string; role: 'user' | 'bot' | 'error'; text: string };
 
@@ -43,6 +43,8 @@ const ChefBotIcon = ({ pulse }: { pulse?: boolean }) => {
 };
 
 export function ExplainBotWidget() {
+  const { user } = useAuth();
+  const userId = user?.id;
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -137,6 +139,10 @@ export function ExplainBotWidget() {
   );
 
   const send = async () => {
+    if (!userId) {
+      notify.error('Please sign in to chat.');
+      return;
+    }
     const text = input.trim();
     if (!text || sending) return;
     const userMsg: ChatMessage = { id: `u-${Date.now()}`, role: 'user', text };
@@ -144,7 +150,7 @@ export function ExplainBotWidget() {
     setInput('');
     setSending(true);
     try {
-      const res = await explainChat({ message: text, userId: DEMO_USER_ID });
+      const res = await explainChat({ message: text, userId });
       const botMsg: ChatMessage = { id: `b-${Date.now()}`, role: 'bot', text: res.reply };
       setMessages((prev) => [...prev, botMsg]);
     } catch (err: any) {

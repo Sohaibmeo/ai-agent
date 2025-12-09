@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { fetchRecipes } from '../api/recipes';
-import { DEMO_USER_ID } from '../lib/config';
+import { fetchRecipes, generateRecipeAi, generateRecipeFromImage } from '../api/recipes';
 import { Card } from '../components/shared/Card';
-import { generateRecipeAi, generateRecipeFromImage } from '../api/recipes';
 import { useAgentPipeline } from '../hooks/useAgentPipeline';
+import { useAuth } from '../context/AuthContext';
 
 export function RecipesPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [mineOnly, setMineOnly] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [aiNote, setAiNote] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -38,8 +39,9 @@ export function RecipesPage() {
   }, [searchTerm]);
 
   const { data: recipes, isLoading } = useQuery({
-    queryKey: ['recipes', debouncedSearch],
-    queryFn: () => fetchRecipes({ userId: DEMO_USER_ID, search: debouncedSearch }),
+    queryKey: ['recipes', debouncedSearch, mineOnly],
+    enabled: Boolean(user?.id),
+    queryFn: () => fetchRecipes({ search: debouncedSearch, mine: mineOnly }),
   });
 
   return (
@@ -48,6 +50,17 @@ export function RecipesPage() {
         <div>
           <h1 className="text-lg font-semibold text-slate-900">Your recipes</h1>
           <p className="text-xs text-slate-500">Browse, search and create recipes you can reuse in your plans.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-2 text-xs text-slate-700">
+            <input
+              type="checkbox"
+              className="rounded border-slate-300 text-emerald-600"
+              checked={mineOnly}
+              onChange={(e) => setMineOnly(e.target.checked)}
+            />
+            My recipes only
+          </label>
         </div>
       </div>
 
@@ -188,7 +201,7 @@ export function RecipesPage() {
                         });
                         updateStep('capture-note', 'done', undefined, undefined, 18);
                         updateStep('draft-recipe', 'active', 'Generating recipe draft...', undefined, 36);
-                        const created = await generateRecipeAi({ userId: DEMO_USER_ID, note });
+                        const created = await generateRecipeAi({ note });
                         updateStep('draft-recipe', 'done', undefined, undefined, 64);
                         updateStep('build-ingredients', 'active', 'Resolving ingredients...', undefined, 82);
                         updateStep('build-ingredients', 'done', undefined, undefined, 92);
@@ -305,7 +318,6 @@ export function RecipesPage() {
                             updateStep('vision', 'done', undefined, undefined, 58);
                             updateStep('draft-recipe', 'active', 'Drafting recipe...', undefined, 76);
                             const created = await generateRecipeFromImage({
-                              userId: DEMO_USER_ID,
                               imageBase64: base64,
                             });
                             updateStep('draft-recipe', 'done', undefined, undefined, 86);

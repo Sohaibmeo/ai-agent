@@ -1,14 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { DEMO_USER_ID } from '../lib/config';
 import { applyPlanAction, fetchActivePlan, generatePlan } from '../api/plans';
 import type { WeeklyPlan } from '../api/types';
+import { useAuth } from '../context/AuthContext';
 
-export function useActivePlan(userId: string = DEMO_USER_ID) {
+export function useActivePlan() {
+  const { user } = useAuth();
+  const userId = user?.id as string;
   const queryClient = useQueryClient();
 
   const planQuery = useQuery<WeeklyPlan | null>({
     queryKey: ['plan', 'active', userId],
-    queryFn: () => fetchActivePlan(userId),
+    enabled: !!userId,
+    queryFn: () => fetchActivePlan(),
   });
 
   const generateMutation = useMutation({
@@ -23,7 +26,7 @@ export function useActivePlan(userId: string = DEMO_USER_ID) {
       lunch_enabled?: boolean;
       dinner_enabled?: boolean;
       maxDifficulty?: string;
-    }) => generatePlan({ userId, weekStartDate: new Date().toISOString().slice(0, 10), ...opts }),
+    }) => generatePlan({  weekStartDate: new Date().toISOString().slice(0, 10), ...opts }),
     onSuccess: (data) => {
       queryClient.setQueryData(['plan', 'active', userId], data);
     },

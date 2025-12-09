@@ -1,31 +1,35 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { PlansService } from './plans.service';
 import { GeneratePlanDto } from './dto/generate-plan.dto';
 import { SetMealRecipeDto } from './dto/set-meal-recipe.dto';
 import { ActivatePlanDto } from './dto/set-plan-status.dto';
-import { UserIdParamDto } from './dto/user-id-param.dto';
 import { SetPlanStatusDto } from './dto/set-plan-status.dto';
 import { SaveCustomRecipeDto } from './dto/save-custom-recipe.dto';
 import { AiPlanSwapDto } from './dto/ai-plan-swap.dto';
+import { JwtAuthGuard } from '../auth/jwt.guard';
 
 @Controller('plans')
+@UseGuards(JwtAuthGuard)
 export class PlansController {
   constructor(private readonly plansService: PlansService) {}
 
   @Get()
-  list() {
-    return this.plansService.findAll();
+  list(@Req() req: any) {
+    const userId = req.user?.userId as string;
+    return this.plansService.findAll(userId);
   }
 
-  @Get('active/:userId')
-  getActive(@Param() params: UserIdParamDto) {
-    return this.plansService.getActivePlan(params.userId);
+  @Get('active')
+  getActive(@Req() req: any) {
+    const userId = req.user?.userId as string;
+    return this.plansService.getActivePlan(userId);
   }
 
   @Post('generate')
-  generate(@Body() body: GeneratePlanDto) {
+  generate(@Req() req: any, @Body() body: GeneratePlanDto) {
+    const userId = req.user?.userId as string;
     const weekStartDate = body.weekStartDate || new Date().toISOString().slice(0, 10);
-    return this.plansService.generateWeek(body.userId, weekStartDate, body.useAgent, {
+    return this.plansService.generateWeek(userId, weekStartDate, body.useAgent, {
       useLlmRecipes: body.useLlmRecipes,
       sameMealsAllWeek: body.sameMealsAllWeek,
       weeklyBudgetGbp: body.weeklyBudgetGbp,
@@ -38,37 +42,43 @@ export class PlansController {
   }
 
   @Post('set-meal-recipe')
-  setMealRecipe(@Body() body: SetMealRecipeDto) {
-    return this.plansService.setMealRecipe(body.planMealId, body.newRecipeId);
+  setMealRecipe(@Req() req: any, @Body() body: SetMealRecipeDto) {
+    const userId = req.user?.userId as string;
+    return this.plansService.setMealRecipe(body.planMealId, body.newRecipeId, userId);
   }
 
   @Post('activate')
-  activate(@Body() body: ActivatePlanDto) {
-    return this.plansService.setStatus(body.planId, 'active');
+  activate(@Req() req: any, @Body() body: ActivatePlanDto) {
+    const userId = req.user?.userId as string;
+    return this.plansService.setStatus(body.planId, 'active', userId);
   }
 
   @Post('status')
-  setStatus(@Body() body: SetPlanStatusDto) {
-    return this.plansService.setStatus(body.planId, body.status);
+  setStatus(@Req() req: any, @Body() body: SetPlanStatusDto) {
+    const userId = req.user?.userId as string;
+    return this.plansService.setStatus(body.planId, body.status, userId);
   }
 
   @Post('save-custom-recipe')
-  saveCustomRecipe(@Body() body: SaveCustomRecipeDto) {
-    return this.plansService.saveCustomRecipe(body.planMealId, body.newName, body.ingredientItems, body.instructions);
+  saveCustomRecipe(@Req() req: any, @Body() body: SaveCustomRecipeDto) {
+    const userId = req.user?.userId as string;
+    return this.plansService.saveCustomRecipe(userId, body.planMealId, body.newName, body.ingredientItems, body.instructions);
   }
 
   @Post('ai-plan-swap')
-  aiPlanSwap(@Body() body: AiPlanSwapDto) {
+  aiPlanSwap(@Req() req: any, @Body() body: AiPlanSwapDto) {
     // For debugging:
     // console.log('[ai-plan-swap] request', JSON.stringify(body));
-    if (body?.weeklyPlanId && body.userId) {
-      return this.plansService.reviewAndApplyFromAiSwap(body);
+    const userId = req.user?.userId as string;
+    if (body?.weeklyPlanId && userId) {
+      return this.plansService.reviewAndApplyFromAiSwap({ ...body, userId });
     }
     return { ok: true, received: body, warning: 'weeklyPlanId and userId are required' };
   }
 
   @Get(':id')
-  getById(@Param('id') id: string) {
-    return this.plansService.findById(id);
+  getById(@Req() req: any, @Param('id') id: string) {
+    const userId = req.user?.userId as string;
+    return this.plansService.findById(id, userId);
   }
 }

@@ -2,22 +2,26 @@ import { useEffect, useMemo, useState } from 'react';
 import { Card } from '../components/shared/Card';
 import { useProfile } from '../hooks/useProfile';
 import { notify } from '../lib/toast';
+import { useAuth } from '../context/AuthContext';
+import { calculateTargets } from '../lib/targets';
+import { GOALS, INTENSITIES, ACTIVITY_LEVELS } from '../constants/targets';
+import { DIET_TYPES, ALLERGENS } from '../constants/dietAllergy';
 
 const inputClass =
   'w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-slate-300';
-const allergens = ['gluten', 'dairy', 'eggs', 'fish', 'shellfish', 'tree_nuts', 'peanuts', 'soy', 'sesame', 'celery', 'mustard', 'lupin', 'sulphites', 'molluscs'];
 const difficultyOptions = ['super_easy', 'easy', 'medium', 'hard'];
 
 export function ProfilePage() {
   const { data, isLoading, isSaving, saveProfile } = useProfile();
+  const { logout } = useAuth();
   const [form, setForm] = useState({
     age: '',
     height_cm: '',
     weight_kg: '',
-    activity_level: '',
-    goal: '',
-    goal_intensity: '',
-    diet_type: '',
+    activity_level: 'moderate',
+    goal: 'maintain_weight',
+    goal_intensity: 'moderate',
+    diet_type: 'none',
     allergies: '',
     breakfast_enabled: true,
     snack_enabled: true,
@@ -35,7 +39,7 @@ export function ProfilePage() {
       weight_kg: data.weight_kg ? String(data.weight_kg) : '',
       activity_level: data.activity_level || 'moderate',
       goal: data.goal || 'maintain_weight',
-      goal_intensity: data.goal_intensity || '',
+      goal_intensity: data.goal_intensity || 'moderate',
       diet_type: data.diet_type || 'none',
       allergies: (data.allergy_keys || []).join(', '),
       breakfast_enabled: data.breakfast_enabled ?? true,
@@ -60,6 +64,7 @@ export function ProfilePage() {
     [form.allergies],
   );
 
+  const [dirty, setDirty] = useState(false);
   const handleSave = async () => {
     try {
       await saveProfile({
@@ -79,10 +84,38 @@ export function ProfilePage() {
         max_difficulty: form.max_difficulty || null,
       });
       notify.success('Profile saved');
+      setDirty(false);
     } catch (e) {
       notify.error('Could not save profile');
     }
   };
+  useEffect(() => {
+    if (data) setDirty(false);
+  }, [data]);
+
+  useEffect(() => {
+    setDirty(true);
+  }, [form]);
+
+  const targets = useMemo(
+    () =>
+      calculateTargets({
+        age: form.age ? Number(form.age) : undefined,
+        height_cm: form.height_cm ? Number(form.height_cm) : undefined,
+        weight_kg: form.weight_kg ? Number(form.weight_kg) : undefined,
+        activity_level: form.activity_level || undefined,
+        goal: form.goal || undefined,
+        goal_intensity: form.goal_intensity || undefined,
+      }),
+    [form],
+  );
+
+  const calorieDeltaLabel =
+    targets.calorieDelta === 0
+      ? 'Maintain'
+      : targets.calorieDelta > 0
+        ? `+${targets.calorieDelta} kcal`
+        : `${targets.calorieDelta} kcal`;
 
   return (
     <div className="p-6 space-y-4">
@@ -91,13 +124,21 @@ export function ProfilePage() {
           <h1 className="text-2xl font-semibold text-slate-900">Profile</h1>
           <p className="text-sm text-slate-600">Body data, diet, allergies, and plan defaults.</p>
         </div>
-        <button
-          disabled={isSaving}
-          onClick={handleSave}
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-        >
-          {isSaving ? 'Saving...' : 'Save Profile'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            disabled={!dirty || isSaving}
+            onClick={handleSave}
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+          >
+            {isSaving ? 'Saving...' : 'Save Profile'}
+          </button>
+          <button
+            onClick={logout}
+            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+          >
+            Log out
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -155,10 +196,11 @@ export function ProfilePage() {
                   value={form.activity_level}
                   onChange={(e) => handleChange('activity_level', e.target.value)}
                 >
-                  <option value="moderate">Moderate</option>
-                  <option value="sedentary">Sedentary</option>
-                  <option value="light">Light</option>
-                  <option value="active">Active</option>
+                  {ACTIVITY_LEVELS.map((a) => (
+                    <option key={a.value} value={a.value}>
+                      {a.label}
+                    </option>
+                  ))}
                 </select>
               )}
             </label>
@@ -168,9 +210,11 @@ export function ProfilePage() {
                 <div className="h-9 w-full animate-pulse rounded-md bg-slate-200/70" />
               ) : (
                 <select className={inputClass} value={form.goal} onChange={(e) => handleChange('goal', e.target.value)}>
-                  <option value="maintain_weight">Maintain weight</option>
-                  <option value="lose_weight">Lose weight</option>
-                  <option value="gain_weight">Gain weight</option>
+                  {GOALS.map((g) => (
+                    <option key={g.value} value={g.value}>
+                      {g.label}
+                    </option>
+                  ))}
                 </select>
               )}
             </label>
@@ -184,10 +228,11 @@ export function ProfilePage() {
                   value={form.goal_intensity}
                   onChange={(e) => handleChange('goal_intensity', e.target.value)}
                 >
-                  <option value="">—</option>
-                  <option value="mild">Mild</option>
-                  <option value="moderate">Moderate</option>
-                  <option value="aggressive">Aggressive</option>
+                  {INTENSITIES.map((i) => (
+                    <option key={i.value} value={i.value}>
+                      {i.label}
+                    </option>
+                  ))}
                 </select>
               )}
             </label>
@@ -201,16 +246,13 @@ export function ProfilePage() {
               {isLoading ? (
                 <div className="h-9 w-full animate-pulse rounded-md bg-slate-200/70" />
               ) : (
-                <select
-                  className={inputClass}
-                  value={form.diet_type}
-                  onChange={(e) => handleChange('diet_type', e.target.value)}
-                >
+                <select className={inputClass} value={form.diet_type} onChange={(e) => handleChange('diet_type', e.target.value)}>
                   <option value="none">None</option>
-                  <option value="halal">Halal</option>
-                  <option value="vegan">Vegan</option>
-                  <option value="vegetarian">Vegetarian</option>
-                  <option value="keto">Keto</option>
+                  {DIET_TYPES.map((d) => (
+                    <option key={d.value} value={d.value}>
+                      {d.label}
+                    </option>
+                  ))}
                 </select>
               )}
             </label>
@@ -220,16 +262,16 @@ export function ProfilePage() {
                 <div className="h-9 w-full animate-pulse rounded-md bg-slate-200/70" />
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  {allergens.map((al) => {
-                    const selected = parsedAllergies.includes(al);
+                  {ALLERGENS.map((al) => {
+                    const selected = parsedAllergies.includes(al.value);
                     return (
                       <button
-                        key={al}
+                        key={al.value}
                         type="button"
                         onClick={() => {
                           const next = selected
-                            ? parsedAllergies.filter((a) => a !== al)
-                            : [...parsedAllergies, al];
+                            ? parsedAllergies.filter((a) => a !== al.value)
+                            : [...parsedAllergies, al.value];
                           handleChange('allergies', next.join(', '));
                         }}
                         className={[
@@ -239,7 +281,7 @@ export function ProfilePage() {
                             : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
                         ].join(' ')}
                       >
-                        {al.replace('_', ' ')}
+                        {al.label}
                       </button>
                     );
                   })}
@@ -299,6 +341,47 @@ export function ProfilePage() {
               )}
             </label>
           </div>
+        </Card>
+
+        <Card title="Daily Targets (preview)">
+          {isLoading ? (
+            <div className="h-32 animate-pulse rounded-xl bg-slate-100" />
+          ) : (
+            <div className="space-y-3 text-sm text-slate-700">
+              <p className="text-xs text-slate-500">
+                Based on your current inputs. ChefBot will aim your weekly plan around these numbers.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Calories</p>
+                  <p className="mt-1 text-xl font-semibold text-slate-900">
+                    {targets.dailyCalories}
+                    <span className="ml-1 text-xs text-slate-500">kcal</span>
+                  </p>
+                  <p className="text-[11px] text-slate-500">Daily target</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Protein</p>
+                  <p className="mt-1 text-xl font-semibold text-slate-900">
+                    {targets.dailyProtein}
+                    <span className="ml-1 text-xs text-slate-500">g</span>
+                  </p>
+                  <p className="text-[11px] text-slate-500">Approx 1.9g/kg</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Maintenance</p>
+                  <p className="mt-1 text-xl font-semibold text-slate-900">
+                    {targets.maintenanceCalories}
+                    <span className="ml-1 text-xs text-slate-500">kcal</span>
+                  </p>
+                  <p className="text-[11px] text-slate-500">{calorieDeltaLabel}</p>
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                You can tweak these later in your profile settings. For now, this is enough for the AI coach to start planning.
+              </p>
+            </div>
+          )}
         </Card>
       </div>
     </div>

@@ -1,25 +1,28 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card } from '../components/shared/Card';
 import { useShoppingList } from '../hooks/useShoppingList';
-import { DEMO_USER_ID } from '../lib/config';
 import { Skeleton } from '../components/shared/Skeleton';
 import { useNavigate } from 'react-router-dom';
 import { UpdatePriceModal } from '../components/groceries/UpdatePriceModal';
 import type { ShoppingListItem } from '../api/types';
 import { notify } from '../lib/toast';
-import { updatePantry, updatePrice } from '../api/shoppingList';
+import { updatePantry, updatePrice, emailShoppingList } from '../api/shoppingList';
 import { useActivePlan } from '../hooks/usePlan';
 import { usePlansList } from '../hooks/usePlansList';
+import { useAuth } from '../context/AuthContext';
 
 export function GroceriesPage() {
-  const { data: plan } = useActivePlan(DEMO_USER_ID);
+  const { user } = useAuth();
+  const userId = user?.id as string;
+  const { data: plan } = useActivePlan();
   const { data: plansList } = usePlansList();
   const [selectedPlanId, setSelectedPlanId] = useState<string | undefined>(undefined);
-  const { data: list, isLoading } = useShoppingList(selectedPlanId, DEMO_USER_ID);
+  const { data: list, isLoading } = useShoppingList(selectedPlanId);
   const navigate = useNavigate();
   const [items, setItems] = useState(list?.items || []);
   const [priceTarget, setPriceTarget] = useState<ShoppingListItem | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isEmailSending, setIsEmailSending] = useState(false);
 
   useEffect(() => {
     setItems(list?.items || []);
@@ -39,13 +42,31 @@ export function GroceriesPage() {
       .reduce((sum, i) => sum + (i.estimated_cost_gbp ? Number(i.estimated_cost_gbp) : 0), 0);
   }, [items]);
 
+  const emailList = async () => {
+    const planId = selectedPlanId || list?.weekly_plan_id || plan?.id;
+    if (!planId) {
+      notify.error('No plan selected');
+      return;
+    }
+    try {
+      setIsEmailSending(true);
+      notify.info('Sending shopping list...');
+      await emailShoppingList({ planId });
+      notify.success('Sent shopping list');
+    } catch (err: any) {
+      notify.error('Could not send email');
+    } finally {
+      setIsEmailSending(false);
+    }
+  };
+
   const toggleItem = (id: string) => {
     const target = items.find((i) => i.id === id);
     if (!target) return;
     const next = !target.has_item;
     setItems((prev) => prev.map((item) => (item.id === id ? { ...item, has_item: next } : item)));
     updatePantry({
-      userId: DEMO_USER_ID,
+      userId,
       ingredientId: target.ingredient.id,
       hasItem: next,
       planId: list?.weekly_plan_id,
@@ -107,6 +128,17 @@ export function GroceriesPage() {
               title="Copy shopping list (CSV)"
             >
               📋 Copy list
+            </button>
+          )}
+          {items.length > 0 && (
+            <button
+              className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
+              onClick={emailList}
+              disabled={isEmailSending}
+              style={isEmailSending ? { opacity: 0.6, cursor: 'not-allowed' } : undefined}
+              title="Email shopping list"
+            >
+              ✉️ Email list
             </button>
           )}
         </div>
@@ -210,7 +242,7 @@ export function GroceriesPage() {
         onClose={() => setPriceTarget(null)}
         onSave={(payload) => {
           updatePrice({
-            userId: DEMO_USER_ID,
+            userId,
             ingredientId: priceTarget?.ingredient.id || '',
             pricePaid: payload.pricePaid,
             quantity: payload.quantity,
