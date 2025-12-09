@@ -4,11 +4,11 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
-import { User, UserProfile, UserPreferences } from '../database/entities';
+import { User, UserProfile } from '../database/entities';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, UserProfile, UserPreferences]),
+    TypeOrmModule.forFeature([User, UserProfile]),
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'dev-secret-change-me',
       signOptions: { expiresIn: '7d' },

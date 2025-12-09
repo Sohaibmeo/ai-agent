@@ -240,7 +240,11 @@ export function RecipesPage() {
                       className="text-slate-500 hover:text-slate-800 disabled:opacity-50"
                       disabled={isGenerating}
                       onClick={() => {
+                        if (isGenerating) return;
+                        setShowCreateModal(false);
                         setShowAiForm(false);
+                        setShowImageForm(false);
+                        setAiNote('');
                         setImageFile(null);
                         setImagePreview(null);
                       }}

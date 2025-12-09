@@ -12,6 +12,7 @@ export function useActivePlan() {
     queryKey: ['plan', 'active', userId],
     enabled: !!userId,
     queryFn: () => fetchActivePlan(),
+    refetchOnWindowFocus: false,
   });
 
   const generateMutation = useMutation({

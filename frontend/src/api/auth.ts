@@ -21,13 +21,13 @@ export async function login(email: string, password: string): Promise<AuthRespon
   return res.json();
 }
 
-export async function register(email: string, password: string): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE_URL}/auth/register`, {
+export async function resetPassword(email: string) {
+  const res = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email }),
   });
-  if (!res.ok) throw new Error('Register failed');
+  if (!res.ok) throw new Error('Reset failed');
   return res.json();
 }
 

@@ -116,7 +116,7 @@ export class PlansService {
 
   findAll(userId: string) {
     return this.weeklyPlanRepo.find({
-      where: { user: { id: userId } as any },
+      where: { status: Not('systemdraft'), user: { id: userId } as any },
       order: { week_start_date: 'DESC' },
       relations: ['days', 'days.meals', 'days.meals.recipe'],
     });

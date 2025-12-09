@@ -6,9 +6,15 @@ import { JwtAuthGuard } from './jwt.guard';
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
-  @Post('register')
-  register(@Body() body: { email: string; password: string }) {
-    return this.auth.register(body.email, body.password);
+  @Post('forgot-password')
+  async forgotPassword(@Body() body: { email: string }) {
+    try {
+      await this.auth.resetPassword(body.email);
+      return { status: 'ok' };
+    } catch (err) {
+      // ensure we do not leak SMTP details
+      return { status: 'error' };
+    }
   }
 
   @Post('login')
