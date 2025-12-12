@@ -7,6 +7,7 @@ import { UsersModule } from '../users/users.module';
 import { IngredientsModule } from '../ingredients/ingredients.module';
 import { PreferencesModule } from '../preferences/preferences.module';
 import { AgentsModule } from '../agents/agents.module';
+import { ProfileModule } from '../profile/profile.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { AgentsModule } from '../agents/agents.module';
     forwardRef(() => IngredientsModule),
     forwardRef(() => PreferencesModule),
     forwardRef(() => AgentsModule),
+    ProfileModule,
   ],
   providers: [RecipesService],
   controllers: [RecipesController],

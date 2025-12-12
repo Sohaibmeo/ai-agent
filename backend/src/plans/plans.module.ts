@@ -9,6 +9,7 @@ import { ShoppingListModule } from '../shopping-list/shopping-list.module';
 import { PreferencesModule } from '../preferences/preferences.module';
 import { AgentsModule } from '../agents/agents.module';
 import { IngredientsModule } from '../ingredients/ingredients.module';
+import { ProfileModule } from '../profile/profile.module';
 import { PipelineGateway } from './pipeline.gateway';
 
 @Module({
@@ -20,6 +21,7 @@ import { PipelineGateway } from './pipeline.gateway';
     forwardRef(() => PreferencesModule),
     forwardRef(() => AgentsModule),
     forwardRef(() => IngredientsModule),
+    ProfileModule,
   ],
   providers: [PlansService, PipelineGateway],
   controllers: [PlansController],

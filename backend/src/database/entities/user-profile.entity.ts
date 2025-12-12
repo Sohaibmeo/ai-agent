@@ -49,7 +49,7 @@ export class UserProfile {
   @Column({ type: 'varchar', length: 50, default: 'easy' })
   max_difficulty!: string;
 
-  @Column({ type: 'integer', default: 30 })
+  @Column({ type: 'numeric', default: 35 })
   credit!: number;
 
   @Column({ type: 'numeric', nullable: true })
