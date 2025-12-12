@@ -125,6 +125,7 @@ export class RecipesService {
       note: body.note,
       meal_slot: body.mealSlot,
       meal_type: body.mealType,
+      userId: body.userId,
     });
 
     const created = await this.createUserRecipe(body.userId, {
@@ -153,7 +154,11 @@ export class RecipesService {
     if (!body.imageBase64) {
       throw new Error('Image is required');
     }
-    const visionNote = await this.agentsService.describeImage({ imageBase64: body.imageBase64, note: body.note });
+    const visionNote = await this.agentsService.describeImage({
+      imageBase64: body.imageBase64,
+      note: body.note,
+      userId: body.userId,
+    });
     const combinedNote = body.note ? `${body.note}. Image notes: ${visionNote}` : `From image: ${visionNote}`;
     return this.generateRecipeWithAi({ ...body, note: combinedNote });
   }

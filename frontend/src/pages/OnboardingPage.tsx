@@ -158,7 +158,8 @@ export function OnboardingPage() {
   const handleFinish = async () => {
     if (!token) return;
     const toastId = toast.loading('Finalising onboarding…');
-    const cost = sameMealsAllWeek ? CREDIT_COSTS.planGeneration.same : CREDIT_COSTS.planGeneration.varied;
+    const dayCost = CREDIT_COSTS.planGeneration.day;
+    const cost = dayCost * (sameMealsAllWeek ? 1 : 7);
     const detail = sameMealsAllWeek
       ? 'Same meals all week'
       : 'Different meals every day';

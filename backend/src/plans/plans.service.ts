@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Not } from 'typeorm';
 import { PlanDay, PlanMeal, WeeklyPlan, PlanActionLog, Recipe } from '../database/entities';
@@ -7,7 +7,6 @@ import { UsersService } from '../users/users.service';
 import { calculateTargets } from './utils/profile-targets';
 import { ShoppingListService } from '../shopping-list/shopping-list.service';
 import { PreferencesService } from '../preferences/preferences.service';
-import { Logger } from '@nestjs/common';
 import { IngredientsService } from '../ingredients/ingredients.service';
 import { AgentsService } from '../agents/agents.service';
 import { AiPlanSwapDto } from './dto/ai-plan-swap.dto';
@@ -467,6 +466,7 @@ export class PlansService {
               daily_protein: targets.dailyProtein,
             },
             meal_slots: requiredSlots,
+            userId,
           });
           this.logger.log(
             `generateWeek day=${dayIdx} dayGenerator meals=${dayPlan.meals?.length || 0}`,
@@ -1612,6 +1612,7 @@ export class PlansService {
       meal_type: opts?.preferMealType,
       difficulty: profile.max_difficulty,
       budget_per_meal: budgetPerMeal,
+      userId,
     });
     this.logger.log(
       `[review] regenerateMeal planMeal=${planMealId} draft=${JSON.stringify({
@@ -1692,6 +1693,7 @@ export class PlansService {
       },
       meal_slots: mealSlots,
       note,
+      userId,
     });
 
     if (!llmDay.meals || !llmDay.meals.length) {

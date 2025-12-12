@@ -216,7 +216,8 @@ export function PlansPage() {
   };
 
   const runAgentPlanGeneration = async () => {
-    const cost = sameMealsAllWeek ? CREDIT_COSTS.planGeneration.same : CREDIT_COSTS.planGeneration.varied;
+    const dayCost = CREDIT_COSTS.planGeneration.day;
+    const cost = dayCost * (sameMealsAllWeek ? 1 : 7);
     const detail = sameMealsAllWeek ? 'Generate the same meals all week' : 'Generate a varied week';
     const confirmed = await confirmCreditUse(cost, 'Generate a new week', detail);
     if (!confirmed) return;

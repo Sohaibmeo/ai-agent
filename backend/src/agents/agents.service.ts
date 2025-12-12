@@ -185,7 +185,11 @@ export class AgentsService {
       'explain',
       `model=${client.model} latency_ms=${Date.now() - start} includePlan=${includePlan} ctxLen=${ctxLength} replyPreview="${(content || '').slice(0, 120)}"`,
     );
-    return { reply: content };
+    const reply = { reply: content };
+    if (userId && String(reply).trim().length > 0) {
+      await this.profileService.chargeCredit(userId, CREDIT_COSTS.explain);
+    }
+    return reply;
   }
 
   async interpretReviewAction(payload: {
@@ -285,6 +289,7 @@ export class AgentsService {
     meal_type?: string;
     difficulty?: string;
     budget_per_meal?: number;
+    userId?: string;
   }) {
     const toNum = (v: any) => {
       if (v === null || v === undefined || v === '') return 0;
@@ -324,7 +329,11 @@ export class AgentsService {
         this.logger.log(
           `[review] generateRecipe raw=${JSON.stringify(raw)} input=${JSON.stringify(payload)} attempt=${attempt + 1}`,
         );
-        return schema.parse(raw);
+        const parsed = schema.parse(raw);
+        if (payload.userId) {
+          await this.profileService.chargeCredit(payload.userId, CREDIT_COSTS.recipeGeneration);
+        }
+        return parsed;
       } catch (err) {
         lastErr = err;
         this.logger.error(
@@ -335,7 +344,7 @@ export class AgentsService {
     throw lastErr;
   }
 
-  async describeImage(payload: { imageBase64: string; note?: string }) {
+  async describeImage(payload: { imageBase64: string; note?: string; userId?: string }) {
     if (!payload.imageBase64) throw new Error('Image is required');
     const visionClient = this.createClient('vision');
     const imageData = `data:image/jpeg;base64,${payload.imageBase64}`;
@@ -360,6 +369,9 @@ export class AgentsService {
     const text = (res as any)?.content || (res as any)?.text || '';
     const clean = text?.toString().replace(/\s+/g, ' ').trim() || 'Dish photo';
     this.logger.log(`[vision] describeImage -> ${clean.slice(0, 240)}`);
+    if (payload.userId) {
+      await this.profileService.chargeCredit(payload.userId, CREDIT_COSTS.vision);
+    }
     return clean;
   }
 
@@ -511,6 +523,7 @@ export class AgentsService {
     meal_slots: string[];
     maxRetries?: number;
     note?: string;
+    userId?: string;
   }): Promise<LlmPlanDay> {
     const perMealBudget =
       payload.week_state.weekly_budget_gbp && payload.meal_slots.length
@@ -631,6 +644,9 @@ export class AgentsService {
         const parsedOk = parsed.success && normalizedMeals.length > 0;
 
         if (parsedOk && unitsOk && slotsOk) {
+          if (payload.userId) {
+            await this.profileService.chargeCredit(payload.userId, CREDIT_COSTS.planGeneration.day);
+          }
           return { ...parsed.data, meals: normalizedMeals };
         }
 
