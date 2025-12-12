@@ -19,7 +19,7 @@ export function RecipesPage() {
   const [showImageForm, setShowImageForm] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const { startRun, updateStep, endRun, setError } = useAgentPipeline();
+  const { startRun, updateStep, setError } = useAgentPipeline();
 
   const fileToBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
