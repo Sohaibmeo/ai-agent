@@ -12,6 +12,8 @@ import {
 import { reviewInstructionSchema, ReviewInstruction } from './schemas/review-instruction.schema';
 import { PlansService } from '../plans/plans.service';
 import { UsersService } from '../users/users.service';
+import { CreditService } from '../profile/credit.service';
+import { CREDIT_COSTS } from '../constants/credits';
 import { calculateTargets } from '../plans/utils/profile-targets';
 import {
   DAY_COACH_SYSTEM_PROMPT,
@@ -61,6 +63,7 @@ export class AgentsService {
     @Inject(forwardRef(() => PlansService))
     private readonly plansService: PlansService,
     private readonly usersService: UsersService,
+    private readonly creditService: CreditService,
   ) {}
 
   private summarizePlanContext = async (userId?: string) => {

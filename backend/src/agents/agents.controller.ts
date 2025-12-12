@@ -18,6 +18,9 @@ export class AgentsController {
       throw new BadRequestException('message is required');
     }
     const userId = req.user?.userId as string;
+    if (!userId) {
+      throw new BadRequestException('userId is required');
+    }
     return this.agentsService.explain(body.message, body.context, userId);
   }
 }
