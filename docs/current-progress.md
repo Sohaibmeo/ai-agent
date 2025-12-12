@@ -13,8 +13,6 @@ Below this thing will have monthly,yearly and lifetime plan toggle and for month
 
 Lets make this page accessible through the settings icon dropdown options we will add before the change password called current plan or soemthing suitable
 
-Add credit cost modal for modify and swap modal changes
-
 
 
 # Proper Auth Implementation Plan
@@ -192,13 +190,13 @@ Or:
     "ingredient_blacklist": [
       // global “never use”
     ],
-    "ingredient_whitelist": [
-      "chicken breast",
-      "rice",
-      "oats",
-      "eggs",
-      "yogurt"
-    ],
+  "ingredient_whitelist": [
+    "chicken breast",
+    "rice",
+    "oats",
+    "eggs",
+    "yogurt"
+  ],
 
     "disliked_flavours": [
       // e.g. "very_spicy", "bitter", "strong_coriander"
