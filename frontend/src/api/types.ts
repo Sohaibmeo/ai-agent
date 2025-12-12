@@ -14,6 +14,7 @@ export interface UserProfile {
   dinner_enabled?: boolean;
   max_difficulty?: string | null;
   weekly_budget_gbp?: number | null;
+  credit: number;
 }
 
 export interface Recipe {

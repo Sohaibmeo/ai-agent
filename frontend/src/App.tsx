@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import type { ReactElement } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { AppShell } from './components/layout/AppShell';
@@ -13,8 +13,9 @@ import { AgentPipelineModal } from './components/agents/AgentPipelineModal';
 import { ExplainBotWidget } from './components/agents/ExplainBotWidget';
 import { LoginPage } from './pages/LoginPage';
 import { OnboardingPage } from './pages/OnboardingPage';
+import { SignupPage } from './pages/SignupPage';
+import { SetPasswordPage } from './pages/SetPasswordPage';
 import { useAuth } from './context/AuthContext';
-import { Navigate, useLocation } from 'react-router-dom';
 
 function Protected({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
@@ -41,6 +42,8 @@ function App() {
       <AgentPipelineProvider>
         <Routes>
           <Route path="/auth/login" element={<LoginPage />} />
+          <Route path="/auth/signup" element={<SignupPage />} />
+          <Route path="/auth/set-password" element={<SetPasswordPage />} />
           <Route path="/onboarding" element={<OnboardingPage />} />
           <Route
             path="/*"

@@ -1,250 +1,219 @@
-# 🧠 AI-Powered Meal Planning Platform
-### Enterprise-Grade Nutrition, Cost Optimization & Preference-Learning System  
-Built with **NestJS**, **Postgres**, **Local LLM Agents**, **TypeScript**, and **Structured AI Orchestration**
+# 🧠 Overcooked AI – Multi-Agent Meal Planning Platform
+### AI-Driven Meal Planning Engine Powered by Multi-Agent Precision, Real Nutrition Intelligence, and Automated Weekly Planning.
+
+A high-performance multi-agent orchestration system that generates personalised, budget-aware weekly meal plans with clean, structured outputs. Built for real users. Engineered like a developer-grade AI product.
+
+**Live App:** https://overcooked-ai.vercel.app/
 
 ---
 
-## 📌 Overview
+## 🚀 Overview
 
-This repository contains a **production-ready AI-Assisted Meal Planning System**, designed for the UK market.  
-It generates **7-day meal plans** tailored to:
+Overcooked AI is a next-generation meal-planning platform powered by coordinated LLM agents and a robust validation pipeline. Unlike typical recipe generators, Overcooked AI produces strictly structured, nutritionally accurate, budget-aligned weekly plans tailored to each user’s goals.
 
-- Body composition goals (lose / maintain / gain)  
-- Diet requirements (Halal, Vegan, Vegetarian, Keto, etc.)  
-- UK’s 14 allergen categories  
-- Weekly budget constraints  
-- Recipe difficulty  
-- Meal schedule preferences  
-- User behaviour (likes, dislikes, swaps, custom recipes)
+The platform combines:
 
-The system combines:
+- Multi-agent LLM reasoning  
+- Nutrition science  
+- Price-aware ingredient modelling  
+- Schema-enforced plan generation  
+- Vision-based macro estimation  
+- A modern, serverless architecture (Next.js + NestJS + Vercel + Neon)
 
-- **Local LLM agents** (Review Agent + Coach Agent)  
-- **Strong deterministic backend logic** (macro/cost engine, filtering, targets)  
-- **Preference learning**  
-- **Recipe + Ingredient catalogs with cost estimation**  
-- **Shopping list generation with price overrides + pantry tracking**
-
-This architecture prioritises **reliability**, **explainability**, and **cost efficiency** while still benefiting from AI reasoning where helpful.
+The result: AI-generated plans that are consistent, correct, and actually usable in real life.
 
 ---
 
-## 🧩 System Flow (Figma Diagram)
+## 🧩 Key Capabilities
 
-Prototype Workflow:  
-👉 https://github.com/Sohaibmeo/ai-agent/raw/adv-fitness-agent/docs/Figma.png
+### 1. Multi-Agent Pipeline (Developer-Grade Reliability)
+Each day of the meal plan is generated through a controlled sequence of agents:
 
-This illustrates user navigation: **Profile → Plans → Groceries**, including swaps, modifications, price overrides, and ingredient interactions.
+1. **Coach Agent** – drafts initial meal structures aligned to user goals and macros  
+2. **Review Agent** – enforces Zod schemas (DayMeal, PlanDay, WeeklyPlan) and self-corrects invalid outputs  
+3. **Nutrition Agent** – balances calories, protein, carbs, and fats  
+4. **Vision Macros Agent** – extracts macros from food images  
+5. **Orchestrator (PlansService)** – ensures weekly consistency, regeneration, and budget compliance
 
----
-
-## 🏗️ Core Architecture
-
-### **Backend**
-- **NestJS + TypeScript**
-- **PostgreSQL (TypeORM)**
-- **Modular domain architecture**
-- **Zod validation for all AI structured outputs**
-- **Local compatible LLM endpoints** for agents
-- **Deterministic domain logic** for macros and cost calculations
-
-### **AI Layer**
-- **Review Agent** – interprets user intent into structured instructions  
-- **Coach Agent** – selects recipes per day/meal slot using ranked candidates  
-- **Structured JSON I/O with Zod validation**  
-- **Fallback logic** ensures reliability if AI fails validation  
+Every stage includes fallback logic, validation, and retry mechanisms.
 
 ---
 
-## 📦 Features Implemented
+## 🧭 Figma Workflow Diagram (Placeholder)
 
-### ✅ **User Profile**
-- Age, height, weight, activity level  
-- Goal (lose/maintain/gain)  
-- Diet type (Halal, Vegan, etc.)  
-- Allergens (14 UK categories)  
-- Default plan settings (optional)
-- Meal schedule defaults
+*(Space reserved — image link will be inserted here later)*  
 
-### ✅ **Recipe & Ingredient Catalog**
-- Ingredient macros, allergens, cost per unit  
-- Recipes with difficulty, diet tags, base macros & cost  
-- Linking via RecipeIngredient with quantities and units  
-
-### ✅ **User Preferences & Learning**
-- Recipe-level likes/dislikes  
-- Ingredient-level scoring  
-- Automatic learning when swapping meals  
-
-### ✅ **Weekly Plan Generation**
-- 7-day plan  
-- Daily meal slots  
-- Portion scaling toward calorie/protein targets  
-- Diet, allergen, difficulty filtering  
-- Optional LLM-assisted selection  
-- Deterministic fallback generation  
-
-### ✅ **Shopping List Engine**
-- Aggregates ingredients across the week  
-- Applies user price overrides  
-- Pantry tracking (“already have this”)  
-
-### ✅ **LLM Agents**
-- Structured-review instructions  
-- Recipe selection  
-- Nutrition insights  
-- Error handling + JSON schema enforcement  
 
 ---
 
-## 🔧 Backend Structure
+## 🏗 Architecture
 
 ```
-src/
- ├─ agents/
- ├─ plans/
- ├─ recipes/
- ├─ ingredients/
- ├─ preferences/
- ├─ shopping-list/
- ├─ users/
- ├─ database/
- └─ common/
+                ┌────────────────────────────────┐
+                │       Next.js Frontend         │
+                │   - Auth (JWT)                 │
+                │   - Profile setup              │
+                │   - Weekly plan UI             │
+                └───────────────┬────────────────┘
+                                │ HTTPS
+                                ▼
+        ┌─────────────────────────────────────────────────────┐
+        │                     NestJS Backend                  │
+        │                                                     │
+        │   ┌───────────────────────────────┐                 │
+        │   │        PlansService           │                 │
+        │   │  - generateWeek()             │                 │
+        │   │  - regenerateDay()            │                 │
+        │   └───────────┬───────────────────┘                 │
+        │               │ calls AgentsService                 │
+        │               ▼                                     │
+        │   ┌───────────────────────────────┐                 │
+        │   │        AgentsService          │                 │
+        │   │  Coach → Review → Nutrition   │                 │
+        │   │  → Vision → Finalise Output   │                 │
+        │   └───────────────────────────────┘                 │
+        │                                                     │
+        │  Neon Postgres (TypeORM Entities)                   │
+        │  - Users                                            │
+        │  - Profiles                                         │
+        │  - Plans / Days / Meals                             │
+        │  - Action Logs                                      │
+        └─────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 🧠 AI Orchestration
+## ⚙️ Core Backend Components
 
-### **Review Agent**
-Inputs:
-- Action (swap/modify)
-- Reason  
-- Plan context  
+### 1. AgentsService
+Implements the entire multi-agent orchestration pipeline:
 
-Outputs:  
-- `ReviewInstruction` with actionable structure  
+- Coach → Review → Nutrition sequencing  
+- Prompt construction  
+- Schema enforcement using Zod  
+- Retry logic for malformed outputs  
+- Vision macro extraction  
+- Supports cloud + local LLMs (Ollama / OpenAI)
 
-### **Coach Agent**
-Inputs:
-- Profile  
-- Targets  
-- Candidate recipes  
-
-Outputs:  
-- `{ days: [ { day_index, meals: [ { recipe_id, portion_multiplier } ] } ] }`  
-
-Backend recalculates macros & cost deterministically.
-
----
-
-## 🧮 Deterministic Engine
-
-The backend—not the LLM—handles:
-
-- Calorie targets  
-- Protein targets  
-- Portion scaling  
-- Budget logic (upcoming)  
-- Difficulty filtering  
-- Allergen filtering  
-- Macro calculations  
-- Shopping list generation  
-
-This ensures **accuracy** and **consistency**.
-
----
-
-## 📊 Database Schema (Summary)
+Environment-driven configuration:
 
 ```
-users
-user_profile
-ingredients
-user_ingredient_price
-pantry_items
-recipes
-recipe_ingredients
-weekly_plans
-plan_days
-plan_meals
-shopping_list_items
-user_recipe_score
-user_ingredient_score
+LLM_MODEL_REVIEW=gpt-5-mini
+LLM_MODEL_COACH=gpt-5-mini
+LLM_MODEL_NUTRITION=gpt-5-nano
+LLM_MODEL_VISION=gpt-4.1-mini
+LLM_MODE=cloud | local
+LLM_BASE_URL=<ollama-url-if-local>
 ```
 
 ---
 
-## 🧪 Development Status
+### 2. PlansService
+Handles complete weekly plan generation:
 
-### ✔ Backend foundations  
-### ✔ AI agent wrappers  
-### ✔ Weekly plan generator  
-### ✔ Shopping list engine  
-### ✔ Preference learning  
-### ✔ Ingredients/recipes schema  
-### △ Budget-aware AI selection (upcoming)  
-### △ Frontend UI (next phase)  
-### △ Figma update needed  
+- `generateWeek()` – builds seven fully validated days  
+- `regenerateDay()` – replaces a single day without breaking the plan  
+- Profile-driven macro + calorie calculations  
+- Budget enforcement  
+- Delegation to AgentsService with validation  
+- Final plan persistence
 
----
-
-## 🚀 Next Milestones
-
-### **1. Frontend MVP**
-- Profile  
-- Generate Week  
-- Current Plan  
-- Swap Recipe  
-- Groceries  
-
-### **2. Improved Coach Agent**
-Include metadata for calorie/cost-awareness.
-
-### **3. Weekly Plan Settings Modal**
-Replace reliance on profile-only settings.
-
-### **4. Enhanced Review Agent Schema**
-Add structured action parameters.
-
-### **5. Recipe expansion**
-Improve coverage across diets and meal slots.
+Ensures stable, deterministic generation even under partial agent failures.
 
 ---
 
-## 🛠️ Getting Started
+### 3. Strict Zod Schemas
+These schemas guarantee compatibility and stability:
 
-### Install
-```bash
+- `DayMealSchema`  
+- `PlanDaySchema`  
+- `WeeklyPlanSchema`  
+
+Invalid responses are corrected before proceeding.
+
+---
+
+## 🔐 Authentication Flow
+
+- JWT-based login  
+- `POST /auth/register`  
+- `POST /auth/login`  
+- `GET /auth/me`  
+- Profiles stored separately for cleaner domain separation  
+
+Credit limits or usage controls can be added without enabling open public signups.
+
+---
+
+## 📡 API Endpoints
+
+### Auth
+```
+POST /auth/register
+POST /auth/login
+GET  /auth/me
+```
+
+### Profile
+```
+GET  /profile/me
+PUT  /profile/me
+```
+
+### Plans
+```
+POST /plans/week/generate
+POST /plans/:id/day/:dayIndex/regenerate
+GET  /plans/week/current
+```
+
+### Vision
+```
+POST /agents/vision/recognize
+```
+
+---
+
+## 🛠 Local Development
+
+```
+git clone <repo-url>
+cd backend
 npm install
 ```
 
-### Environment variables
-```env
-DATABASE_URL=postgres://...
-LLM_BASE_URL=http://localhost:11434/v1
-LLM_MODEL_REVIEW=llama3
-LLM_MODEL_COACH=llama3
+### Environment Setup
 ```
-
-### Start Postgres
-```bash
-docker-compose up -d
+cp .env.example .env
 ```
+Add Postgres + LLM credentials.
 
-### Run migrations & seeds
-```bash
+### Database Migrations
+```
 npm run typeorm:migration:run
-npm run seed
 ```
 
-### Start backend
-```bash
+### Start Backend
+```
 npm run start:dev
 ```
 
 ---
 
-## 📄 License
-[MIT License](https://github.com/Sohaibmeo/ai-agent/blob/main/LICENSE)
+## 🧭 Roadmap
 
+- Pantry and inventory tracking  
+- Live supermarket price scraping (UK market)  
+- Multi-item vision recognition  
+- Subscription tiers with usage credits  
+- Multi-culture recipe intelligence  
+- Insights dashboard  
+- Learning user preference and using it for future plans
+- Implementing full meal planner based on proper professional level contraints as recorded in the docs/current-progress
+
+---
+
+## 📄 License
+
+Licensed under the MIT License.  
+See `LICENSE` in this repository.

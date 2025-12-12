@@ -49,6 +49,9 @@ export class UserProfile {
   @Column({ type: 'varchar', length: 50, default: 'easy' })
   max_difficulty!: string;
 
+  @Column({ type: 'integer', default: 30 })
+  credit!: number;
+
   @Column({ type: 'numeric', nullable: true })
   weekly_budget_gbp?: number;
 }
