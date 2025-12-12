@@ -1338,6 +1338,7 @@ export class PlansService {
             weeklyBudgetGbp: profile.weekly_budget_gbp,
           }
         : undefined,
+      userId: profileUserId,
     });
 
     this.logger.debug(

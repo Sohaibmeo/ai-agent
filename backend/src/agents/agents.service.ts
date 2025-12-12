@@ -452,6 +452,7 @@ export class AgentsService {
       dietType?: string;
       weeklyBudgetGbp?: number;
     };
+    userId?: string;
   }) {
     const toNum = (v: any) => {
       if (v === null || v === undefined || v === '') return 0;
@@ -477,11 +478,11 @@ export class AgentsService {
         .optional(),
     });
 
-    const prompt: { role: 'system' | 'user'; content: string }[] = [
-      {
-        role: 'system',
-        content: RECIPE_ADJUSTOR_SYSTEM_PROMPT,
-      },
+      const prompt: { role: 'system' | 'user'; content: string }[] = [
+        {
+          role: 'system',
+          content: RECIPE_ADJUSTOR_SYSTEM_PROMPT,
+        },
       {
         role: 'user',
         content: JSON.stringify(payload),
@@ -500,7 +501,11 @@ export class AgentsService {
             1000,
           )} attempt=${attempt + 1}`,
         );
-        return schema.parse(raw);
+        const parsed = schema.parse(raw);
+        if (payload.userId) {
+          await this.profileService.chargeCredit(payload.userId, CREDIT_COSTS.recipeGeneration);
+        }
+        return parsed;
       } catch (err) {
         lastErr = err;
         this.logger.error(

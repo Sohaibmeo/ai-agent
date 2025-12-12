@@ -186,7 +186,10 @@ export class RecipesService {
       },
     };
 
-    const adjusted = await this.agentsService.adjustRecipeWithContext(payload);
+    const adjusted = await this.agentsService.adjustRecipeWithContext({
+      ...payload,
+      userId,
+    });
     const adjustedIngredients =
       adjusted.ingredients && adjusted.ingredients.length ? adjusted.ingredients : payload.originalRecipe.ingredients;
 
