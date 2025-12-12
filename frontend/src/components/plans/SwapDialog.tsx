@@ -3,7 +3,6 @@ import { useRecipeCandidates } from '../../hooks/useRecipeCandidates';
 import { notify } from '../../lib/toast';
 import { aiPlanSwap } from '../../api/plans';
 import { useLlmAction } from '../../hooks/useLlmAction';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useCreditConfirmation } from '../../hooks/useCreditConfirmation.tsx';
 import { useProfile } from '../../hooks/useProfile';
@@ -30,7 +29,6 @@ export function SwapDialog({
 }: SwapDialogProps) {
   const { user } = useAuth();
   const userId = user?.id as string;
-  const navigate = useNavigate();
   const { data: profileData } = useProfile();
   const { requestCreditConfirmation } = useCreditConfirmation();
   const confirmCreditUse = async (cost: number, label: string, detail: string) => {
