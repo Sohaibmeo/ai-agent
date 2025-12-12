@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { notify } from '../lib/toast';
 import { useProfile } from '../hooks/useProfile';
 import { Card } from '../components/shared/Card';
@@ -131,6 +131,11 @@ export function PaymentPage() {
     return Number.isFinite(n) ? n : 0;
   }, [profile?.credit]);
 
+  const creditBundlesRef = useRef<HTMLDivElement | null>(null);
+  const scrollToBundles = () => {
+    creditBundlesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const yearlySavingsText = useMemo(() => {
     // Your current pricing is "10x monthly" effectively; position as “~2 months free”.
     return 'Save ~2 months';
@@ -153,15 +158,15 @@ export function PaymentPage() {
           </p>
         </div>
 
-        <div className="w-full sm:w-auto">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="text-xs uppercase tracking-[0.35em] text-slate-500">Current credits</div>
-            <div className="mt-2 text-3xl font-semibold text-slate-900">{credit.toFixed(2)}</div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <PrimaryButton onClick={() => notify.info('Scroll to Credit bundles')}>
-                Top up credits
-              </PrimaryButton>
-              <SecondaryButton onClick={() => notify.info('Invoices & receipts coming soon')}>
+            <div className="w-full sm:w-auto">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="text-xs uppercase tracking-[0.35em] text-slate-500">Current credits</div>
+                <div className="mt-2 text-3xl font-semibold text-slate-900">{credit.toFixed(2)}</div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <PrimaryButton onClick={scrollToBundles}>
+                    Top up credits
+                  </PrimaryButton>
+                  <SecondaryButton onClick={() => notify.info('Invoices & receipts coming soon')}>
                 View invoices
               </SecondaryButton>
             </div>
@@ -306,7 +311,7 @@ export function PaymentPage() {
   );
 
   const CreditBundles = () => (
-    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div ref={creditBundlesRef} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-[0.35em] text-slate-500">Credit bundles</p>
@@ -318,7 +323,7 @@ export function PaymentPage() {
         <div className="text-xs text-slate-400">More credits = better value</div>
       </div>
 
-      <div className="mt-5 grid gap-4 md:grid-cols-4">
+      <div className="mt-5 grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {creditBundles.map((bundle) => (
           <div
             key={bundle.label}
@@ -417,17 +422,17 @@ export function PaymentPage() {
             </div>
           </div>
 
-          <div className="mt-6">
-            {billingCycle === 'lifetime' ? (
-              <LifetimeCard />
-            ) : (
-              <div className="grid gap-4 md:grid-cols-3">
-                {planTiers.map((tier) => (
-                  <PlanCard key={tier.name} {...tier} />
-                ))}
-              </div>
-            )}
-          </div>
+            <div className="mt-6">
+              {billingCycle === 'lifetime' ? (
+                <LifetimeCard />
+              ) : (
+                <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                  {planTiers.map((tier) => (
+                    <PlanCard key={tier.name} {...tier} />
+                  ))}
+                </div>
+              )}
+            </div>
         </div>
 
         <CreditBundles />
