@@ -6,6 +6,10 @@ import { calculateTargets, type ProfileInputs } from '../lib/targets';
 import { updateProfile, fetchProfileMe } from '../api/profile';
 import { DIET_TYPES, ALLERGENS } from '../constants/dietAllergy';
 import { GOALS, INTENSITIES, ACTIVITY_LEVELS } from '../constants/targets';
+import { useQueryClient } from '@tanstack/react-query';
+import { useProfile } from '../hooks/useProfile';
+import { useCreditConfirmation } from '../hooks/useCreditConfirmation.tsx';
+import { CREDIT_COSTS } from '../constants/credits';
 import { activatePlan, generatePlan } from '../api/plans';
 
 type Step = 0 | 1 | 2 | 3 | 4;
@@ -21,6 +25,9 @@ export function OnboardingPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [sameMealsAllWeek, setSameMealsAllWeek] = useState(false);
+  const queryClient = useQueryClient();
+  const { data: profileData } = useProfile();
+  const { requestCreditConfirmation } = useCreditConfirmation();
 
   const [profile, setProfile] = useState<
     ProfileInputs & {
@@ -132,25 +139,29 @@ export function OnboardingPage() {
     }
   };
 
-  const handleSave = async () => {
-    if (!token) return;
-    setSaving(true);
-    const toastId = toast.loading('Saving your profile…');
-    try {
-      await persistProfile();
-      toast.success('Profile saved! Redirecting to your plan…', { id: toastId });
-      navigate('/plans');
-    } catch (e) {
-      console.error(e);
-      toast.error('Could not save your profile. Please try again.', { id: toastId });
-    } finally {
-      setSaving(false);
+  const confirmCreditUse = async (cost: number, label: string, detail: string) => {
+    const available = Number(profileData?.credit ?? 0);
+    if (available < cost) {
+      toast.error('You do not have enough credits for this action.');
+      return false;
     }
+    return await requestCreditConfirmation({ cost, title: label, detail });
   };
 
   const handleFinish = async () => {
     if (!token) return;
     const toastId = toast.loading('Finalising onboarding…');
+    const cost = sameMealsAllWeek ? CREDIT_COSTS.planGeneration.same : CREDIT_COSTS.planGeneration.varied;
+    const detail = sameMealsAllWeek
+      ? 'Same meals all week'
+      : 'Different meals every day';
+    setSaving(true);
+    const confirmed = await confirmCreditUse(cost, 'Generate your first plan', detail);
+    if (!confirmed) {
+      setSaving(false);
+      toast.dismiss(toastId);
+      return;
+    }
     try {
       await persistProfile();
       const plan = await generatePlan({
@@ -165,10 +176,13 @@ export function OnboardingPage() {
       });
       await activatePlan(plan.id);
       toast.success('Onboarding complete! Generating your plan now…', { id: toastId });
+      await queryClient.invalidateQueries({ queryKey: ['profile', 'me'] });
       navigate('/plans');
     } catch (e) {
       console.error(e);
       toast.error('Could not finish onboarding. Please try again.', { id: toastId });
+    } finally {
+      setSaving(false);
     }
   };
 

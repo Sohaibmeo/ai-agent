@@ -15,6 +15,7 @@ import { LoginPage } from './pages/LoginPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { SignupPage } from './pages/SignupPage';
 import { SetPasswordPage } from './pages/SetPasswordPage';
+import { CreditConfirmationProvider } from './hooks/useCreditConfirmation.tsx';
 import { useAuth } from './context/AuthContext';
 
 function Protected({ children }: { children: ReactElement }) {
@@ -52,8 +53,9 @@ function App() {
   }
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <AgentPipelineProvider>
-        <Routes>
+      <CreditConfirmationProvider>
+        <AgentPipelineProvider>
+          <Routes>
           <Route
             path="/auth/login"
             element={
@@ -90,11 +92,12 @@ function App() {
               </Protected>
             }
           />
-        </Routes>
-        <AgentPipelineModal />
-        {user && <ExplainBotWidget />}
-        <Toaster position="top-right" toastOptions={{ className: 'text-sm' }} />
-      </AgentPipelineProvider>
+          </Routes>
+          <AgentPipelineModal />
+          {user && <ExplainBotWidget />}
+          <Toaster position="top-right" toastOptions={{ className: 'text-sm' }} />
+        </AgentPipelineProvider>
+      </CreditConfirmationProvider>
     </div>
   );
 }

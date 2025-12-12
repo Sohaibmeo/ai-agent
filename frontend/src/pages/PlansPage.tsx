@@ -11,6 +11,8 @@ import { SwapDialog } from '../components/plans/SwapDialog';
 import { activatePlan, aiPlanSwap, fetchActivePlan, setMealRecipe, setPlanStatus } from '../api/plans';
 import { notify } from '../lib/toast';
 import { useLlmAction } from '../hooks/useLlmAction';
+import { useCreditConfirmation } from '../hooks/useCreditConfirmation.tsx';
+import { CREDIT_COSTS } from '../constants/credits';
 
 const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const pillClass = 'rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 border border-slate-200';
@@ -142,6 +144,16 @@ export function PlansPage() {
     navigate(`/plans/meal/${mealId}`);
   };
 
+  const { data: profileData } = useProfile();
+  const { requestCreditConfirmation } = useCreditConfirmation();
+  const confirmCreditUse = async (cost: number, label: string, detail: string) => {
+    const available = Number(profileData?.credit ?? 0);
+    if (available < cost) {
+      notify.error('You do not have enough credits for this action.');
+      return false;
+    }
+    return await requestCreditConfirmation({ cost, title: label, detail });
+  };
   const openSwap = (mealId: string, slot?: string) => {
     setSwapMealId(mealId);
     setSwapMealSlot(slot);
@@ -197,6 +209,10 @@ export function PlansPage() {
   };
 
   const runAgentPlanGeneration = async () => {
+    const cost = sameMealsAllWeek ? CREDIT_COSTS.planGeneration.same : CREDIT_COSTS.planGeneration.varied;
+    const detail = sameMealsAllWeek ? 'Generate the same meals all week' : 'Generate a varied week';
+    const confirmed = await confirmCreditUse(cost, 'Generate a new week', detail);
+    if (!confirmed) return;
     try {
       await runPlanGeneration(async () => {
         const result = await generatePlan({
@@ -212,6 +228,7 @@ export function PlansPage() {
           maxDifficulty: slots.max_difficulty,
         });
         notify.success('New plan generated');
+        await queryClient.invalidateQueries({ queryKey: ['profile', 'me'] });
         return result;
       });
     } catch (e) {

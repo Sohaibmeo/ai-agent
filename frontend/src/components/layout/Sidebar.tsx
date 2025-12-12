@@ -1,4 +1,4 @@
-import { NavLink, useNavigate, useLocation, Link } from 'react-router-dom';
+import { NavLink, useNavigate, Link } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { FiSettings } from 'react-icons/fi';
 import { useAuth } from '../../context/AuthContext';
@@ -12,7 +12,6 @@ const navItems = [
 export function Sidebar() {
   const items = useMemo(() => navItems, []);
   const navigate = useNavigate();
-  const location = useLocation();
   const { logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
