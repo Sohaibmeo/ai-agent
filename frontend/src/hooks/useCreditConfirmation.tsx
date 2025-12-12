@@ -6,6 +6,9 @@ type CreditConfirmationOptions = {
   cost: number;
   title: string;
   detail?: string;
+  insufficient?: boolean;
+  ctaLabel?: string;
+  onRecharge?: () => void;
 };
 
 type PendingConfirmation = CreditConfirmationOptions & {
@@ -47,6 +50,12 @@ export function CreditConfirmationProvider({ children }: { children: ReactNode }
           cost={pending.cost}
           title={pending.title}
           detail={pending.detail}
+          insufficient={pending.insufficient}
+          ctaLabel={pending.ctaLabel}
+          onRecharge={() => {
+            pending.onRecharge?.();
+            handleClose(false);
+          }}
           onConfirm={() => handleClose(true)}
           onCancel={() => handleClose(false)}
         />

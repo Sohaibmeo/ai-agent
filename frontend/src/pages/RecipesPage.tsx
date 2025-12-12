@@ -7,7 +7,6 @@ import { useAgentPipeline } from '../hooks/useAgentPipeline';
 import { useAuth } from '../context/AuthContext';
 import { useCreditConfirmation } from '../hooks/useCreditConfirmation.tsx';
 import { useProfile } from '../hooks/useProfile';
-import { notify } from '../lib/toast';
 import { CREDIT_COSTS } from '../constants/credits';
 
 export function RecipesPage() {
@@ -29,11 +28,18 @@ export function RecipesPage() {
   const { requestCreditConfirmation } = useCreditConfirmation();
   const confirmCreditUse = async (cost: number, label: string, detail: string) => {
     const available = Number(profileData?.credit ?? 0);
-    if (available < cost) {
-      notify.error('You do not have enough credits for this action.');
-      return false;
-    }
-    return await requestCreditConfirmation({ cost, title: label, detail });
+    const insufficient = available < cost;
+    const options = insufficient
+      ? {
+          cost,
+          title: label,
+          detail,
+          insufficient: true,
+          ctaLabel: 'Add credits',
+          onRecharge: () => navigate('/'),
+        }
+      : { cost, title: label, detail };
+    return await requestCreditConfirmation(options);
   };
 
   const handleAiTextCreation = async () => {

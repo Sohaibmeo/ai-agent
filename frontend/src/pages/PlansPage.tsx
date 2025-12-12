@@ -148,11 +148,18 @@ export function PlansPage() {
   const { requestCreditConfirmation } = useCreditConfirmation();
   const confirmCreditUse = async (cost: number, label: string, detail: string) => {
     const available = Number(profileData?.credit ?? 0);
-    if (available < cost) {
-      notify.error('You do not have enough credits for this action.');
-      return false;
-    }
-    return await requestCreditConfirmation({ cost, title: label, detail });
+    const insufficient = available < cost;
+    const options = insufficient
+      ? {
+          cost,
+          title: label,
+          detail,
+          insufficient: true,
+          ctaLabel: 'Add credits',
+          onRecharge: () => navigate('/'),
+        }
+      : { cost, title: label, detail };
+    return await requestCreditConfirmation(options);
   };
   const openSwap = (mealId: string, slot?: string) => {
     setSwapMealId(mealId);
