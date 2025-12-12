@@ -106,18 +106,10 @@ export const useLlmAction = (opts?: LlmActionOptions) => {
               ? await driveReview()
               : await driveGeneric();
 
-        setTimeout(() => {
-          endRun();
-        }, 300);
-
         return result;
       } catch (err: any) {
         console.error('LLM action failed', err);
         setError(err?.message || 'Something went wrong while talking to the AI.');
-
-        setTimeout(() => {
-          endRun();
-        }, 1200);
 
         throw err;
       }

@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { login, resetPassword } from '../api/auth';
+import { Link, useNavigate } from 'react-router-dom';
+import { login } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
-import toast from 'react-hot-toast';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -11,10 +10,6 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const { setAuth } = useAuth();
   const navigate = useNavigate();
-  const [showReset, setShowReset] = useState(false);
-  const [resetEmail, setResetEmail] = useState('');
-  const [resetting, setResetting] = useState(false);
-  const [resetMessage, setResetMessage] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,21 +23,6 @@ export function LoginPage() {
       setError(err?.message || 'Could not log in');
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  const handleReset = async () => {
-    setResetting(true);
-    setResetMessage(null);
-    try {
-      await resetPassword(resetEmail.trim());
-      setResetMessage('If that email exists we sent a temporary password.');
-      toast.success('Temporary password sent if the address exists.');
-    } catch (err: any) {
-      setResetMessage(err?.message || 'Could not send reset email');
-      toast.error('Unable to send reset email.');
-    } finally {
-      setResetting(false);
     }
   };
 
@@ -99,41 +79,17 @@ export function LoginPage() {
           </button>
 
           <div className="mt-4 text-center text-[11px] text-slate-600">
-            Need an account? Ask the admin to create one for you.
+            Need access?{' '}
+            <Link to="/auth/signup" className="font-semibold text-emerald-600 hover:text-emerald-700">
+              Request a link
+            </Link>
           </div>
-          <div className="mt-2 text-right text-xs">
-            <button
-              type="button"
-              onClick={() => setShowReset((prev) => !prev)}
-              className="text-emerald-600 hover:text-emerald-700"
-            >
-              {showReset ? 'Hide' : 'Forgot password?'}
-            </button>
+          <div className="mt-3 text-center text-[11px] text-slate-500">
+            Forgot your password?{' '}
+            <Link to="/auth/signup?mode=reset" className="font-semibold text-emerald-600 hover:text-emerald-700">
+              Reset password link
+            </Link>
           </div>
-          {showReset && (
-            <div className="mt-3 space-y-3 rounded-2xl bg-emerald-50/40 px-5 py-4 text-xs text-slate-700">
-              <p className="text-[11px] text-slate-500">
-                Enter your email and we’ll send a temporary password to sign in.
-              </p>
-              <input
-                type="email"
-                required
-                value={resetEmail}
-                onChange={(e) => setResetEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs text-slate-900"
-              />
-              {resetMessage && <p className="text-[11px] text-slate-600">{resetMessage}</p>}
-              <button
-                type="button"
-                onClick={handleReset}
-                disabled={resetting}
-                className="w-full rounded-xl border border-emerald-300 bg-white px-3 py-2 text-[11px] font-semibold text-emerald-600 hover:border-emerald-400 disabled:opacity-50"
-              >
-                {resetting ? 'Sending…' : 'Email temporary password'}
-              </button>
-            </div>
-          )}
         </form>
       </div>
     </div>

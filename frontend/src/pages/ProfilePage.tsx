@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Card } from '../components/shared/Card';
 import { useProfile } from '../hooks/useProfile';
 import { notify } from '../lib/toast';
-import { useAuth } from '../context/AuthContext';
 import { calculateTargets } from '../lib/targets';
 import { GOALS, INTENSITIES, ACTIVITY_LEVELS } from '../constants/targets';
 import { DIET_TYPES, ALLERGENS } from '../constants/dietAllergy';
@@ -13,7 +12,6 @@ const difficultyOptions = ['super_easy', 'easy', 'medium', 'hard'];
 
 export function ProfilePage() {
   const { data, isLoading, isSaving, saveProfile } = useProfile();
-  const { logout } = useAuth();
   const [form, setForm] = useState({
     age: '',
     height_cm: '',
@@ -65,6 +63,8 @@ export function ProfilePage() {
   );
 
   const [dirty, setDirty] = useState(false);
+  const showSaveButton = dirty || isSaving;
+
   const handleSave = async () => {
     try {
       await saveProfile({
@@ -117,6 +117,9 @@ export function ProfilePage() {
         ? `+${targets.calorieDelta} kcal`
         : `${targets.calorieDelta} kcal`;
 
+  const creditBalance = data?.credit ?? 0;
+  const creditDisplay = isLoading ? '—' : creditBalance.toString();
+
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
@@ -125,21 +128,28 @@ export function ProfilePage() {
           <p className="text-sm text-slate-600">Body data, diet, allergies, and plan defaults.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            disabled={!dirty || isSaving}
-            onClick={handleSave}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-          >
-            {isSaving ? 'Saving...' : 'Save Profile'}
-          </button>
-          <button
-            onClick={logout}
-            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-          >
-            Log out
-          </button>
+          {showSaveButton && (
+            <button
+              disabled={!dirty || isSaving}
+              onClick={handleSave}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+            >
+              {isSaving ? 'Saving...' : 'Save Profile'}
+            </button>
+          )}
         </div>
       </div>
+
+      <Card title="AI Credits" subtitle="Each generation consumes a credit">
+        <div className="flex flex-col gap-2">
+          <span className="text-4xl font-semibold text-slate-900">{creditDisplay}</span>
+          <p className="text-sm text-slate-500">
+            {isLoading
+              ? 'Loading your balance…'
+              : 'Keep an eye on this balance to know how many plan generations are available.'}
+          </p>
+        </div>
+      </Card>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card title="Body & Goals" subtitle="Core data for targets">

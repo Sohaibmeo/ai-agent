@@ -6,8 +6,13 @@ import { calculateTargets, type ProfileInputs } from '../lib/targets';
 import { updateProfile, fetchProfileMe } from '../api/profile';
 import { DIET_TYPES, ALLERGENS } from '../constants/dietAllergy';
 import { GOALS, INTENSITIES, ACTIVITY_LEVELS } from '../constants/targets';
+import { useQueryClient } from '@tanstack/react-query';
+import { useProfile } from '../hooks/useProfile';
+import { useCreditConfirmation } from '../hooks/useCreditConfirmation.tsx';
+import { CREDIT_COSTS } from '../constants/credits';
+import { activatePlan, generatePlan } from '../api/plans';
 
-type Step = 0 | 1 | 2 | 3;
+type Step = 0 | 1 | 2 | 3 | 4;
 
 const goals = GOALS;
 const intensities = INTENSITIES;
@@ -19,6 +24,10 @@ export function OnboardingPage() {
   const [step, setStep] = useState<Step>(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [sameMealsAllWeek, setSameMealsAllWeek] = useState(false);
+  const queryClient = useQueryClient();
+  const { data: profileData } = useProfile();
+  const { requestCreditConfirmation } = useCreditConfirmation();
 
   const [profile, setProfile] = useState<
     ProfileInputs & {
@@ -105,35 +114,80 @@ export function OnboardingPage() {
     });
   };
 
-  const handleSave = async () => {
+  const buildProfilePayload = () => ({
+    age: profile.age,
+    height_cm: profile.height_cm,
+    weight_kg: profile.weight_kg,
+    activity_level: profile.activity_level,
+    goal: profile.goal,
+    goal_intensity: profile.goal_intensity,
+    diet_type: profile.diet_type,
+    allergy_keys: profile.allergy_keys,
+    breakfast_enabled: profile.breakfast_enabled,
+    snack_enabled: profile.snack_enabled,
+    lunch_enabled: profile.lunch_enabled,
+    dinner_enabled: profile.dinner_enabled,
+    weekly_budget_gbp: profile.weekly_budget_gbp,
+    max_difficulty: profile.max_difficulty,
+  });
+
+  const persistProfile = async () => {
     if (!token) return;
+    await updateProfile(token, buildProfilePayload());
+    if (user) {
+      setAuth(token, { ...user, hasProfile: true });
+    }
+  };
+
+  const confirmCreditUse = async (cost: number, label: string, detail: string) => {
+    const available = Number(profileData?.credit ?? 0);
+    const insufficient = available < cost;
+    const options = insufficient
+      ? {
+          cost,
+          title: label,
+          detail,
+          insufficient: true,
+          ctaLabel: 'Add credits',
+        }
+      : { cost, title: label, detail };
+    return await requestCreditConfirmation(options);
+  };
+
+  const handleFinish = async () => {
+    if (!token) return;
+    const toastId = toast.loading('Finalising onboarding…');
+    const dayCost = CREDIT_COSTS.planGeneration.day;
+    const cost = dayCost * (sameMealsAllWeek ? 1 : 7);
+    const detail = sameMealsAllWeek
+      ? 'Same meals all week'
+      : 'Different meals every day';
     setSaving(true);
-    const toastId = toast.loading('Saving your profile…');
+    const confirmed = await confirmCreditUse(cost, 'Generate your first plan', detail);
+    if (!confirmed) {
+      setSaving(false);
+      toast.dismiss(toastId);
+      return;
+    }
     try {
-      await updateProfile(token, {
-        age: profile.age,
-        height_cm: profile.height_cm,
-        weight_kg: profile.weight_kg,
-        activity_level: profile.activity_level,
-        goal: profile.goal,
-        goal_intensity: profile.goal_intensity,
-        diet_type: profile.diet_type,
-        allergy_keys: profile.allergy_keys,
+      await persistProfile();
+      const plan = await generatePlan({
         breakfast_enabled: profile.breakfast_enabled,
         snack_enabled: profile.snack_enabled,
         lunch_enabled: profile.lunch_enabled,
         dinner_enabled: profile.dinner_enabled,
-        weekly_budget_gbp: profile.weekly_budget_gbp,
-        max_difficulty: profile.max_difficulty,
+        weeklyBudgetGbp: profile.weekly_budget_gbp,
+        sameMealsAllWeek,
+        maxDifficulty: profile.max_difficulty,
+        useAgent: true,
       });
-      if (user) {
-        setAuth(token, { ...user, hasProfile: true });
-      }
-      toast.success('Profile saved! Redirecting to your plan…', { id: toastId });
+      await activatePlan(plan.id);
+      toast.success('Onboarding complete! Generating your plan now…', { id: toastId });
+      await queryClient.invalidateQueries({ queryKey: ['profile', 'me'] });
       navigate('/plans');
     } catch (e) {
       console.error(e);
-      toast.error('Could not save your profile. Please try again.', { id: toastId });
+      toast.error('Could not finish onboarding. Please try again.', { id: toastId });
     } finally {
       setSaving(false);
     }
@@ -158,14 +212,14 @@ export function OnboardingPage() {
               This takes under a minute. We&apos;ll use it to set your calories and protein targets.
             </p>
           </div>
-          <div className="hidden sm:flex flex-col items-end gap-1">
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <span>Step {step + 1} of 4</span>
-              <div className="h-1.5 w-28 rounded-full bg-slate-200 overflow-hidden">
-                <div className="h-full bg-emerald-500 transition-all" style={{ width: `${((step + 1) / 4) * 100}%` }} />
+            <div className="hidden sm:flex flex-col items-end gap-1">
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <span>Step {step + 1} of 5</span>
+                <div className="h-1.5 w-28 rounded-full bg-slate-200 overflow-hidden">
+                  <div className="h-full bg-emerald-500 transition-all" style={{ width: `${((step + 1) / 5) * 100}%` }} />
+                </div>
               </div>
             </div>
-          </div>
         </div>
 
         <div className="rounded-3xl border border-slate-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.08)] p-6 md:p-8 grid md:grid-cols-[1.6fr,1.1fr] gap-8">
@@ -399,6 +453,44 @@ export function OnboardingPage() {
               </div>
             )}
 
+            {step === 4 && (
+              <div className="space-y-4">
+                <h2 className="text-sm font-semibold text-slate-900">How would you like your week?</h2>
+                <p className="text-xs text-slate-500">
+                  We&apos;ll start generating your first plan and it takes about 3-5 minutes. Pick whether you&apos;d
+                  love the same meals all week or prefer a varied week.
+                </p>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => setSameMealsAllWeek(true)}
+                    className={`flex-1 rounded-2xl border px-4 py-3 text-sm font-semibold text-left transition ${
+                      sameMealsAllWeek
+                        ? 'border-emerald-400 bg-emerald-50 text-emerald-700 shadow-inner'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400'
+                    }`}
+                  >
+                    <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Faster</div>
+                    <div className="mt-2 text-base text-slate-900">Same meals all week</div>
+                    <p className="mt-1 text-[11px] text-slate-500">We&apos;ll repeat recipes so you can reuse groceries.</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSameMealsAllWeek(false)}
+                    className={`flex-1 rounded-2xl border px-4 py-3 text-sm font-semibold text-left transition ${
+                      !sameMealsAllWeek
+                        ? 'border-emerald-400 bg-emerald-50 text-emerald-700 shadow-inner'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400'
+                    }`}
+                  >
+                    <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Varied</div>
+                    <div className="mt-2 text-base text-slate-900">Different meals each day</div>
+                    <p className="mt-1 text-[11px] text-slate-500">It takes a bit longer, but keeps your week fresh.</p>
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="pt-4 flex justify-between items-center">
               <button
                 type="button"
@@ -408,7 +500,7 @@ export function OnboardingPage() {
               >
                 ← Back
               </button>
-              {step < 3 ? (
+              {step < 4 ? (
                 <button
                   type="button"
                   onClick={() => setStep((s) => ((s + 1) as Step))}
@@ -420,10 +512,10 @@ export function OnboardingPage() {
                 <button
                   type="button"
                   disabled={!canFinish || saving}
-                  onClick={handleSave}
+                  onClick={handleFinish}
                   className="rounded-full bg-emerald-500 px-5 py-2 text-xs font-semibold text-white hover:bg-emerald-600 disabled:opacity-60"
                 >
-                  {saving ? 'Saving…' : 'Finish & view my plan'}
+                  Generate my first plan
                 </button>
               )}
             </div>

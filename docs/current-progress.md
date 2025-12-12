@@ -1,14 +1,13 @@
 # Next steps
 
-Proper User Auth
-
-Documentation and Presentation
-
-Switch the llm use from local to the cloud chat gpt maybe mini 5?
-
 store chat history for a session (maybe a day limit or a week limit or wipe it when a new plan is marked as active)
 
 is_custom logic for recipes
+
+### Billing UX shipped
+- Payment page now shows the current credit balance, four bundle tiles with increasing discounts, and toggles between monthly / yearly / lifetime subscription cards (yearly versions highlight the savings and lifetime shows an all-in deal).
+- The settings menu exposes a `Current plan` entry to reach the new page and the credit confirmation modal now redirects users there when they tap “Add credits”, so every LLM trigger keeps the payment path consistent.
+
 
 
 # Proper Auth Implementation Plan
@@ -186,13 +185,13 @@ Or:
     "ingredient_blacklist": [
       // global “never use”
     ],
-    "ingredient_whitelist": [
-      "chicken breast",
-      "rice",
-      "oats",
-      "eggs",
-      "yogurt"
-    ],
+  "ingredient_whitelist": [
+    "chicken breast",
+    "rice",
+    "oats",
+    "eggs",
+    "yogurt"
+  ],
 
     "disliked_flavours": [
       // e.g. "very_spicy", "bitter", "strong_coriander"

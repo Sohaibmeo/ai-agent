@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import type { ReactElement } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { AppShell } from './components/layout/AppShell';
@@ -8,13 +8,16 @@ import { PlansPage } from './pages/PlansPage';
 import { GroceriesPage } from './pages/GroceriesPage';
 import { RecipeDetailPage } from './pages/RecipeDetailPage';
 import { RecipesPage } from './pages/RecipesPage';
+import { PaymentPage } from './pages/PaymentPage';
 import { AgentPipelineProvider } from './hooks/useAgentPipeline';
 import { AgentPipelineModal } from './components/agents/AgentPipelineModal';
 import { ExplainBotWidget } from './components/agents/ExplainBotWidget';
 import { LoginPage } from './pages/LoginPage';
 import { OnboardingPage } from './pages/OnboardingPage';
+import { SignupPage } from './pages/SignupPage';
+import { SetPasswordPage } from './pages/SetPasswordPage';
+import { CreditConfirmationProvider } from './hooks/useCreditConfirmation.tsx';
 import { useAuth } from './context/AuthContext';
-import { Navigate, useLocation } from 'react-router-dom';
 
 function Protected({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
@@ -31,6 +34,19 @@ function Protected({ children }: { children: ReactElement }) {
   return children;
 }
 
+function PublicRoute({ children }: { children: ReactElement }) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
+  if (user) {
+    const redirect = user.hasProfile ? '/plans' : '/onboarding';
+    return <Navigate to={redirect} replace state={{ from: location }} />;
+  }
+  return children;
+}
+
 function App() {
   const { loading, user } = useAuth();
   if (loading) {
@@ -38,9 +54,26 @@ function App() {
   }
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <AgentPipelineProvider>
-        <Routes>
-          <Route path="/auth/login" element={<LoginPage />} />
+      <CreditConfirmationProvider>
+        <AgentPipelineProvider>
+          <Routes>
+          <Route
+            path="/auth/login"
+            element={
+              <PublicRoute>
+                <LoginPage />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/auth/signup"
+            element={
+              <PublicRoute>
+                <SignupPage />
+              </PublicRoute>
+            }
+          />
+          <Route path="/auth/set-password" element={<SetPasswordPage />} />
           <Route path="/onboarding" element={<OnboardingPage />} />
           <Route
             path="/*"
@@ -55,16 +88,18 @@ function App() {
                     <Route path="/recipes" element={<RecipesPage />} />
                     <Route path="/recipes/new" element={<RecipeDetailPage />} />
                     <Route path="/recipes/:recipeId" element={<RecipeDetailPage />} />
+                    <Route path="/current-plan" element={<PaymentPage />} />
                   </Routes>
                 </AppShell>
               </Protected>
             }
           />
-        </Routes>
-        <AgentPipelineModal />
-        {user && <ExplainBotWidget />}
-        <Toaster position="top-right" toastOptions={{ className: 'text-sm' }} />
-      </AgentPipelineProvider>
+          </Routes>
+          <AgentPipelineModal />
+          {user && <ExplainBotWidget />}
+          <Toaster position="top-right" toastOptions={{ className: 'text-sm' }} />
+        </AgentPipelineProvider>
+      </CreditConfirmationProvider>
     </div>
   );
 }

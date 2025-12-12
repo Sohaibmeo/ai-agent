@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { fetchRecipes, generateRecipeAi, generateRecipeFromImage } from '../api/recipes';
 import { Card } from '../components/shared/Card';
 import { useAgentPipeline } from '../hooks/useAgentPipeline';
 import { useAuth } from '../context/AuthContext';
+import { useCreditConfirmation } from '../hooks/useCreditConfirmation.tsx';
+import { useProfile } from '../hooks/useProfile';
+import { CREDIT_COSTS } from '../constants/credits';
 
 export function RecipesPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -19,7 +23,125 @@ export function RecipesPage() {
   const [showImageForm, setShowImageForm] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const { startRun, updateStep, endRun, setError } = useAgentPipeline();
+  const { startRun, updateStep, setError } = useAgentPipeline();
+  const { data: profileData } = useProfile();
+  const { requestCreditConfirmation } = useCreditConfirmation();
+  const confirmCreditUse = async (cost: number, label: string, detail: string) => {
+    const available = Number(profileData?.credit ?? 0);
+    const insufficient = available < cost;
+    const options = insufficient
+      ? {
+          cost,
+          title: label,
+          detail,
+          insufficient: true,
+          ctaLabel: 'Add credits',
+        }
+      : { cost, title: label, detail };
+    return await requestCreditConfirmation(options);
+  };
+
+  const handleAiTextCreation = async () => {
+    const note = aiNote.trim();
+    if (!note) {
+      setShowCreateModal(false);
+      navigate('/recipes/new');
+      return;
+    }
+    const confirmed = await confirmCreditUse(
+      CREDIT_COSTS.recipeGeneration,
+      'Create recipe with AI',
+      'This will cost 0.25 credits.',
+    );
+    if (!confirmed) return;
+    try {
+      setIsGenerating(true);
+      const steps = [
+        { id: 'capture-note', label: 'Capturing your request', status: 'active' as const, progressHint: 10 },
+        { id: 'draft-recipe', label: 'Drafting recipe with AI', status: 'pending' as const, progressHint: 45 },
+        { id: 'build-ingredients', label: 'Building ingredients', status: 'pending' as const, progressHint: 75 },
+        { id: 'finishing', label: 'Finishing up', status: 'pending' as const, progressHint: 98 },
+      ];
+      startRun('generic-llm', {
+        title: 'Creating your recipe with AI...',
+        subtitle: 'Drafting ingredients and steps based on your description.',
+        steps,
+      });
+      updateStep('capture-note', 'done', undefined, undefined, 18);
+      updateStep('draft-recipe', 'active', 'Generating recipe draft...', undefined, 36);
+      const created = await generateRecipeAi({ note });
+      updateStep('draft-recipe', 'done', undefined, undefined, 64);
+      updateStep('build-ingredients', 'active', 'Resolving ingredients...', undefined, 82);
+      updateStep('build-ingredients', 'done', undefined, undefined, 92);
+      updateStep('finishing', 'active', 'Saving recipe...', undefined, 98);
+      updateStep('finishing', 'done', undefined, undefined, 100);
+      setShowCreateModal(false);
+      setShowAiForm(false);
+      setAiNote('');
+      navigate(`/recipes/${created.id}`);
+      await queryClient.invalidateQueries({ queryKey: ['profile', 'me'] });
+    } catch (e) {
+      setError('Could not create recipe. Try again or start from scratch.');
+      setShowCreateModal(false);
+      setShowAiForm(false);
+      navigate('/recipes/new');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleAiImageCreation = async () => {
+    if (!imageFile) return;
+    const confirmed = await confirmCreditUse(
+      CREDIT_COSTS.recipeGeneration + CREDIT_COSTS.vision,
+      'Create recipe from photo',
+      `Vision + recipe generation will cost ${(
+        CREDIT_COSTS.recipeGeneration + CREDIT_COSTS.vision
+      ).toFixed(2)} credits.`,
+    );
+    if (!confirmed) return;
+    try {
+      setIsGenerating(true);
+      const steps = [
+        { id: 'upload', label: 'Reading image', status: 'active' as const, progressHint: 10 },
+        { id: 'vision', label: 'Describing dish', status: 'pending' as const, progressHint: 40 },
+        { id: 'draft-recipe', label: 'Drafting recipe with AI', status: 'pending' as const, progressHint: 70 },
+        { id: 'finishing', label: 'Saving recipe', status: 'pending' as const, progressHint: 95 },
+      ];
+      startRun('generic-llm', {
+        title: 'Creating your recipe from the photo...',
+        subtitle: 'Analyzing the image and drafting the recipe.',
+        steps,
+      });
+      updateStep('upload', 'done', undefined, undefined, 18);
+      updateStep('vision', 'active', 'Describing the dish...', undefined, 36);
+      const base64 = await fileToBase64(imageFile);
+      updateStep('vision', 'done', undefined, undefined, 58);
+      updateStep('draft-recipe', 'active', 'Drafting recipe...', undefined, 76);
+      const created = await generateRecipeFromImage({
+        imageBase64: base64,
+      });
+      updateStep('draft-recipe', 'done', undefined, undefined, 86);
+      updateStep('finishing', 'active', 'Saving recipe...', undefined, 96);
+      updateStep('finishing', 'done', undefined, undefined, 100);
+      setShowCreateModal(false);
+      setShowAiForm(false);
+      setImageFile(null);
+      setImagePreview(null);
+      setAiNote('');
+      navigate(`/recipes/${created.id}`);
+      await queryClient.invalidateQueries({ queryKey: ['profile', 'me'] });
+    } catch (e) {
+      setError('Could not create recipe from image. Try again or use AI text.');
+      setShowCreateModal(false);
+      setShowAiForm(false);
+      setImageFile(null);
+      setImagePreview(null);
+      navigate('/recipes/new');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   const fileToBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -178,54 +300,12 @@ export function RecipesPage() {
                       Cancel
                     </button>
                     <button
-                    className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
-                    onClick={async () => {
-                      const note = aiNote.trim();
-                      if (!note) {
-                        setShowCreateModal(false);
-                        navigate('/recipes/new');
-                        return;
-                      }
-                      try {
-                        setIsGenerating(true);
-                        const steps = [
-                          { id: 'capture-note', label: 'Capturing your request', status: 'active' as const, progressHint: 10 },
-                          { id: 'draft-recipe', label: 'Drafting recipe with AI', status: 'pending' as const, progressHint: 45 },
-                          { id: 'build-ingredients', label: 'Building ingredients', status: 'pending' as const, progressHint: 75 },
-                          { id: 'finishing', label: 'Finishing up', status: 'pending' as const, progressHint: 98 },
-                        ];
-                        startRun('generic-llm', {
-                          title: 'Creating your recipe with AI...',
-                          subtitle: 'Drafting ingredients and steps based on your description.',
-                          steps,
-                        });
-                        updateStep('capture-note', 'done', undefined, undefined, 18);
-                        updateStep('draft-recipe', 'active', 'Generating recipe draft...', undefined, 36);
-                        const created = await generateRecipeAi({ note });
-                        updateStep('draft-recipe', 'done', undefined, undefined, 64);
-                        updateStep('build-ingredients', 'active', 'Resolving ingredients...', undefined, 82);
-                        updateStep('build-ingredients', 'done', undefined, undefined, 92);
-                        updateStep('finishing', 'active', 'Saving recipe...', undefined, 98);
-                        updateStep('finishing', 'done', undefined, undefined, 100);
-                        setTimeout(() => endRun(), 400);
-                        setShowCreateModal(false);
-                        setShowAiForm(false);
-                        setAiNote('');
-                        navigate(`/recipes/${created.id}`);
-                      } catch (e) {
-                        setError('Could not create recipe. Try again or start from scratch.');
-                        setShowCreateModal(false);
-                        setShowAiForm(false);
-                        navigate('/recipes/new');
-                        setTimeout(() => endRun(), 600);
-                      } finally {
-                        setIsGenerating(false);
-                      }
-                    }}
-                    disabled={isGenerating}
-                  >
-                    {isGenerating ? 'Generating...' : 'Create with AI'}
-                  </button>
+                      className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+                      onClick={handleAiTextCreation}
+                      disabled={isGenerating}
+                    >
+                      {isGenerating ? 'Generating...' : 'Create with AI'}
+                    </button>
                   </div>
                 </div>
               </>
@@ -301,51 +381,7 @@ export function RecipesPage() {
                       </button>
                       <button
                         className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
-                        onClick={async () => {
-                          if (!imageFile) return;
-                          try {
-                            setIsGenerating(true);
-                            const steps = [
-                              { id: 'upload', label: 'Reading image', status: 'active' as const, progressHint: 10 },
-                              { id: 'vision', label: 'Describing dish', status: 'pending' as const, progressHint: 40 },
-                              { id: 'draft-recipe', label: 'Drafting recipe with AI', status: 'pending' as const, progressHint: 70 },
-                              { id: 'finishing', label: 'Saving recipe', status: 'pending' as const, progressHint: 95 },
-                            ];
-                            startRun('generic-llm', {
-                              title: 'Creating your recipe from the photo...',
-                              subtitle: 'Analyzing the image and drafting the recipe.',
-                              steps,
-                            });
-                            updateStep('upload', 'done', undefined, undefined, 18);
-                            updateStep('vision', 'active', 'Describing the dish...', undefined, 36);
-                            const base64 = await fileToBase64(imageFile);
-                            updateStep('vision', 'done', undefined, undefined, 58);
-                            updateStep('draft-recipe', 'active', 'Drafting recipe...', undefined, 76);
-                            const created = await generateRecipeFromImage({
-                              imageBase64: base64,
-                            });
-                            updateStep('draft-recipe', 'done', undefined, undefined, 86);
-                            updateStep('finishing', 'active', 'Saving recipe...', undefined, 96);
-                            updateStep('finishing', 'done', undefined, undefined, 100);
-                            setTimeout(() => endRun(), 400);
-                            setShowCreateModal(false);
-                            setShowAiForm(false);
-                            setImageFile(null);
-                            setImagePreview(null);
-                            setAiNote('');
-                            navigate(`/recipes/${created.id}`);
-                          } catch (e) {
-                            setError('Could not create recipe from image. Try again or use AI text.');
-                            setTimeout(() => endRun(), 600);
-                            setShowCreateModal(false);
-                            setShowAiForm(false);
-                            setImageFile(null);
-                            setImagePreview(null);
-                            navigate('/recipes/new');
-                          } finally {
-                            setIsGenerating(false);
-                          }
-                        }}
+                        onClick={handleAiImageCreation}
                         disabled={isGenerating || !imageFile}
                       >
                         {isGenerating ? 'Processing...' : 'Create from image'}

@@ -10,6 +10,9 @@ import { fetchIngredients } from '../api/ingredients';
 import { fetchRecipeById, updateRecipe, adjustRecipeAi, createRecipe } from '../api/recipes';
 import type { Ingredient, RecipeWithIngredients } from '../api/types';
 import { useLlmAction } from '../hooks/useLlmAction';
+import { useProfile } from '../hooks/useProfile';
+import { useCreditConfirmation } from '../hooks/useCreditConfirmation.tsx';
+import { CREDIT_COSTS } from '../constants/credits';
 
 type IngredientRow = {
   id: string; // recipe_ingredient id
@@ -85,6 +88,22 @@ export function RecipeDetailPage() {
     queryFn: () => fetchRecipeById(recipeId as string),
     enabled: Boolean(recipeId),
   });
+  const { data: profileData } = useProfile();
+  const { requestCreditConfirmation } = useCreditConfirmation();
+  const confirmCreditUse = async (cost: number, label: string, detail: string) => {
+    const available = Number(profileData?.credit ?? 0);
+    const insufficient = available < cost;
+    const options = insufficient
+      ? {
+          cost,
+          title: label,
+          detail,
+          insufficient: true,
+          ctaLabel: 'Add credits',
+        }
+      : { cost, title: label, detail };
+    return await requestCreditConfirmation(options);
+  };
 
   const m = meal?.meal;
   const recipe = recipeDetail || m?.recipe;
@@ -284,6 +303,27 @@ export function RecipeDetailPage() {
 
   const handleApplyAI = async () => {
     const note = aiNote.trim() || undefined;
+    if (!m?.id && !recipeId) {
+      notify.error('Missing recipe context for AI changes.');
+      return;
+    }
+    if (m?.id && plan?.id) {
+      const dayCost = CREDIT_COSTS.planGeneration.day;
+      const confirmed = await confirmCreditUse(
+        dayCost,
+        'Adjust this meal with AI',
+        `Adjusting this meal uses ${dayCost} credit.`,
+      );
+      if (!confirmed) return;
+    } else if (recipeId) {
+      const recipeCost = CREDIT_COSTS.recipeGeneration;
+      const confirmed = await confirmCreditUse(
+        recipeCost,
+        'Adjust this recipe with AI',
+        `This request will cost ${recipeCost.toFixed(2)} credits.`,
+      );
+      if (!confirmed) return;
+    }
     try {
       setIsApplying(true);
       if (m?.id && plan?.id) {
@@ -313,8 +353,6 @@ export function RecipeDetailPage() {
         setDirty(false);
         queryClient.invalidateQueries({ queryKey: ['recipe', recipeId] });
         notify.success('Recipe adjusted');
-      } else {
-        notify.error('Missing recipe context for AI changes.');
       }
     } catch (e) {
       console.error(e);

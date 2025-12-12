@@ -11,6 +11,8 @@ import { SwapDialog } from '../components/plans/SwapDialog';
 import { activatePlan, aiPlanSwap, fetchActivePlan, setMealRecipe, setPlanStatus } from '../api/plans';
 import { notify } from '../lib/toast';
 import { useLlmAction } from '../hooks/useLlmAction';
+import { useCreditConfirmation } from '../hooks/useCreditConfirmation.tsx';
+import { CREDIT_COSTS } from '../constants/credits';
 
 const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const pillClass = 'rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 border border-slate-200';
@@ -142,6 +144,22 @@ export function PlansPage() {
     navigate(`/plans/meal/${mealId}`);
   };
 
+  const { data: profileData } = useProfile();
+  const { requestCreditConfirmation } = useCreditConfirmation();
+  const confirmCreditUse = async (cost: number, label: string, detail: string) => {
+    const available = Number(profileData?.credit ?? 0);
+    const insufficient = available < cost;
+    const options = insufficient
+      ? {
+          cost,
+          title: label,
+          detail,
+          insufficient: true,
+          ctaLabel: 'Add credits',
+        }
+      : { cost, title: label, detail };
+    return await requestCreditConfirmation(options);
+  };
   const openSwap = (mealId: string, slot?: string) => {
     setSwapMealId(mealId);
     setSwapMealSlot(slot);
@@ -197,6 +215,11 @@ export function PlansPage() {
   };
 
   const runAgentPlanGeneration = async () => {
+    const dayCost = CREDIT_COSTS.planGeneration.day;
+    const cost = dayCost * (sameMealsAllWeek ? 1 : 7);
+    const detail = sameMealsAllWeek ? 'Generate the same meals all week' : 'Generate a varied week';
+    const confirmed = await confirmCreditUse(cost, 'Generate a new week', detail);
+    if (!confirmed) return;
     try {
       await runPlanGeneration(async () => {
         const result = await generatePlan({
@@ -212,6 +235,7 @@ export function PlansPage() {
           maxDifficulty: slots.max_difficulty,
         });
         notify.success('New plan generated');
+        await queryClient.invalidateQueries({ queryKey: ['profile', 'me'] });
         return result;
       });
     } catch (e) {
@@ -291,7 +315,15 @@ export function PlansPage() {
                 className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
                 disabled={!plan?.id || selectedDayIds.length === 0}
                 onClick={async () => {
-                  if (!plan?.id) return;
+                  if (!plan?.id || selectedDayIds.length === 0) return;
+                  const dayCost = CREDIT_COSTS.planGeneration.day;
+                  const cost = dayCost * selectedDayIds.length;
+                  const detail =
+                    selectedDayIds.length === 1
+                      ? 'Adjusting a single day costs 1 credit.'
+                      : `Adjusting ${selectedDayIds.length} days costs ${cost} credits (1 credit per day).`;
+                  const confirmed = await confirmCreditUse(cost, 'Adjust selected days with AI', detail);
+                  if (!confirmed) return;
                   try {
                     await runPlanAdjustment(async () => {
                       const result = await aiPlanSwap({
@@ -557,8 +589,8 @@ export function PlansPage() {
 
       {isAdvancedOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => { resetAdvanced(); setIsAdvancedOpen(false); }}>
-          <div
-            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+        <div
+          className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"

@@ -4,6 +4,9 @@ import { notify } from '../../lib/toast';
 import { aiPlanSwap } from '../../api/plans';
 import { useLlmAction } from '../../hooks/useLlmAction';
 import { useAuth } from '../../context/AuthContext';
+import { useCreditConfirmation } from '../../hooks/useCreditConfirmation.tsx';
+import { useProfile } from '../../hooks/useProfile';
+import { CREDIT_COSTS } from '../../constants/credits';
 
 interface SwapDialogProps {
   open: boolean;
@@ -26,6 +29,22 @@ export function SwapDialog({
 }: SwapDialogProps) {
   const { user } = useAuth();
   const userId = user?.id as string;
+  const { data: profileData } = useProfile();
+  const { requestCreditConfirmation } = useCreditConfirmation();
+  const confirmCreditUse = async (cost: number, label: string, detail: string) => {
+    const available = Number(profileData?.credit ?? 0);
+    const insufficient = available < cost;
+    const options = insufficient
+      ? {
+          cost,
+          title: label,
+          detail,
+          insufficient: true,
+          ctaLabel: 'Add credits',
+        }
+      : { cost, title: label, detail };
+    return await requestCreditConfirmation(options);
+  };
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   useEffect(() => {
@@ -69,6 +88,13 @@ export function SwapDialog({
       notify.error('Missing plan id for swap');
       return;
     }
+    const dayCost = CREDIT_COSTS.planGeneration.day;
+    const confirmed = await confirmCreditUse(
+      dayCost,
+      'Swap meal with AI',
+      `Swapping this meal with the agent costs ${dayCost} credit.`,
+    );
+    if (!confirmed) return;
     try {
       setIsAutoPicking(true);
       const payload = {
