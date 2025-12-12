@@ -96,7 +96,9 @@ export function RecipesPage() {
     const confirmed = await confirmCreditUse(
       CREDIT_COSTS.recipeGeneration + CREDIT_COSTS.vision,
       'Create recipe from photo',
-      'Vision + recipe generation will cost 0.5 credits.',
+      `Vision + recipe generation will cost ${(
+        CREDIT_COSTS.recipeGeneration + CREDIT_COSTS.vision
+      ).toFixed(2)} credits.`,
     );
     if (!confirmed) return;
     try {
