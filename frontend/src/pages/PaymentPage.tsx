@@ -5,6 +5,7 @@ import { Card } from '../components/shared/Card';
 import type { ReactNode } from 'react';
 
 type BillingCycle = 'monthly' | 'yearly' | 'lifetime';
+type PlanId = 'free' | 'starter' | 'performance';
 
 const creditBundles = [
   { label: 'Entry', credits: 21, price: '£28', detail: 'Base enterprise top-up · 21 credits' },
@@ -13,40 +14,66 @@ const creditBundles = [
   { label: 'Enterprise', credits: 240, price: '£250', detail: '50% bonus + dedicated SLA support' },
 ];
 
-const planTiers = [
+const planTiers: Array<{
+  id: PlanId;
+  name: string;
+  badge: null | 'Most popular';
+  monthlyPrice: number;
+  yearlyPrice: number;
+  highlight: string;
+  perks: string[];
+}> = [
   {
+    id: 'free',
+    name: 'Free',
+    badge: null,
+    monthlyPrice: 0,
+    yearlyPrice: 0,
+    highlight: 'Try OverCooked with 2 AI days/month for experimentation.',
+    perks: ['Includes 2 AI credit days/month', 'Community recipe generation', 'View limited insights'],
+  },
+  {
+    id: 'starter',
     name: 'Starter',
-    badge: null as null | 'Most popular',
+    badge: null,
     monthlyPrice: 19,
     yearlyPrice: 190,
     highlight: 'Reliable weekly planning with predictable credit burns.',
     perks: ['Includes 8 AI credit days/month', 'Basic recipe generation', 'Weekly plan edits'],
   },
   {
+    id: 'performance',
     name: 'Performance',
-    badge: 'Most popular' as null | 'Most popular',
+    badge: 'Most popular',
     monthlyPrice: 39,
     yearlyPrice: 390,
     highlight: 'Higher throughput with bulk credit resets.',
     perks: ['Includes 16 AI credit days/month', 'Priority swaps and regenerations', 'Unlimited recipe adjustments'],
   },
+];
+
+const planFeatures: Array<{ label: string; availability: Record<PlanId, boolean> }> = [
   {
-    name: 'Ultimate',
-    badge: null as null | 'Most popular',
-    monthlyPrice: 69,
-    yearlyPrice: 690,
-    highlight: 'Team-ready capacity for frequent vision & reasoning calls.',
-    perks: [
-      'Includes 30 AI credit days/month',
-      'Dedicated support lead',
-      'Custom plan templates & reporting',
-    ],
+    label: 'Priority swaps & regenerations',
+    availability: { free: false, starter: false, performance: true },
+  },
+  {
+    label: 'Unlimited recipe adjustments',
+    availability: { free: false, starter: false, performance: true },
+  },
+  {
+    label: 'Dedicated support lead',
+    availability: { free: false, starter: false, performance: false },
+  },
+  {
+    label: 'Custom templates & reporting',
+    availability: { free: false, starter: false, performance: false },
   },
 ];
 
 const lifetimePlan = {
   name: 'Lifetime Access',
-  price: '£349',
+  price: '£999',
   subtitle: 'One-time payment · All AI features forever',
   perks: ['Unlimited plan generations', 'Unlimited recipe & vision calls', 'VIP support & roadmap voting'],
 };
@@ -192,6 +219,8 @@ export function PaymentPage() {
   const PlanCard = (tier: (typeof planTiers)[number]) => {
     const isYearly = billingCycle === 'yearly';
     const price = isYearly ? tier.yearlyPrice : tier.monthlyPrice;
+    const displayPrice = price === 0 ? 'Free' : `£${price}`;
+    const priceLabel = price === 0 ? 'Always free' : isYearly ? 'per year' : 'per month';
 
     return (
       <Card
@@ -215,24 +244,44 @@ export function PaymentPage() {
           </div>
 
           <div className="text-right">
-            <div className="text-3xl font-semibold text-slate-900">£{price}</div>
-            <div className="text-xs uppercase tracking-[0.25em] text-slate-500">
-              {isYearly ? 'per year' : 'per month'}
-            </div>
-            {isYearly && <div className="mt-2 text-sm font-semibold text-emerald-700">{yearlySavingsText}</div>}
+            <div className="text-3xl font-semibold text-slate-900">{displayPrice}</div>
+            <div className="text-xs uppercase tracking-[0.25em] text-slate-500">{priceLabel}</div>
+            {price !== 0 && isYearly && (
+              <div className="mt-2 text-sm font-semibold text-emerald-700">{yearlySavingsText}</div>
+            )}
           </div>
         </div>
 
         <div className="mt-5 h-px w-full bg-slate-100" />
 
-        <ul className="mt-5 space-y-2 text-sm text-slate-700">
+        <div className="mt-5 space-y-2 text-sm text-slate-700">
           {tier.perks.map((perk) => (
-            <li key={perk} className="flex items-start gap-3">
-              <span className="mt-2 h-1.5 w-1.5 rounded-full bg-emerald-600" />
+            <div key={perk} className="flex items-center gap-2">
+              <span className="mt-1 h-2 w-2 rounded-full bg-emerald-600" />
               <span>{perk}</span>
-            </li>
+            </div>
           ))}
-        </ul>
+        </div>
+
+        <div className="mt-5 space-y-2 text-sm text-slate-700">
+          <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Enterprise features</div>
+          {planFeatures.map((feature) => {
+            const available = feature.availability[tier.id];
+            return (
+              <div key={feature.label} className="flex items-center gap-2">
+                <span
+                  className={classNames(
+                    'flex h-5 w-5 items-center justify-center rounded-full text-xs font-semibold transition',
+                    available ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'
+                  )}
+                >
+                  {available ? '✓' : '✕'}
+                </span>
+                <span className={available ? 'text-slate-900' : 'text-slate-500'}>{feature.label}</span>
+              </div>
+            );
+          })}
+        </div>
 
         <div className="mt-6 space-y-2">
           <PrimaryButton onClick={() => onCheckout({ type: 'plan', id: `${tier.name}:${billingCycle}` })} className="w-full">
