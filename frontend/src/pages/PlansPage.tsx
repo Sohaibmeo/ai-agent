@@ -557,8 +557,8 @@ export function PlansPage() {
 
       {isAdvancedOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => { resetAdvanced(); setIsAdvancedOpen(false); }}>
-          <div
-            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+        <div
+          className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
