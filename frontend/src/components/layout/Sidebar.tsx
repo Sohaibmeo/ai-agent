@@ -55,6 +55,13 @@ export function Sidebar() {
                 Profile
               </Link>
               <Link
+                to="/current-plan"
+                className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                onClick={() => setMenuOpen(false)}
+              >
+                Current plan
+              </Link>
+              <Link
                 to="/auth/set-password"
                 className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
                 onClick={() => setMenuOpen(false)}

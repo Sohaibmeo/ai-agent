@@ -8,6 +8,7 @@ import { PlansPage } from './pages/PlansPage';
 import { GroceriesPage } from './pages/GroceriesPage';
 import { RecipeDetailPage } from './pages/RecipeDetailPage';
 import { RecipesPage } from './pages/RecipesPage';
+import { PaymentPage } from './pages/PaymentPage';
 import { AgentPipelineProvider } from './hooks/useAgentPipeline';
 import { AgentPipelineModal } from './components/agents/AgentPipelineModal';
 import { ExplainBotWidget } from './components/agents/ExplainBotWidget';
@@ -87,6 +88,7 @@ function App() {
                     <Route path="/recipes" element={<RecipesPage />} />
                     <Route path="/recipes/new" element={<RecipeDetailPage />} />
                     <Route path="/recipes/:recipeId" element={<RecipeDetailPage />} />
+                    <Route path="/current-plan" element={<PaymentPage />} />
                   </Routes>
                 </AppShell>
               </Protected>

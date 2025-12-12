@@ -4,14 +4,9 @@ store chat history for a session (maybe a day limit or a week limit or wipe it w
 
 is_custom logic for recipes
 
-### NEXT PLAN:
-For the frontend lets develop a user payment page.
-
-On the top we will have user credits and user can add credits adding credits will have 4 options to add credits with more credits having more discounts.
-
-Below this thing will have monthly,yearly and lifetime plan toggle and for monthly and yearly three cards for each plan with yearly plans saving cost. for lifetime a single card with a good offer will be there.
-
-Lets make this page accessible through the settings icon dropdown options we will add before the change password called current plan or soemthing suitable
+### Billing UX shipped
+- Payment page now shows the current credit balance, four bundle tiles with increasing discounts, and toggles between monthly / yearly / lifetime subscription cards (yearly versions highlight the savings and lifetime shows an all-in deal).
+- The settings menu exposes a `Current plan` entry to reach the new page and the credit confirmation modal now redirects users there when they tap “Add credits”, so every LLM trigger keeps the payment path consistent.
 
 
 

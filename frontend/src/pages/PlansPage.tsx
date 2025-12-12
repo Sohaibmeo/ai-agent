@@ -156,7 +156,6 @@ export function PlansPage() {
           detail,
           insufficient: true,
           ctaLabel: 'Add credits',
-          onRecharge: () => navigate('/'),
         }
       : { cost, title: label, detail };
     return await requestCreditConfirmation(options);

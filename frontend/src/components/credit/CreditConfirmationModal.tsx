@@ -11,7 +11,6 @@ export function CreditConfirmationModal({
   detail,
   insufficient,
   ctaLabel,
-  onRecharge,
   onConfirm,
   onCancel,
 }: {
@@ -20,7 +19,6 @@ export function CreditConfirmationModal({
   detail?: string;
   insufficient?: boolean;
   ctaLabel?: string;
-  onRecharge?: () => void;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -30,11 +28,7 @@ export function CreditConfirmationModal({
   const rechargeLabel = ctaLabel || 'Add credits';
 
   const handleRecharge = () => {
-    if (onRecharge) {
-      onRecharge();
-    } else {
-      navigate('/');
-    }
+    navigate('/current-plan');
   };
 
   return (
