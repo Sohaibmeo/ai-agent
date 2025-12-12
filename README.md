@@ -9,7 +9,7 @@ A high-performance multi-agent orchestration system that generates personalised,
 
 ## 🚀 Overview
 
-Overcooked AI is a next-generation meal-planning platform powered by coordinated LLM agents and a robust validation pipeline. Unlike typical recipe generators, Overcooked AI produces strictly structured, nutritionally accurate, budget-aligned weekly plans tailored to each user’s goals.
+Overcooked AI is a next-generation meal-planning platform powered by coordinated LLM agents and a robust validation pipeline. Unlike typical recipe generators, Overcooked AI produces strictly structured, nutritionally accurate, budget-aligned weekly plans tailored to each user’s goals and ties every AI call into the enterprise-grade credit system (see `/current-plan` payment console).
 
 The platform combines:
 
@@ -19,6 +19,8 @@ The platform combines:
 - Schema-enforced plan generation  
 - Vision-based macro estimation  
 - A modern, serverless architecture (Next.js + NestJS + Vercel + Neon)
+
+The new Vite + React client now includes a billing/payment experience (`frontend/src/pages/PaymentPage.tsx`) with credit bundles, plan tiers, and a CTA that always redirects to `/current-plan`.
 
 The result: AI-generated plans that are consistent, correct, and actually usable in real life.
 
@@ -49,12 +51,13 @@ Every stage includes fallback logic, validation, and retry mechanisms.
 ## 🏗 Architecture
 
 ```
-                ┌────────────────────────────────┐
-                │       Next.js Frontend         │
-                │   - Auth (JWT)                 │
-                │   - Profile setup              │
-                │   - Weekly plan UI             │
-                └───────────────┬────────────────┘
+                ┌─────────────────────────────────┐
+                │       Vite + React Frontend     │
+                │   - Auth (JWT)                  │
+                │   - Profile setup               │
+                │   - Weekly plan UI              │
+                │   - Current-plan billing UI     │
+                └───────────────┬─────────────────┘
                                 │ HTTPS
                                 ▼
         ┌─────────────────────────────────────────────────────┐
@@ -140,6 +143,7 @@ Invalid responses are corrected before proceeding.
 - `POST /auth/login`  
 - `GET /auth/me`  
 - Profiles stored separately for cleaner domain separation  
+ - `/auth/register` kicks off the user onboarding flow `/onboarding` → `/plans`.
 
 Credit limits or usage controls can be added without enabling open public signups.
 
@@ -202,7 +206,7 @@ npm run start:dev
 
 ## 🧭 Roadmap
 
-- Pantry and inventory tracking  
+- Pantry View and manual updates (UI )
 - Live supermarket price scraping (UK market)  
 - Multi-item vision recognition  
 - Subscription tiers with usage credits  
