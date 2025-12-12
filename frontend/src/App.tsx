@@ -32,6 +32,19 @@ function Protected({ children }: { children: ReactElement }) {
   return children;
 }
 
+function PublicRoute({ children }: { children: ReactElement }) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
+  if (user) {
+    const redirect = user.hasProfile ? '/plans' : '/onboarding';
+    return <Navigate to={redirect} replace state={{ from: location }} />;
+  }
+  return children;
+}
+
 function App() {
   const { loading, user } = useAuth();
   if (loading) {
@@ -41,8 +54,22 @@ function App() {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <AgentPipelineProvider>
         <Routes>
-          <Route path="/auth/login" element={<LoginPage />} />
-          <Route path="/auth/signup" element={<SignupPage />} />
+          <Route
+            path="/auth/login"
+            element={
+              <PublicRoute>
+                <LoginPage />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/auth/signup"
+            element={
+              <PublicRoute>
+                <SignupPage />
+              </PublicRoute>
+            }
+          />
           <Route path="/auth/set-password" element={<SetPasswordPage />} />
           <Route path="/onboarding" element={<OnboardingPage />} />
           <Route
