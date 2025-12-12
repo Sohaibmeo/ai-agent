@@ -207,7 +207,6 @@ export function RecipesPage() {
                         updateStep('build-ingredients', 'done', undefined, undefined, 92);
                         updateStep('finishing', 'active', 'Saving recipe...', undefined, 98);
                         updateStep('finishing', 'done', undefined, undefined, 100);
-                        setTimeout(() => endRun(), 400);
                         setShowCreateModal(false);
                         setShowAiForm(false);
                         setAiNote('');
@@ -217,7 +216,6 @@ export function RecipesPage() {
                         setShowCreateModal(false);
                         setShowAiForm(false);
                         navigate('/recipes/new');
-                        setTimeout(() => endRun(), 600);
                       } finally {
                         setIsGenerating(false);
                       }
@@ -327,7 +325,6 @@ export function RecipesPage() {
                             updateStep('draft-recipe', 'done', undefined, undefined, 86);
                             updateStep('finishing', 'active', 'Saving recipe...', undefined, 96);
                             updateStep('finishing', 'done', undefined, undefined, 100);
-                            setTimeout(() => endRun(), 400);
                             setShowCreateModal(false);
                             setShowAiForm(false);
                             setImageFile(null);
@@ -336,7 +333,6 @@ export function RecipesPage() {
                             navigate(`/recipes/${created.id}`);
                           } catch (e) {
                             setError('Could not create recipe from image. Try again or use AI text.');
-                            setTimeout(() => endRun(), 600);
                             setShowCreateModal(false);
                             setShowAiForm(false);
                             setImageFile(null);
