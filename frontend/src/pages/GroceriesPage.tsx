@@ -19,7 +19,7 @@ export function GroceriesPage() {
   const [selectedPlanId, setSelectedPlanId] = useState<string | undefined>(undefined);
   const { data: list, isLoading } = useShoppingList(selectedPlanId);
   const navigate = useNavigate();
-  const [items, setItems] = useState(list?.items || []);
+  const [items, setItems] = useState<ShoppingListItem[]>(list?.items || []);
   const [priceTarget, setPriceTarget] = useState<ShoppingListItem | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isEmailSending, setIsEmailSending] = useState(false);
@@ -30,17 +30,21 @@ export function GroceriesPage() {
   }, [list]);
 
   useEffect(() => {
-    if (!selectedPlanId) {
-      const activeId = list?.weekly_plan_id || plan?.id;
-      if (activeId) setSelectedPlanId(activeId);
+    if (selectedPlanId) return;
+    const activeId = list?.weekly_plan_id || plan?.id;
+    if (activeId) {
+      setSelectedPlanId(activeId);
     }
-  }, [selectedPlanId, list?.weekly_plan_id, plan?.id]);
+  }, [list?.weekly_plan_id, plan?.id, selectedPlanId]);
 
   const estimatedTotal = useMemo(() => {
     return items
       .filter((i) => !i.has_item)
       .reduce((sum, i) => sum + (i.estimated_cost_gbp ? Number(i.estimated_cost_gbp) : 0), 0);
   }, [items]);
+  const hasActivePlan = Boolean(selectedPlanId || list?.weekly_plan_id || plan?.id);
+  const hasFetchedList = !isLoading && list !== undefined;
+  const showEmptyState = hasFetchedList && !error && hasActivePlan && (list?.items?.length ?? 0) === 0;
 
   const emailList = async () => {
     const planId = selectedPlanId || list?.weekly_plan_id || plan?.id;
@@ -159,7 +163,7 @@ export function GroceriesPage() {
           </div>
         )}
 
-        {!isLoading && !error && (items?.length || 0) === 0 && (
+        {!isLoading && showEmptyState && (
           <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
             <div className="text-base font-semibold text-slate-900">No shopping list yet</div>
             <div className="text-sm text-slate-500">Generate a plan to see your groceries here.</div>
@@ -189,7 +193,7 @@ export function GroceriesPage() {
           </div>
         )}
 
-        {!isLoading && (items?.length || 0) > 0 && (
+        {!isLoading && items.length > 0 && (
           <div className="space-y-2 p-4">
             {items.map((item) => (
               <div

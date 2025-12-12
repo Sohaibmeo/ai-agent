@@ -7,9 +7,7 @@ import { updateProfile, fetchProfileMe } from '../api/profile';
 import { DIET_TYPES, ALLERGENS } from '../constants/dietAllergy';
 import { GOALS, INTENSITIES, ACTIVITY_LEVELS } from '../constants/targets';
 import { useQueryClient } from '@tanstack/react-query';
-import { useProfile } from '../hooks/useProfile';
-import { useCreditConfirmation } from '../hooks/useCreditConfirmation.tsx';
-import { CREDIT_COSTS } from '../constants/credits';
+import { useLlmAction } from '../hooks/useLlmAction';
 import { activatePlan, generatePlan } from '../api/plans';
 
 type Step = 0 | 1 | 2 | 3 | 4;
@@ -26,8 +24,11 @@ export function OnboardingPage() {
   const [saving, setSaving] = useState(false);
   const [sameMealsAllWeek, setSameMealsAllWeek] = useState(false);
   const queryClient = useQueryClient();
-  const { data: profileData } = useProfile();
-  const { requestCreditConfirmation } = useCreditConfirmation();
+  const { runWithLlmLoader: runOnboardingPlanGeneration } = useLlmAction({
+    kind: 'generate-week',
+    title: 'Generating your weekly plan...',
+    subtitle: 'Your AI coach is planning meals around your macros and budget.',
+  });
 
   const [profile, setProfile] = useState<
     ProfileInputs & {
@@ -139,47 +140,27 @@ export function OnboardingPage() {
     }
   };
 
-  const confirmCreditUse = async (cost: number, label: string, detail: string) => {
-    const available = Number(profileData?.credit ?? 0);
-    const insufficient = available < cost;
-    const options = insufficient
-      ? {
-          cost,
-          title: label,
-          detail,
-          insufficient: true,
-          ctaLabel: 'Add credits',
-        }
-      : { cost, title: label, detail };
-    return await requestCreditConfirmation(options);
-  };
+const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
 
   const handleFinish = async () => {
     if (!token) return;
     const toastId = toast.loading('Finalising onboarding…');
-    const dayCost = CREDIT_COSTS.planGeneration.day;
-    const cost = dayCost * (sameMealsAllWeek ? 1 : 7);
-    const detail = sameMealsAllWeek
-      ? 'Same meals all week'
-      : 'Different meals every day';
     setSaving(true);
-    const confirmed = await confirmCreditUse(cost, 'Generate your first plan', detail);
-    if (!confirmed) {
-      setSaving(false);
-      toast.dismiss(toastId);
-      return;
-    }
+    setIsGeneratingPlan(true);
     try {
       await persistProfile();
-      const plan = await generatePlan({
-        breakfast_enabled: profile.breakfast_enabled,
-        snack_enabled: profile.snack_enabled,
-        lunch_enabled: profile.lunch_enabled,
-        dinner_enabled: profile.dinner_enabled,
-        weeklyBudgetGbp: profile.weekly_budget_gbp,
-        sameMealsAllWeek,
-        maxDifficulty: profile.max_difficulty,
-        useAgent: true,
+      const plan = await runOnboardingPlanGeneration(async () => {
+        const generatedPlan = await generatePlan({
+          breakfast_enabled: profile.breakfast_enabled,
+          snack_enabled: profile.snack_enabled,
+          lunch_enabled: profile.lunch_enabled,
+          dinner_enabled: profile.dinner_enabled,
+          weeklyBudgetGbp: profile.weekly_budget_gbp,
+          sameMealsAllWeek,
+          maxDifficulty: profile.max_difficulty,
+          useAgent: true,
+        });
+        return generatedPlan;
       });
       await activatePlan(plan.id);
       toast.success('Onboarding complete! Generating your plan now…', { id: toastId });
@@ -190,6 +171,7 @@ export function OnboardingPage() {
       toast.error('Could not finish onboarding. Please try again.', { id: toastId });
     } finally {
       setSaving(false);
+      setIsGeneratingPlan(false);
     }
   };
 
@@ -197,6 +179,18 @@ export function OnboardingPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100">
         <div className="text-sm text-slate-600">Preparing your onboarding…</div>
+      </div>
+    );
+  }
+
+  if (isGeneratingPlan) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-slate-50 to-slate-100 px-4 py-8">
+        <div className="text-center rounded-3xl border border-slate-200 bg-white px-6 py-8 shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
+          <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Onboarding</p>
+          <h2 className="mt-2 text-2xl font-semibold text-slate-900">Generating your first plan…</h2>
+          <p className="mt-2 text-sm text-slate-500">Please wait while our AI finishes cooking your week.</p>
+        </div>
       </div>
     );
   }
