@@ -12,7 +12,7 @@ import {
 import { reviewInstructionSchema, ReviewInstruction } from './schemas/review-instruction.schema';
 import { PlansService } from '../plans/plans.service';
 import { UsersService } from '../users/users.service';
-import { CreditService } from '../profile/credit.service';
+import { ProfileService } from '../profile/profile.service';
 import { CREDIT_COSTS } from '../constants/credits';
 import { calculateTargets } from '../plans/utils/profile-targets';
 import {
@@ -63,7 +63,7 @@ export class AgentsService {
     @Inject(forwardRef(() => PlansService))
     private readonly plansService: PlansService,
     private readonly usersService: UsersService,
-    private readonly creditService: CreditService,
+    private readonly profileService: ProfileService,
   ) {}
 
   private summarizePlanContext = async (userId?: string) => {

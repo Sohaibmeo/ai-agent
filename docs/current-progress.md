@@ -1,14 +1,18 @@
 # Next steps
 
-Proper User Auth
-
-Documentation and Presentation
-
-Switch the llm use from local to the cloud chat gpt maybe mini 5?
-
 store chat history for a session (maybe a day limit or a week limit or wipe it when a new plan is marked as active)
 
 is_custom logic for recipes
+
+### NEXT PLAN:
+For the frontend lets develop a user payment page.
+
+On the top we will have user credits and user can add credits adding credits will have 4 options to add credits with more credits having more discounts.
+
+Below this thing will have monthly,yearly and lifetime plan toggle and for monthly and yearly three cards for each plan with yearly plans saving cost. for lifetime a single card with a good offer will be there.
+
+Lets make this page accessible through the settings icon dropdown options we will add before the change password called current plan or soemthing suitable
+
 
 
 # Proper Auth Implementation Plan

@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { UserProfile } from '../database/entities';
 
 @Injectable()
-export class CreditService {
+export class ProfileService {
   constructor(
     @InjectRepository(UserProfile)
     private readonly profileRepo: Repository<UserProfile>,
@@ -19,7 +19,7 @@ export class CreditService {
     return profile;
   }
 
-  async charge(userId: string, amount: number) {
+  async chargeCredit(userId: string, amount: number) {
     if (amount <= 0) return;
     const profile = await this.loadProfile(userId);
     const current = Number(profile.credit ?? 0);
