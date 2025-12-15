@@ -3,7 +3,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Ingredient } from '../database/entities';
 import { AgentsService } from '../agents/agents.service';
-import { NormalizeForMatch, ComputeNameSimilarity, Singularize } from '../ingredients/helper/normalize';
+import {
+  NormalizeForMatch,
+  ComputeNameSimilarity,
+  Singularize,
+  tokenizeForMatch,
+  tokensOverlap,
+} from '../ingredients/helper/normalize';
 
 @Injectable()
 export class IngredientsService implements OnModuleInit {
@@ -161,11 +167,7 @@ async findOrCreateByName(name: string): Promise<Ingredient> {
   let bestScore = 0;
 
   for (const cand of candidates) {
-    const score = ComputeNameSimilarity(
-      trimmed,
-      cand.name,
-      cand.similarity_name,
-    );
+    const score = ComputeNameSimilarity(trimmed, cand.name, cand.similarity_name);
     if (score > bestScore) {
       bestScore = score;
       best = cand;
@@ -173,14 +175,22 @@ async findOrCreateByName(name: string): Promise<Ingredient> {
   }
 
   const THRESHOLD = 0.52; // can be tuned
+  const RELAXED_THRESHOLD = 0.45;
 
-  if (best && bestScore >= THRESHOLD) {
-    this.logger.log(
-      `Matched LLM ingredient "${trimmed}" -> "${best.name}" (score=${bestScore.toFixed(
-        2,
-      )})`,
-    );
-    return best;
+  if (best) {
+    const queryTokens = tokenizeForMatch(trimmed);
+    const candidateTokens = tokenizeForMatch(best.similarity_name || best.name);
+    const overlap = tokensOverlap(queryTokens, candidateTokens);
+    const relaxedMatch = bestScore >= RELAXED_THRESHOLD && overlap;
+
+    if (bestScore >= THRESHOLD || relaxedMatch) {
+      this.logger.log(
+        `Matched LLM ingredient "${trimmed}" -> "${best.name}" (score=${bestScore.toFixed(
+          2,
+        )}, relaxed=${relaxedMatch})`,
+      );
+      return best;
+    }
   }
 
   // --- 6) No good match found → call LLM ingredient estimator --------
