@@ -1,3 +1,36 @@
+const stopwords = new Set([
+  'raw',
+  'cooked',
+  'fresh',
+  'peeled',
+  'with',
+  'skin',
+  'without',
+  'no',
+  'and',
+  'or',
+  'from',
+  'juice',
+  'sliced',
+  'chopped',
+  'ground',
+  'whole',
+  'medium',
+  'large',
+  'small',
+  'boneless',
+  'drumstick',
+  'thigh',
+  'breast',
+  'fillet',
+  'fillet', // double is fine
+  'frozen',
+  'canned',
+  'added',
+  'grade',
+  'style', // e.g. "Greek-style yogurt"
+]);
+
 export function NormalizeForMatch(str: string): string {
   let s = str.toLowerCase();
 
@@ -48,59 +81,36 @@ export function Singularize(word: string): string {
   return word;
 }
 
+function tokenizeNormalized(normalized: string): string[] {
+  if (!normalized) return [];
+  return normalized
+    .split(' ')
+    .filter((t) => t && !stopwords.has(t))
+    .map((t) => Singularize(t));
+}
+
+export function tokenizeForMatch(str?: string): string[] {
+  if (!str) return [];
+  return tokenizeNormalized(NormalizeForMatch(str));
+}
+
+export function tokensOverlap(a: string[], b: string[]): boolean {
+  if (!a.length || !b.length) return false;
+  const setA = new Set(a);
+  return b.some((token) => setA.has(token));
+}
+
 function computeSingleSimilarity(a: string, b: string): number {
   const normA = NormalizeForMatch(a);
   const normB = NormalizeForMatch(b);
 
-  if (!normA || !normB) return 0;
+  const tokensA = tokenizeNormalized(normA);
+  const tokensB = tokenizeNormalized(normB);
 
-  const stopwords = new Set([
-    'raw',
-    'cooked',
-    'fresh',
-    'peeled',
-    'with',
-    'skin',
-    'without',
-    'no',
-    'and',
-    'or',
-    'from',
-    'juice',
-    'sliced',
-    'chopped',
-    'ground',
-    'whole',
-    'medium',
-    'large',
-    'small',
-    'boneless',
-    'drumstick',
-    'thigh',
-    'breast',
-    'fillet',
-    'fillet', // double is fine
-    'frozen',
-    'canned',
-    'added',
-    'grade',
-    'style', // e.g. "Greek-style yogurt"
-  ]);
-
-  const tokensA = normA
-    .split(' ')
-    .filter((t) => t && !stopwords.has(t))
-    .map((t) => Singularize(t));
-
-  const tokensB = normB
-    .split(' ')
-    .filter((t) => t && !stopwords.has(t))
-    .map((t) => Singularize(t));
+  if (!tokensA.length || !tokensB.length) return 0;
 
   const setA = new Set(tokensA);
   const setB = new Set(tokensB);
-
-  if (setA.size === 0 || setB.size === 0) return 0;
 
   // 1) Token overlap score (0..1)
   let intersection = 0;
