@@ -1,16 +1,26 @@
-import { IsArray, IsBoolean, IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsArray, IsBoolean, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class UpdateProfileDto {
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
+  @Min(13)
+  @Max(100)
   age?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
+  @Min(120)
+  @Max(230)
   height_cm?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
+  @Min(35)
+  @Max(300)
   weight_kg?: number;
 
   @IsOptional()
@@ -60,6 +70,9 @@ export class UpdateProfileDto {
   max_difficulty?: string;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
+  @Min(10)
+  @Max(500)
   weekly_budget_gbp?: number;
 }

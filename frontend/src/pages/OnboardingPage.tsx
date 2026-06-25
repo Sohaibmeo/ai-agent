@@ -3,6 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { calculateTargets, type ProfileInputs } from '../lib/targets';
+import {
+  PROFILE_LIMITS,
+  validateProfileBasics,
+  validateWeeklyBudget,
+} from '../lib/profileValidation';
 import { updateProfile, fetchProfileMe } from '../api/profile';
 import { DIET_TYPES, ALLERGENS } from '../constants/dietAllergy';
 import { GOALS, INTENSITIES, ACTIVITY_LEVELS } from '../constants/targets';
@@ -104,7 +109,14 @@ export function OnboardingPage() {
     });
   }, [profile]);
 
-  const canFinish = !!profile.age && !!profile.height_cm && !!profile.weight_kg;
+  const profileBasicsError = validateProfileBasics({
+    age: profile.age,
+    height_cm: profile.height_cm,
+    weight_kg: profile.weight_kg,
+  });
+  const weeklyBudgetError = validateWeeklyBudget(profile.weekly_budget_gbp);
+  const canContinue = step !== 0 || !profileBasicsError;
+  const canFinish = !profileBasicsError && !weeklyBudgetError;
 
   const handleToggleAllergy = (key: string) => {
     setProfile((prev) => {
@@ -135,6 +147,11 @@ export function OnboardingPage() {
 
   const persistProfile = async () => {
     if (!token) return;
+    const validationError = profileBasicsError || weeklyBudgetError;
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
     await updateProfile(token, buildProfilePayload());
     if (user) {
       setAuth(token, { ...user, hasProfile: true });
@@ -145,6 +162,11 @@ const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
 
   const handleFinish = async () => {
     if (!token) return;
+    const validationError = profileBasicsError || weeklyBudgetError;
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
     const toastId = toast.loading('Finalising onboarding…');
     setSaving(true);
     setIsGeneratingPlan(true);
@@ -229,16 +251,17 @@ const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
                 <p className="text-xs text-slate-500">We&apos;ll use this to estimate your maintenance calories.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2">
                   {[
-                    { key: 'age', label: 'Age', suffix: 'yrs' },
-                    { key: 'height_cm', label: 'Height', suffix: 'cm' },
-                    { key: 'weight_kg', label: 'Weight', suffix: 'kg' },
+                    { key: 'age', label: 'Age', suffix: 'yrs', min: PROFILE_LIMITS.age.min, max: PROFILE_LIMITS.age.max },
+                    { key: 'height_cm', label: 'Height', suffix: 'cm', min: PROFILE_LIMITS.height_cm.min, max: PROFILE_LIMITS.height_cm.max },
+                    { key: 'weight_kg', label: 'Weight', suffix: 'kg', min: PROFILE_LIMITS.weight_kg.min, max: PROFILE_LIMITS.weight_kg.max },
                   ].map((field) => (
                     <div key={field.key}>
                       <label className="block text-[12px] text-slate-600 mb-1">{field.label}</label>
                       <div className="flex items-center rounded-2xl border border-slate-300 bg-slate-50 px-3 py-2 shadow-inner">
                         <input
                           type="number"
-                          min={0}
+                          min={field.min}
+                          max={field.max}
                           value={(profile as any)[field.key] ?? ''}
                           onChange={(e) =>
                             setProfile((prev) => ({
@@ -422,7 +445,8 @@ const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
                       <span className="mr-1 text-[11px] text-slate-500">£</span>
                       <input
                         type="number"
-                        min={0}
+                        min={PROFILE_LIMITS.weekly_budget_gbp.min}
+                        max={PROFILE_LIMITS.weekly_budget_gbp.max}
                         value={profile.weekly_budget_gbp ?? ''}
                         onChange={(e) =>
                           setProfile((prev) => ({
@@ -502,8 +526,9 @@ const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
               {step < 4 ? (
                 <button
                   type="button"
+                  disabled={!canContinue}
                   onClick={() => setStep((s) => ((s + 1) as Step))}
-                  className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-600"
+                  className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-600 disabled:opacity-60"
                 >
                   Continue
                 </button>

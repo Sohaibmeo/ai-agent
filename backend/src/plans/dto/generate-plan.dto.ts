@@ -1,4 +1,4 @@
-import { IsBoolean, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class GeneratePlanDto {
@@ -24,6 +24,8 @@ export class GeneratePlanDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
+  @Min(10)
+  @Max(500)
   weeklyBudgetGbp?: number;
 
   @IsOptional()

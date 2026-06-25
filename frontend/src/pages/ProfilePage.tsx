@@ -3,6 +3,11 @@ import { Card } from '../components/shared/Card';
 import { useProfile } from '../hooks/useProfile';
 import { notify } from '../lib/toast';
 import { calculateTargets } from '../lib/targets';
+import {
+  PROFILE_LIMITS,
+  validateProfileBasics,
+  validateWeeklyBudget,
+} from '../lib/profileValidation';
 import { GOALS, INTENSITIES, ACTIVITY_LEVELS } from '../constants/targets';
 import { DIET_TYPES, ALLERGENS } from '../constants/dietAllergy';
 
@@ -67,6 +72,17 @@ export function ProfilePage() {
 
   const handleSave = async () => {
     try {
+      const validationError =
+        validateProfileBasics({
+          age: form.age,
+          height_cm: form.height_cm,
+          weight_kg: form.weight_kg,
+        }) || validateWeeklyBudget(form.weekly_budget_gbp);
+      if (validationError) {
+        notify.error(validationError);
+        return;
+      }
+
       await saveProfile({
         age: form.age ? Number(form.age) : null,
         height_cm: form.height_cm ? Number(form.height_cm) : null,
@@ -161,6 +177,8 @@ export function ProfilePage() {
               ) : (
                 <input
                   type="number"
+                  min={PROFILE_LIMITS.age.min}
+                  max={PROFILE_LIMITS.age.max}
                   className={inputClass}
                   placeholder="25"
                   value={form.age}
@@ -175,6 +193,8 @@ export function ProfilePage() {
               ) : (
                 <input
                   type="number"
+                  min={PROFILE_LIMITS.height_cm.min}
+                  max={PROFILE_LIMITS.height_cm.max}
                   className={inputClass}
                   placeholder="175"
                   value={form.height_cm}
@@ -189,6 +209,8 @@ export function ProfilePage() {
               ) : (
                 <input
                   type="number"
+                  min={PROFILE_LIMITS.weight_kg.min}
+                  max={PROFILE_LIMITS.weight_kg.max}
                   className={inputClass}
                   placeholder="70"
                   value={form.weight_kg}
@@ -325,6 +347,8 @@ export function ProfilePage() {
               ) : (
                 <input
                   type="number"
+                  min={PROFILE_LIMITS.weekly_budget_gbp.min}
+                  max={PROFILE_LIMITS.weekly_budget_gbp.max}
                   className={inputClass}
                   placeholder="40"
                   value={form.weekly_budget_gbp}

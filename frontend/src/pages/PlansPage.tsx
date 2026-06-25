@@ -14,6 +14,7 @@ import { notify } from '../lib/toast';
 import { useLlmAction } from '../hooks/useLlmAction';
 import { useCreditConfirmation } from '../hooks/useCreditConfirmation.tsx';
 import { CREDIT_COSTS } from '../constants/credits';
+import { PROFILE_LIMITS, validateWeeklyBudget } from '../lib/profileValidation';
 
 const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const pillClass = 'rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 border border-slate-200';
@@ -216,6 +217,12 @@ export function PlansPage() {
   };
 
   const runAgentPlanGeneration = async () => {
+    const budgetError = validateWeeklyBudget(weeklyBudget);
+    if (budgetError) {
+      notify.error(budgetError);
+      return;
+    }
+
     const dayCost = CREDIT_COSTS.planGeneration.day;
     const cost = dayCost * (sameMealsAllWeek ? 1 : 7);
     const detail = sameMealsAllWeek ? 'Generate the same meals all week' : 'Generate a varied week';
@@ -628,7 +635,8 @@ export function PlansPage() {
                 <span className="text-xs uppercase text-slate-500">Weekly budget (£)</span>
                 <input
                   type="number"
-                  min="0"
+                  min={PROFILE_LIMITS.weekly_budget_gbp.min}
+                  max={PROFILE_LIMITS.weekly_budget_gbp.max}
                   step="1"
                   value={weeklyBudget}
                   onChange={(e) => setWeeklyBudget(e.target.value)}
@@ -701,6 +709,12 @@ export function PlansPage() {
                 <button
                   className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"
                   onClick={() => {
+                    const budgetError = validateWeeklyBudget(weeklyBudget);
+                    if (budgetError) {
+                      notify.error(budgetError);
+                      return;
+                    }
+
                     setIsAdvancedOpen(false);
                     setAppliedSlots({
                       breakfast_enabled: slots.breakfast_enabled,

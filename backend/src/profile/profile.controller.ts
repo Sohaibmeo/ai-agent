@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { UserProfile } from '../database/entities';
+import { UpdateProfileDto } from '../users/dto/update-profile.dto';
 
 @Controller('profile')
 @UseGuards(JwtAuthGuard)
@@ -24,7 +25,7 @@ export class ProfileController {
   }
 
   @Put('me')
-  async updateMe(@Req() req: any, @Body() body: Partial<UserProfile>) {
+  async updateMe(@Req() req: any, @Body() body: UpdateProfileDto) {
     const userId = req.user.userId;
     let profile = await this.profileRepo.findOne({ where: { user_id: userId } });
     if (!profile) {
