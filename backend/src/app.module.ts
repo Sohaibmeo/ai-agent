@@ -14,6 +14,7 @@ import { AuthModule } from './auth/auth.module';
 import { ProfileModule } from './profile/profile.module';
 import { WorkflowRuntimeController } from './workflows/workflow-runtime.controller';
 import { WorkflowRuntimeService } from './workflows/workflow-runtime.service';
+import { WorkflowTestController } from './workflows/workflow-test.controller';
 
 @Module({
   imports: [
@@ -30,7 +31,7 @@ import { WorkflowRuntimeService } from './workflows/workflow-runtime.service';
     AuthModule,
     ProfileModule,
   ],
-  controllers: [WorkflowRuntimeController],
+  controllers: [WorkflowRuntimeController, WorkflowTestController],
   providers: [WorkflowRuntimeService],
 })
 export class AppModule {}
