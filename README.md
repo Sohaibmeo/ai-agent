@@ -221,3 +221,13 @@ npm run start:dev
 
 Licensed under the MIT License.  
 See `LICENSE` in this repository.
+
+
+Best Next Improvements
+Add a deterministic “Plan Validator” after LLM generation and before save.
+Add allergy/diet/budget/macro hard checks.
+Add confidence levels for ingredients and prices.
+Tighten Zod schemas so invalid LLM output fails early.
+Add a repair loop: generate → compute → validate → ask model to fix specific violations.
+Split prompts into smaller role-specific prompts, but make code the authority.
+Remove raw console.log('Candidate') at [agents.service.ts (line 639)](/C:/Users/Sohaib/Desktop/ExComS/My Code/overcooked-ai/backend/src/agents/agents.service.ts:639) before production.
