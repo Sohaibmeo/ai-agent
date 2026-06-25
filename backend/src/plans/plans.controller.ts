@@ -7,6 +7,7 @@ import { SetPlanStatusDto } from './dto/set-plan-status.dto';
 import { SaveCustomRecipeDto } from './dto/save-custom-recipe.dto';
 import { AiPlanSwapDto } from './dto/ai-plan-swap.dto';
 import { JwtAuthGuard } from '../auth/jwt.guard';
+import { GENERATE_WEEKLY_PLAN_WORKFLOW } from '../workflows/plan-generation.workflow';
 
 @Controller('plans')
 @UseGuards(JwtAuthGuard)
@@ -26,10 +27,10 @@ export class PlansController {
   }
 
   @Post('generate')
-  generate(@Req() req: any, @Body() body: GeneratePlanDto) {
+  async generate(@Req() req: any, @Body() body: GeneratePlanDto) {
     const userId = req.user?.userId as string;
     const weekStartDate = body.weekStartDate || new Date().toISOString().slice(0, 10);
-    return this.plansService.generateWeek(userId, weekStartDate, body.useAgent, {
+    const overrides = {
       useLlmRecipes: body.useLlmRecipes,
       sameMealsAllWeek: body.sameMealsAllWeek,
       weeklyBudgetGbp: body.weeklyBudgetGbp,
@@ -38,6 +39,30 @@ export class PlansController {
       lunch_enabled: body.lunch_enabled,
       dinner_enabled: body.dinner_enabled,
       maxDifficulty: body.maxDifficulty,
+    };
+
+    if (body.useAgent && process.env.PLAN_GENERATION_MODE === 'workflow') {
+      const plan = await this.plansService.createWorkflowPlanDraft(userId, weekStartDate);
+      const { start } = await import('workflow/api');
+      const run = await start(GENERATE_WEEKLY_PLAN_WORKFLOW, [
+        {
+          planId: plan.id,
+          userId,
+          weekStartDate,
+          overrides,
+        },
+      ]);
+
+      return {
+        queued: true,
+        planId: plan.id,
+        runId: run.runId,
+        status: 'queued',
+      };
+    }
+
+    return this.plansService.generateWeek(userId, weekStartDate, body.useAgent, {
+      ...overrides,
     });
   }
 

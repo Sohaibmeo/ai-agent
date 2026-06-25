@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PlansService } from './plans.service';
 import { PlansController } from './plans.controller';
+import { PlansWorkflowController } from './plans-workflow.controller';
 import { WeeklyPlan, PlanDay, PlanMeal, PlanActionLog } from '../database/entities';
 import { RecipesModule } from '../recipes/recipes.module';
 import { UsersModule } from '../users/users.module';
@@ -22,7 +23,7 @@ import { PipelineGateway } from './pipeline.gateway';
     forwardRef(() => IngredientsModule),
   ],
   providers: [PlansService, PipelineGateway],
-  controllers: [PlansController],
+  controllers: [PlansController, PlansWorkflowController],
   exports: [PlansService, PipelineGateway],
 })
 export class PlansModule {}

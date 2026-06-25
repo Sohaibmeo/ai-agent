@@ -4,9 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "prebuild": "npx @workflow/nest init --force",
     "start": "node dist/main.js",
     "start:dev": "nodemon --watch src --ext ts --exec \"ts-node --project tsconfig.json --require tsconfig-paths/register src/main.ts\"",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/build-workflows.mjs",
     "lint": "echo \"TODO: add lint\" && exit 0",
     "test": "jest",
     "test:e2e": "jest --config jest.e2e.config.js --runInBand",
@@ -47,10 +48,13 @@
   },
   "overrides": {
     "multer": "2.2.0",
+    "undici": "8.5.0",
     "uuid": "11.1.1"
   },
   "devDependencies": {
     "@nestjs/testing": "^11.1.9",
+    "@swc/cli": "^0.8.1",
+    "@swc/core": "^1.15.43",
     "@types/bcryptjs": "^2.4.2",
     "@types/body-parser": "^1.19.6",
     "@types/jest": "^30.0.0",
