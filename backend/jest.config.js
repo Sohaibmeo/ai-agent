@@ -9,6 +9,7 @@ module.exports = {
     '^(.*)\\.js$': '$1',
     '^typeorm$': '<rootDir>/tests/mocks/typeorm.ts',
     '^@nestjs/common$': '<rootDir>/tests/mocks/nestjs-common.ts',
+    '^@nestjs/websockets$': '<rootDir>/tests/mocks/nestjs-websockets.ts',
     '^@nestjs/typeorm$': '<rootDir>/tests/mocks/nestjs-typeorm.ts',
     '^../database/entities$': '<rootDir>/tests/mocks/entities.ts',
   },

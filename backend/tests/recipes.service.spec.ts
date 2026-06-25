@@ -13,9 +13,11 @@ describe('RecipesService', () => {
     createQueryBuilder: () => qb,
   } as any;
   const qb: any = {
+    where: () => qb,
     andWhere: () => qb,
     limit: () => qb,
     leftJoin: () => qb,
+    leftJoinAndSelect: () => qb,
     addSelect: () => qb,
     orderBy: () => qb,
     getMany: mockFind,

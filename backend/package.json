@@ -19,8 +19,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@langchain/core": "^0.3.11",
-    "@langchain/openai": "^0.3.12",
+    "@langchain/core": "^1.2.1",
+    "@langchain/openai": "^1.5.3",
     "@nestjs/common": "^11.1.9",
     "@nestjs/core": "^11.1.9",
     "@nestjs/jwt": "^11.0.0",
@@ -33,7 +33,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
     "dotenv": "^17.2.3",
-    "nodemailer": "^6.9.13",
+    "nodemailer": "^9.0.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.16.3",
@@ -42,6 +42,10 @@
     "typeorm": "^0.3.27",
     "ws": "^8.18.3",
     "zod": "^4.1.12"
+  },
+  "overrides": {
+    "multer": "2.2.0",
+    "uuid": "11.1.1"
   },
   "devDependencies": {
     "@nestjs/testing": "^11.1.9",

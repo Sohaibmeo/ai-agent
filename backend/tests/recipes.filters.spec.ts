@@ -7,9 +7,11 @@ const makeRecipe = (id: string, meal_slot: string, difficulty: string, diet_tags
 
 const mockQB = (recipes: any[]) => {
   const qb: any = {
+    where: () => qb,
     andWhere: () => qb,
     limit: () => qb,
     leftJoin: () => qb,
+    leftJoinAndSelect: () => qb,
     addSelect: () => qb,
     orderBy: () => qb,
     getMany: jest.fn().mockResolvedValue(recipes),
