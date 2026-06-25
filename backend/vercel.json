@@ -4,8 +4,42 @@
     {
       "src": "src/main.ts",
       "use": "@vercel/node"
+    },
+    {
+      "src": "api/workflow-flow.ts",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/workflow-step.ts",
+      "use": "@vercel/node"
     }
   ],
+  "functions": {
+    "api/workflow-flow.ts": {
+      "maxDuration": 60,
+      "experimentalTriggers": [
+        {
+          "type": "queue/v2beta",
+          "topic": "__wkf_workflow_*",
+          "consumer": "default",
+          "retryAfterSeconds": 5,
+          "initialDelaySeconds": 0
+        }
+      ]
+    },
+    "api/workflow-step.ts": {
+      "maxDuration": 300,
+      "experimentalTriggers": [
+        {
+          "type": "queue/v2beta",
+          "topic": "__wkf_step_*",
+          "consumer": "default",
+          "retryAfterSeconds": 5,
+          "initialDelaySeconds": 0
+        }
+      ]
+    }
+  },
   "routes": [
     {
       "src": "/(.*)",
