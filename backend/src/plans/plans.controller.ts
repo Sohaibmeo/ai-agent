@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Logger, Param, Post, Req, ServiceUnavailableException, UseGuards } from '@nestjs/common';
 import { PlansService } from './plans.service';
 import { GeneratePlanDto } from './dto/generate-plan.dto';
 import { SetMealRecipeDto } from './dto/set-meal-recipe.dto';
@@ -12,6 +12,8 @@ import { GENERATE_WEEKLY_PLAN_WORKFLOW } from '../workflows/plan-generation.work
 @Controller('plans')
 @UseGuards(JwtAuthGuard)
 export class PlansController {
+  private readonly logger = new Logger(PlansController.name);
+
   constructor(private readonly plansService: PlansService) {}
 
   @Get()
@@ -41,17 +43,35 @@ export class PlansController {
       maxDifficulty: body.maxDifficulty,
     };
 
-    if (body.useAgent && process.env.PLAN_GENERATION_MODE === 'workflow') {
+    const generationMode = (process.env.PLAN_GENERATION_MODE || 'sync').trim().toLowerCase();
+    this.logger.log(`generate request user=${userId} useAgent=${body.useAgent} mode=${generationMode}`);
+
+    if (body.useAgent && generationMode === 'workflow') {
       const plan = await this.plansService.createWorkflowPlanDraft(userId, weekStartDate);
       const { start } = await import('workflow/api');
-      const run = await start(GENERATE_WEEKLY_PLAN_WORKFLOW, [
-        {
-          planId: plan.id,
-          userId,
-          weekStartDate,
-          overrides,
-        },
-      ]);
+      this.logger.log(`starting workflow plan=${plan.id}`);
+
+      const workflowStart = start(GENERATE_WEEKLY_PLAN_WORKFLOW, [
+          {
+            planId: plan.id,
+            userId,
+            weekStartDate,
+            overrides,
+          },
+        ]);
+      const timeout = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Workflow start timed out after 15 seconds')), 15000);
+      });
+
+      let run: Awaited<typeof workflowStart>;
+      try {
+        run = await Promise.race([workflowStart, timeout]);
+      } catch (error) {
+        this.logger.error(`workflow start failed plan=${plan.id}: ${(error as Error).message}`);
+        throw new ServiceUnavailableException('Plan generation workflow could not be queued. Please try again.');
+      }
+
+      this.logger.log(`workflow queued plan=${plan.id} run=${run.runId}`);
 
       return {
         queued: true,

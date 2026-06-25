@@ -1,14 +1,22 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { tmpdir } from 'os';
 import { join } from 'path';
 
 @Injectable()
 export class WorkflowRuntimeService implements OnModuleInit {
   private readonly logger = new Logger(WorkflowRuntimeService.name);
-  readonly outDir = join(process.cwd(), '.nestjs', 'workflow');
+  readonly outDir = process.env.WORKFLOW_BUNDLE_DIR || join(
+    process.env.VERCEL ? tmpdir() : process.cwd(),
+    '.nestjs',
+    'workflow',
+  );
   private buildPromise?: Promise<void>;
 
   onModuleInit() {
-    this.buildPromise = this.buildWorkflowBundles();
+    this.buildPromise = this.buildWorkflowBundles().catch((error) => {
+      this.logger.error(`Workflow bundle build failed: ${(error as Error).message}`);
+      this.buildPromise = undefined;
+    });
   }
 
   async ensureBuilt() {
@@ -21,6 +29,7 @@ export class WorkflowRuntimeService implements OnModuleInit {
   private async buildWorkflowBundles() {
     const { NestLocalBuilder } = await import('@workflow/nest/builder');
     const builder = new NestLocalBuilder({
+      workingDir: process.cwd(),
       outDir: this.outDir,
       moduleType: 'commonjs',
       distDir: 'dist',
