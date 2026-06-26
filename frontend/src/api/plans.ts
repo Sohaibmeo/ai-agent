@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { WeeklyPlan } from './types';
+import type { GeneratePlanResponse, WeeklyPlan } from './types';
 
 export function fetchActivePlan() {
   return apiClient.get<WeeklyPlan | null>('/plans/active');
@@ -7,6 +7,10 @@ export function fetchActivePlan() {
 
 export function fetchPlansList() {
   return apiClient.get<WeeklyPlan[]>('/plans');
+}
+
+export function fetchPlanById(planId: string) {
+  return apiClient.get<WeeklyPlan | null>(`/plans/${planId}`);
 }
 
 export function generatePlan(payload: {
@@ -21,7 +25,7 @@ export function generatePlan(payload: {
   dinner_enabled?: boolean;
   maxDifficulty?: string;
 }) {
-  return apiClient.post<WeeklyPlan>('/plans/generate', payload);
+  return apiClient.post<GeneratePlanResponse>('/plans/generate', payload);
 }
 
 export function applyPlanAction(weeklyPlanId: string, body: any) {

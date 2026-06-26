@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Logger, Param, Post, Req, ServiceUnavailableException, UseGuards } from '@nestjs/common';
 import { PlansService } from './plans.service';
 import { GeneratePlanDto } from './dto/generate-plan.dto';
 import { SetMealRecipeDto } from './dto/set-meal-recipe.dto';
@@ -7,10 +7,13 @@ import { SetPlanStatusDto } from './dto/set-plan-status.dto';
 import { SaveCustomRecipeDto } from './dto/save-custom-recipe.dto';
 import { AiPlanSwapDto } from './dto/ai-plan-swap.dto';
 import { JwtAuthGuard } from '../auth/jwt.guard';
+import { inngest } from '../inngest/client';
 
 @Controller('plans')
 @UseGuards(JwtAuthGuard)
 export class PlansController {
+  private readonly logger = new Logger(PlansController.name);
+
   constructor(private readonly plansService: PlansService) {}
 
   @Get()
@@ -26,10 +29,10 @@ export class PlansController {
   }
 
   @Post('generate')
-  generate(@Req() req: any, @Body() body: GeneratePlanDto) {
+  async generate(@Req() req: any, @Body() body: GeneratePlanDto) {
     const userId = req.user?.userId as string;
     const weekStartDate = body.weekStartDate || new Date().toISOString().slice(0, 10);
-    return this.plansService.generateWeek(userId, weekStartDate, body.useAgent, {
+    const overrides = {
       useLlmRecipes: body.useLlmRecipes,
       sameMealsAllWeek: body.sameMealsAllWeek,
       weeklyBudgetGbp: body.weeklyBudgetGbp,
@@ -38,7 +41,36 @@ export class PlansController {
       lunch_enabled: body.lunch_enabled,
       dinner_enabled: body.dinner_enabled,
       maxDifficulty: body.maxDifficulty,
-    });
+    };
+
+    const generationMode = (process.env.PLAN_GENERATION_MODE || 'sync').trim().toLowerCase();
+    if (body.useAgent && generationMode === 'inngest') {
+      const plan = await this.plansService.createPlanGenerationDraft(userId, weekStartDate);
+
+      try {
+        await inngest.send({
+          name: 'plans/generate.requested',
+          data: {
+            planId: plan.id,
+            userId,
+            weekStartDate,
+            useAgent: true,
+            overrides,
+          },
+        });
+      } catch (error) {
+        this.logger.error(`inngest enqueue failed plan=${plan.id}: ${(error as Error).message}`);
+        throw new ServiceUnavailableException('Plan generation could not be queued. Please try again.');
+      }
+
+      return {
+        queued: true,
+        planId: plan.id,
+        status: 'queued',
+      };
+    }
+
+    return this.plansService.generateWeek(userId, weekStartDate, body.useAgent, overrides);
   }
 
   @Post('set-meal-recipe')

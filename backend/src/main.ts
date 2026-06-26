@@ -5,6 +5,10 @@ import { AppModule } from './app.module';
 import * as dotenv from 'dotenv';
 import { WsAdapter } from '@nestjs/platform-ws';
 import * as bodyParser from 'body-parser';
+import { serve } from 'inngest/express';
+import { inngest } from './inngest/client';
+import { createPlanGenerationFunctions } from './inngest/plan-generation.function';
+import { PlansService } from './plans/plans.service';
 
 dotenv.config();
 
@@ -31,6 +35,13 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { cors: corsOptions });
   app.use(bodyParser.json({ limit: '10mb' }));
   app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
+  app.use(
+    '/api/inngest',
+    serve({
+      client: inngest,
+      functions: createPlanGenerationFunctions(app.get(PlansService)),
+    }),
+  );
   app.useWebSocketAdapter(new WsAdapter(app));
   app.useGlobalPipes(
     new ValidationPipe({
