@@ -20,10 +20,7 @@
       "experimentalTriggers": [
         {
           "type": "queue/v2beta",
-          "topic": "__wkf_workflow_*",
-          "consumer": "default",
-          "retryAfterSeconds": 5,
-          "initialDelaySeconds": 0
+          "topic": "__wkf_workflow_*"
         }
       ]
     },
@@ -32,10 +29,7 @@
       "experimentalTriggers": [
         {
           "type": "queue/v2beta",
-          "topic": "__wkf_step_*",
-          "consumer": "default",
-          "retryAfterSeconds": 5,
-          "initialDelaySeconds": 0
+          "topic": "__wkf_step_*"
         }
       ]
     }
