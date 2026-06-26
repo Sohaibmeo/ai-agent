@@ -1,4 +1,4 @@
-import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { User } from './user.entity';
 import { PlanDay } from './plan-day.entity';
 
@@ -16,6 +16,9 @@ export class WeeklyPlan {
 
   @Column({ type: 'varchar', length: 20, default: 'systemdraft' })
   status!: string;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  created_at!: Date;
 
   @Column({ type: 'numeric', nullable: true })
   total_estimated_cost_gbp?: number;

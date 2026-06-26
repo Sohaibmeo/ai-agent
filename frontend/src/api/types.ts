@@ -91,6 +91,8 @@ export interface WeeklyPlan {
   id: string;
   week_start_date: string;
   status: string;
+  created_at?: string;
+  createdAt?: string;
   total_estimated_cost_gbp?: number | null;
   total_kcal?: number | null;
   total_protein?: number | null;

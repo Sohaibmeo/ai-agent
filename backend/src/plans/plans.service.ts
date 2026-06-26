@@ -148,7 +148,7 @@ export class PlansService {
   findAll(userId: string) {
     return this.weeklyPlanRepo.find({
       where: { status: Not('systemdraft'), user: { id: userId } as any },
-      order: { week_start_date: 'DESC' },
+      order: { created_at: 'DESC', week_start_date: 'DESC' },
       relations: ['days', 'days.meals', 'days.meals.recipe'],
     });
   }
@@ -174,7 +174,7 @@ export class PlansService {
     // Fallback: latest plan by week_start_date
     const latest = await this.weeklyPlanRepo.findOne({
       where: { user: { id: userId } as any },
-      order: { week_start_date: 'DESC' },
+      order: { created_at: 'DESC', week_start_date: 'DESC' },
       relations: ['days', 'days.meals', 'days.meals.recipe'],
     });
     return latest;

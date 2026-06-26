@@ -102,11 +102,32 @@ export function PlansPage() {
       Number(f),
     ) : '—'}g`;
   };
+  const getPlanCreatedAt = (weeklyPlan?: { created_at?: string; createdAt?: string } | null) =>
+    weeklyPlan?.created_at || weeklyPlan?.createdAt || null;
+  const getPlanCreatedTime = (weeklyPlan?: { created_at?: string; createdAt?: string } | null) => {
+    const value = getPlanCreatedAt(weeklyPlan);
+    const time = value ? new Date(value).getTime() : 0;
+    return Number.isFinite(time) ? time : 0;
+  };
+  const formatGeneratedAt = (weeklyPlan?: { created_at?: string; createdAt?: string } | null) => {
+    const value = getPlanCreatedAt(weeklyPlan);
+    if (!value) return 'Generated time unavailable';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Generated time unavailable';
+    return `Generated ${date.toLocaleString(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    })}`;
+  };
 
   const totalMeals = useMemo(() => days.reduce((acc, d) => acc + (d.meals?.length || 0), 0), [days]);
   const sortedPlans = useMemo(() => {
     if (!plansList) return [];
-    return [...plansList].sort((a, b) => (a.week_start_date > b.week_start_date ? -1 : 1));
+    return [...plansList].sort((a, b) => {
+      const createdDelta = getPlanCreatedTime(b) - getPlanCreatedTime(a);
+      if (createdDelta !== 0) return createdDelta;
+      return a.week_start_date > b.week_start_date ? -1 : 1;
+    });
   }, [plansList]);
   const selectAllChecked = useMemo(() => !!days.length && selectedDayIds.length === days.length, [days.length, selectedDayIds.length]);
 
@@ -377,31 +398,36 @@ export function PlansPage() {
       </Card>
 
       <Card>
-        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-700">
-          <div>
-            <div className="text-xs uppercase text-slate-500">Week of</div>
-            {isLoading ? <Skeleton className="mt-1 h-4 w-24" /> : <div className="font-semibold text-slate-900">{plan?.week_start_date || '—'}</div>}
+        <div className="flex flex-wrap items-center justify-between gap-4 text-sm text-slate-700">
+          <div className="flex flex-wrap items-center gap-3">
+            <div>
+              <div className="text-xs uppercase text-slate-500">Week of</div>
+              {isLoading ? <Skeleton className="mt-1 h-4 w-24" /> : <div className="font-semibold text-slate-900">{plan?.week_start_date || '—'}</div>}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {isLoading ? (
+                <>
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                </>
+              ) : (
+                <>
+                  <span className={pillClass}>{formatCurrency(plan?.total_estimated_cost_gbp)} total</span>
+                  <span className={pillClass}>
+                    {plan?.total_kcal ? `${Math.round(Number(plan.total_kcal))} kcal` : '—'} {avgKcal ? `(${avgKcal} avg)` : ''}
+                  </span>
+                  <span className={pillClass}>
+                    {plan?.total_protein ? `${Math.round(Number(plan.total_protein))}g protein` : '—'} {avgProtein ? `(${avgProtein} avg)` : ''}
+                  </span>
+                  <span className={pillClass}>{totalMeals} meals</span>
+                </>
+              )}
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {isLoading ? (
-              <>
-                <Skeleton className="h-5 w-16 rounded-full" />
-                <Skeleton className="h-5 w-16 rounded-full" />
-                <Skeleton className="h-5 w-16 rounded-full" />
-                <Skeleton className="h-5 w-16 rounded-full" />
-              </>
-            ) : (
-              <>
-                <span className={pillClass}>{formatCurrency(plan?.total_estimated_cost_gbp)} total</span>
-                <span className={pillClass}>
-                  {plan?.total_kcal ? `${Math.round(Number(plan.total_kcal))} kcal` : '—'} {avgKcal ? `(${avgKcal} avg)` : ''}
-                </span>
-                <span className={pillClass}>
-                  {plan?.total_protein ? `${Math.round(Number(plan.total_protein))}g protein` : '—'} {avgProtein ? `(${avgProtein} avg)` : ''}
-                </span>
-                <span className={pillClass}>{totalMeals} meals</span>
-              </>
-            )}
+          <div className="ml-auto text-right text-xs font-medium text-slate-500">
+            {isLoading ? <Skeleton className="ml-auto h-4 w-40" /> : formatGeneratedAt(plan)}
           </div>
         </div>
       </Card>
@@ -766,13 +792,14 @@ export function PlansPage() {
               ? sortedPlans.map((p) => (
                   <div
                     key={p.id}
-                    className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2"
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2"
                   >
                     <div className="flex items-center gap-3">
                       <span className="font-semibold text-slate-900">{p.week_start_date}</span>
                       <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] text-slate-600">{p.status}</span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+                      <span className="text-xs font-medium text-slate-500">{formatGeneratedAt(p)}</span>
                       {p.status !== 'active' && (
                         <>
                           <button
