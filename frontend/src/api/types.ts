@@ -99,6 +99,18 @@ export interface WeeklyPlan {
   days: PlanDay[];
 }
 
+export interface QueuedPlanGeneration {
+  queued: true;
+  planId: string;
+  status: 'queued';
+}
+
+export type GeneratePlanResponse = WeeklyPlan | QueuedPlanGeneration;
+
+export function isQueuedPlanGeneration(value: GeneratePlanResponse): value is QueuedPlanGeneration {
+  return Boolean((value as QueuedPlanGeneration).queued);
+}
+
 export interface ShoppingListItem {
   id: string;
   ingredient: { id: string; name: string };

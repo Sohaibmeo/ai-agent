@@ -15,6 +15,25 @@ import type { AgentPipelineSummary, PipelineStep } from '../agents/pipeline.type
 import { PipelineGateway } from './pipeline.gateway';
 import { randomUUID } from 'crypto';
 
+export type PlanGenerationOverrides = {
+  useLlmRecipes?: boolean;
+  sameMealsAllWeek?: boolean;
+  weeklyBudgetGbp?: number;
+  breakfast_enabled?: boolean;
+  snack_enabled?: boolean;
+  lunch_enabled?: boolean;
+  dinner_enabled?: boolean;
+  maxDifficulty?: string;
+};
+
+export type GenerateQueuedPlanDayInput = {
+  planId: string;
+  userId: string;
+  weekStartDate: string;
+  dayIndex: number;
+  overrides?: PlanGenerationOverrides;
+};
+
 // Shape used between PlansService and AgentsService review interpreter.
 export interface ReviewActionContext {
   type: string; // e.g. "bulk_edit_days", "edit_day", "swap_meal_auto", "meal_text_edit", "ingredient_text_edit"
@@ -290,16 +309,7 @@ export class PlansService {
     userId: string,
     weekStartDate: string,
     useAgent = false,
-    overrides?: {
-      useLlmRecipes?: boolean;
-      sameMealsAllWeek?: boolean;
-      weeklyBudgetGbp?: number;
-      breakfast_enabled?: boolean;
-      snack_enabled?: boolean;
-      lunch_enabled?: boolean;
-      dinner_enabled?: boolean;
-      maxDifficulty?: string;
-    },
+    overrides?: PlanGenerationOverrides,
   ) {
     this.logger.log(`generateWeek start user=${userId} date=${weekStartDate} useAgent=${useAgent}`);
     let pipeline: AgentPipelineSummary | undefined;
@@ -364,7 +374,6 @@ export class PlansService {
       this.markPipelineStep(pipeline, 'profile-guardrails', 'done', undefined, 22);
     }
 
-    // When useAgent is true, rely on the Day LLM to generate full recipes; otherwise use existing candidate logic.
     const plan = this.weeklyPlanRepo.create({
       user: { id: userId } as any,
       week_start_date: weekStartDate,
@@ -651,6 +660,161 @@ export class PlansService {
     }
     this.logger.log(`generateWeek done id=${savedPlan.id}`);
     return result;
+  }
+
+  async createPlanGenerationDraft(userId: string, weekStartDate: string) {
+    const plan = this.weeklyPlanRepo.create({
+      user: { id: userId } as any,
+      week_start_date: weekStartDate,
+      status: 'systemdraft',
+    });
+    return this.weeklyPlanRepo.save(plan);
+  }
+
+  async generateQueuedPlanDay(input: GenerateQueuedPlanDayInput) {
+    const totalDays = 7;
+    const plan = await this.weeklyPlanRepo.findOne({
+      where: { id: input.planId },
+      relations: ['user', 'days', 'days.meals', 'days.meals.recipe'],
+    });
+    if (!plan) throw new NotFoundException('Weekly plan not found');
+    if ((plan as any).user?.id && (plan as any).user.id !== input.userId) {
+      throw new Error('Forbidden: plan does not belong to user');
+    }
+
+    const existingDay = (plan.days || []).find((day) => day.day_index === input.dayIndex);
+    if (existingDay?.meals?.length) {
+      return {
+        planId: plan.id,
+        dayIndex: input.dayIndex,
+        status: 'already-generated',
+        mealsCreated: existingDay.meals.length,
+      };
+    }
+
+    const profile = await this.usersService.getProfile(input.userId);
+    if (input.overrides?.weeklyBudgetGbp !== undefined) {
+      profile.weekly_budget_gbp = input.overrides.weeklyBudgetGbp;
+    }
+    profile.breakfast_enabled =
+      input.overrides?.breakfast_enabled !== undefined
+        ? input.overrides.breakfast_enabled
+        : profile.breakfast_enabled;
+    profile.snack_enabled =
+      input.overrides?.snack_enabled !== undefined ? input.overrides.snack_enabled : profile.snack_enabled;
+    profile.lunch_enabled =
+      input.overrides?.lunch_enabled !== undefined ? input.overrides.lunch_enabled : profile.lunch_enabled;
+    profile.dinner_enabled =
+      input.overrides?.dinner_enabled !== undefined ? input.overrides.dinner_enabled : profile.dinner_enabled;
+    if (input.overrides?.maxDifficulty) {
+      (profile as any).max_difficulty = input.overrides.maxDifficulty;
+    }
+
+    const targets = calculateTargets(profile);
+    const mealSlots = ['breakfast', 'snack', 'lunch', 'dinner'].filter((slot) => {
+      if (slot === 'breakfast') return profile.breakfast_enabled;
+      if (slot === 'snack') return profile.snack_enabled;
+      if (slot === 'lunch') return profile.lunch_enabled;
+      if (slot === 'dinner') return profile.dinner_enabled;
+      return false;
+    });
+    const requiredSlots = mealSlots.length ? mealSlots : ['meal'];
+    const savedDay = existingDay || (await this.createPlanDay(plan, input.dayIndex));
+    let mealsCreated = 0;
+
+    if (input.overrides?.sameMealsAllWeek && input.dayIndex > 0) {
+      const dayZero = (plan.days || []).find((day) => day.day_index === 0);
+      if (!dayZero?.meals?.length) {
+        throw new Error('Cannot clone weekly meals before day 0 has been generated');
+      }
+      const cloned = await this.cloneMealsFromDay(dayZero.id, savedDay);
+      mealsCreated = cloned.length;
+    } else {
+      const dayPlan = await this.agentsService.generateDayPlanWithCoachLLM({
+        profile,
+        day_index: input.dayIndex,
+        week_state: {
+          week_start_date: input.weekStartDate,
+          weekly_budget_gbp: input.overrides?.weeklyBudgetGbp ?? profile.weekly_budget_gbp,
+          used_budget_gbp: 0,
+          remaining_days: totalDays - input.dayIndex,
+        },
+        targets: {
+          daily_kcal: targets.dailyCalories,
+          daily_protein: targets.dailyProtein,
+        },
+        meal_slots: requiredSlots,
+        userId: input.userId,
+      });
+
+      for (const mealSpec of dayPlan.meals || []) {
+        const slot =
+          typeof mealSpec.meal_slot === 'string'
+            ? mealSpec.meal_slot.trim().toLowerCase()
+            : requiredSlots[0] || 'meal';
+        if (!requiredSlots.includes(slot)) continue;
+
+        const instructions =
+          Array.isArray(mealSpec.instructions) && mealSpec.instructions.length
+            ? mealSpec.instructions.join('\n')
+            : typeof mealSpec.instructions === 'string'
+              ? mealSpec.instructions
+              : undefined;
+
+        const createdRecipe = await this.recipesService.createRecipeFromPlannedMeal({
+          name: mealSpec.name,
+          mealSlot: slot,
+          mealType: 'solid',
+          difficulty: mealSpec.difficulty,
+          userId: input.userId,
+          instructions,
+          ingredients: (mealSpec.ingredients || []).map((ingredient: any) => ({
+            ingredient_name: ingredient.ingredient_name,
+            quantity: ingredient.quantity,
+            unit: 'g',
+          })),
+          source: 'llm',
+          isSearchable: false,
+          priceEstimated: true,
+        });
+
+        await this.createPlanMealFromRecipe({
+          day: savedDay,
+          mealSlot: slot,
+          recipe: createdRecipe,
+          portionMultiplier: 1,
+        });
+        mealsCreated += 1;
+      }
+    }
+
+    await this.recomputeAggregates(plan.id);
+    this.logger.log(`queued plan generated plan=${plan.id} day=${input.dayIndex} meals=${mealsCreated}`);
+    return {
+      planId: plan.id,
+      dayIndex: input.dayIndex,
+      status: 'generated',
+      mealsCreated,
+    };
+  }
+
+  async finalizeQueuedPlan(planId: string, userId: string) {
+    const plan = await this.weeklyPlanRepo.findOne({ where: { id: planId }, relations: ['user'] });
+    if (!plan) throw new NotFoundException('Weekly plan not found');
+    if ((plan as any).user?.id && (plan as any).user.id !== userId) {
+      throw new Error('Forbidden: plan does not belong to user');
+    }
+
+    await this.recomputeAggregates(planId);
+    await this.shoppingListService.rebuildForPlan(planId);
+    plan.status = 'draft';
+    await this.weeklyPlanRepo.save(plan);
+
+    this.logger.log(`queued plan finalized plan=${planId}`);
+    return {
+      planId,
+      status: 'finalized',
+    };
   }
 
   async recomputeAggregates(planId: string) {
