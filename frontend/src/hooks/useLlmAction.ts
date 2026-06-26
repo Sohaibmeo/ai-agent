@@ -10,6 +10,7 @@ type LlmActionOptions = {
   subtitle?: string;
   steps?: LlmActionStep[];
   kind?: AgentRunKind;
+  deferCompletion?: (result: unknown) => boolean;
 };
 
 export const useLlmAction = (opts?: LlmActionOptions) => {
@@ -62,6 +63,16 @@ export const useLlmAction = (opts?: LlmActionOptions) => {
           updateStep('draft-week', 'done', undefined, undefined, 42);
           updateStep('generate-days', 'active', 'Cooking daily menus…', undefined, 52);
           const result = await runner;
+          if (opts?.deferCompletion?.(result)) {
+            updateStep(
+              'generate-days',
+              'active',
+              'Plan generation is running in the background...',
+              undefined,
+              45,
+            );
+            return result;
+          }
           updateStep('generate-days', 'done', undefined, undefined, 76);
           updateStep('hydrate-recipes', 'active', undefined, undefined, 82);
           await sleep(beat);
@@ -114,7 +125,7 @@ export const useLlmAction = (opts?: LlmActionOptions) => {
         throw err;
       }
     },
-    [startRun, updateStep, endRun, setError, opts?.title, opts?.subtitle, opts?.steps, kind],
+    [startRun, updateStep, endRun, setError, opts?.title, opts?.subtitle, opts?.steps, opts?.deferCompletion, kind],
   );
 
   return { runWithLlmLoader };

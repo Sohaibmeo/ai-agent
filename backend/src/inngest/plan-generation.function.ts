@@ -18,9 +18,11 @@ export function createPlanGenerationFunctions(plansService: PlansService) {
     },
     async ({ event, step }) => {
       const input = event.data as PlanGenerationRequested;
+      const pipeline = plansService.createQueuedPlanPipeline(input.planId, input.userId, input.weekStartDate);
 
       for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
-        await step.run(`generate-day-${dayIndex}`, async () => {
+        plansService.markQueuedPlanDayStarted(pipeline, dayIndex);
+        const result = await step.run(`generate-day-${dayIndex}`, async () => {
           return plansService.generateQueuedPlanDay({
             planId: input.planId,
             userId: input.userId,
@@ -29,11 +31,14 @@ export function createPlanGenerationFunctions(plansService: PlansService) {
             overrides: input.overrides,
           });
         });
+        plansService.markQueuedPlanDayDone(pipeline, dayIndex, result);
       }
 
+      plansService.markQueuedPlanFinalizing(pipeline, input.planId);
       await step.run('finalize-plan', async () => {
         return plansService.finalizeQueuedPlan(input.planId, input.userId);
       });
+      plansService.markQueuedPlanFinished(pipeline, input.planId);
 
       return { planId: input.planId, status: 'completed' };
     },
