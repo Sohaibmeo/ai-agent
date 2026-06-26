@@ -34,6 +34,19 @@ export type GenerateQueuedPlanDayInput = {
   overrides?: PlanGenerationOverrides;
 };
 
+const queuedGenerationSteps: Omit<PipelineStep, 'status'>[] = [
+  { id: 'prepare-profile', label: 'Gathering your nutrition profile' },
+  { id: 'day-0', label: 'Generating Monday' },
+  { id: 'day-1', label: 'Generating Tuesday' },
+  { id: 'day-2', label: 'Generating Wednesday' },
+  { id: 'day-3', label: 'Generating Thursday' },
+  { id: 'day-4', label: 'Generating Friday' },
+  { id: 'day-5', label: 'Generating Saturday' },
+  { id: 'day-6', label: 'Generating Sunday' },
+  { id: 'finalize-plan', label: 'Activating plan & shopping list' },
+  { id: 'finishing', label: 'Finishing touches' },
+];
+
 // Shape used between PlansService and AgentsService review interpreter.
 export interface ReviewActionContext {
   type: string; // e.g. "bulk_edit_days", "edit_day", "swap_meal_auto", "meal_text_edit", "ingredient_text_edit"
@@ -671,6 +684,74 @@ export class PlansService {
     return this.weeklyPlanRepo.save(plan);
   }
 
+  createQueuedPlanPipeline(planId: string, userId: string, weekStartDate: string) {
+    const pipeline = this.initPipeline('generate-week', queuedGenerationSteps);
+    this.markPipelineStep(
+      pipeline,
+      'prepare-profile',
+      'running',
+      { planId, userId, weekStartDate },
+      5,
+      'Queued plan generation',
+    );
+    this.markPipelineStep(
+      pipeline,
+      'prepare-profile',
+      'done',
+      { planId, weekStartDate },
+      10,
+      'Worker accepted the plan request',
+    );
+    return pipeline;
+  }
+
+  markQueuedPlanDayStarted(pipeline: AgentPipelineSummary, dayIndex: number) {
+    const dayStepId = `day-${dayIndex}`;
+    const dayName = queuedGenerationSteps.find((step) => step.id === dayStepId)?.label || `Generating day ${dayIndex + 1}`;
+    this.markPipelineStep(
+      pipeline,
+      dayStepId,
+      'running',
+      { dayIndex, stage: 'day-start' },
+      12 + dayIndex * 10,
+      dayName,
+    );
+  }
+
+  markQueuedPlanDayDone(
+    pipeline: AgentPipelineSummary,
+    dayIndex: number,
+    result: { mealsCreated?: number; status?: string },
+  ) {
+    const dayStepId = `day-${dayIndex}`;
+    this.markPipelineStep(
+      pipeline,
+      dayStepId,
+      'done',
+      { dayIndex, mealsCreated: result.mealsCreated, status: result.status },
+      20 + dayIndex * 10,
+      `Day ${dayIndex + 1} ready`,
+    );
+  }
+
+  markQueuedPlanFinalizing(pipeline: AgentPipelineSummary, planId: string) {
+    this.markPipelineStep(
+      pipeline,
+      'finalize-plan',
+      'running',
+      { planId },
+      92,
+      'Building shopping list and activating the plan',
+    );
+  }
+
+  markQueuedPlanFinished(pipeline: AgentPipelineSummary, planId: string) {
+    this.markPipelineStep(pipeline, 'finalize-plan', 'done', { planId }, 97, 'Plan activated');
+    this.markPipelineStep(pipeline, 'finishing', 'done', { planId }, 100, 'Ready to view');
+    pipeline.finishedAt = new Date().toISOString();
+    this.pipelineGateway.broadcastPipeline(pipeline);
+  }
+
   async generateQueuedPlanDay(input: GenerateQueuedPlanDayInput) {
     const totalDays = 7;
     const plan = await this.weeklyPlanRepo.findOne({
@@ -807,7 +888,10 @@ export class PlansService {
 
     await this.recomputeAggregates(planId);
     await this.shoppingListService.rebuildForPlan(planId);
-    plan.status = 'draft';
+    if ((plan as any).user?.id) {
+      await this.weeklyPlanRepo.update({ user: { id: (plan as any).user.id } as any, status: 'active' }, { status: 'archived' });
+    }
+    plan.status = 'active';
     await this.weeklyPlanRepo.save(plan);
 
     this.logger.log(`queued plan finalized plan=${planId}`);

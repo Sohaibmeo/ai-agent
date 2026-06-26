@@ -32,6 +32,7 @@ export function PlansPage() {
     kind: 'generate-week',
     title: 'Generating your weekly plan...',
     subtitle: 'Your AI coach is planning meals around your macros and budget.',
+    deferCompletion: (result) => isQueuedPlanGeneration(result as any),
   });
   const { runWithLlmLoader: runPlanAdjustment } = useLlmAction({
     kind: 'review-plan',
