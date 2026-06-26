@@ -4,10 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "prebuild": "npx @workflow/nest init --force",
     "start": "node dist/main.js",
     "start:dev": "nodemon --watch src --ext ts --exec \"ts-node --project tsconfig.json --require tsconfig-paths/register src/main.ts\"",
-    "build": "tsc -p tsconfig.json && node scripts/build-workflows.mjs",
+    "build": "tsc -p tsconfig.json",
     "lint": "echo \"TODO: add lint\" && exit 0",
     "test": "jest",
     "test:e2e": "jest --config jest.e2e.config.js --runInBand",
@@ -30,7 +29,6 @@
     "@nestjs/platform-ws": "^11.1.9",
     "@nestjs/typeorm": "^11.0.0",
     "@nestjs/websockets": "^11.1.9",
-    "@workflow/nest": "^0.0.10",
     "bcryptjs": "^2.4.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
@@ -42,19 +40,15 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "typeorm": "^0.3.27",
-    "workflow": "^4.5.0",
     "ws": "^8.18.3",
     "zod": "^4.1.12"
   },
   "overrides": {
     "multer": "2.2.0",
-    "undici": "8.5.0",
     "uuid": "11.1.1"
   },
   "devDependencies": {
     "@nestjs/testing": "^11.1.9",
-    "@swc/cli": "^0.8.1",
-    "@swc/core": "^1.15.43",
     "@types/bcryptjs": "^2.4.2",
     "@types/body-parser": "^1.19.6",
     "@types/jest": "^30.0.0",

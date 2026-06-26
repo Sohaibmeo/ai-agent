@@ -14,7 +14,6 @@ import { GOALS, INTENSITIES, ACTIVITY_LEVELS } from '../constants/targets';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLlmAction } from '../hooks/useLlmAction';
 import { activatePlan, generatePlan } from '../api/plans';
-import { isQueuedPlanGeneration } from '../api/types';
 
 type Step = 0 | 1 | 2 | 3 | 4;
 
@@ -185,12 +184,8 @@ const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
         });
         return generatedPlan;
       });
-      if (isQueuedPlanGeneration(plan)) {
-        toast.success('Onboarding complete! Your plan is generating now.', { id: toastId });
-      } else {
-        await activatePlan(plan.id);
-        toast.success('Onboarding complete! Generating your plan now…', { id: toastId });
-      }
+      await activatePlan(plan.id);
+      toast.success('Onboarding complete! Generating your plan now…', { id: toastId });
       await queryClient.invalidateQueries({ queryKey: ['profile', 'me'] });
       navigate('/plans');
     } catch (e) {

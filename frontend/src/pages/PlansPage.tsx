@@ -8,8 +8,7 @@ import { usePlansList } from '../hooks/usePlansList';
 import { useProfile } from '../hooks/useProfile';
 import { useAuth } from '../context/AuthContext';
 import { SwapDialog } from '../components/plans/SwapDialog';
-import { activatePlan, aiPlanSwap, fetchActivePlan, fetchPlanById, setMealRecipe, setPlanStatus } from '../api/plans';
-import { isQueuedPlanGeneration } from '../api/types';
+import { activatePlan, aiPlanSwap, fetchActivePlan, setMealRecipe, setPlanStatus } from '../api/plans';
 import { notify } from '../lib/toast';
 import { useLlmAction } from '../hooks/useLlmAction';
 import { useCreditConfirmation } from '../hooks/useCreditConfirmation.tsx';
@@ -242,22 +241,6 @@ export function PlansPage() {
           dinner_enabled: slots.dinner_enabled,
           maxDifficulty: slots.max_difficulty,
         });
-        if (isQueuedPlanGeneration(result)) {
-          notify.success('Plan generation started');
-          for (let attempt = 0; attempt < 60; attempt += 1) {
-            await new Promise((resolve) => setTimeout(resolve, 5000));
-            const queuedPlan = await fetchPlanById(result.planId);
-            if (queuedPlan?.status !== 'systemdraft' && queuedPlan?.days?.length) {
-              queryClient.setQueryData(['plan', 'active', user?.id], queuedPlan);
-              notify.success('New plan generated');
-              return queuedPlan;
-            }
-          }
-          await refetchPlan();
-          notify.success('Plan is still generating');
-          return result;
-        }
-
         notify.success('New plan generated');
         await queryClient.invalidateQueries({ queryKey: ['profile', 'me'] });
         return result;

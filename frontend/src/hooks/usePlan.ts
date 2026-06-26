@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { applyPlanAction, fetchActivePlan, generatePlan } from '../api/plans';
-import { isQueuedPlanGeneration, type WeeklyPlan } from '../api/types';
+import type { WeeklyPlan } from '../api/types';
 import { useAuth } from '../context/AuthContext';
 
 export function useActivePlan() {
@@ -29,10 +29,6 @@ export function useActivePlan() {
       maxDifficulty?: string;
     }) => generatePlan({  weekStartDate: new Date().toISOString().slice(0, 10), ...opts }),
     onSuccess: (data) => {
-      if (isQueuedPlanGeneration(data)) {
-        queryClient.invalidateQueries({ queryKey: ['plan', 'active', userId] });
-        return;
-      }
       queryClient.setQueryData(['plan', 'active', userId], data);
     },
   });
